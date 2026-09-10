@@ -108,13 +108,14 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 
 ## Security
 
-- **Auth**: database-backed accounts (`users` table), managed by a director
-  on the **Team** screen (add/disable/delete users, set roles, reset
-  passwords; everyone can change their own). First boot seeds from
-  `DASH_USERS` (or prints a random bootstrap password). Passwords are
-  scrypt-hashed; login is constant-time and rate-limited (8 tries / 5 min /
-  IP → 429). Session is a signed httpOnly `SameSite=Lax` cookie, `Secure`
-  over HTTPS, 7-day default lifetime.
+- **Auth**: database-backed accounts (`users` table). On first run the
+  dashboard shows a one-time "create your account" screen (you become the
+  director) — nothing is auto-created. After that, a director manages
+  accounts on the **Team** screen (add/disable/delete, set roles, reset
+  passwords; everyone can change their own). Passwords are scrypt-hashed;
+  login is constant-time and rate-limited (8 tries / 5 min / IP → 429).
+  Session is a signed httpOnly `SameSite=Lax` cookie, `Secure` over HTTPS,
+  7-day default lifetime. `DASH_USERS` optionally pre-creates accounts.
 - **Roles**: `director` (full) vs `admin` (create invoices + generate
   documents only). Enforced per endpoint server-side (403), not just in the UI.
 - **Headers**: CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,

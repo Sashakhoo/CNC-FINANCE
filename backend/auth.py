@@ -10,11 +10,15 @@ from the dashboard (Team screen). Roles:
 
 Any other role has no access — login is refused.
 
-Bootstrap: on first start, if the users table is empty, it is seeded from
-the DASH_USERS environment variable (comma-separated `username:password:role`,
-password may be `scrypt:<salt>:<hash>`). If DASH_USERS is also unset, a single
-`admin` director is created with a random password printed to the logs once.
-After that, DASH_USERS is ignored — manage accounts in the UI.
+First run: when the users table is empty, the dashboard shows a one-time
+"create the first account" screen (POST /api/setup) — you choose your own
+username and password and become the director. No account is ever created
+automatically.
+
+Optional: setting the DASH_USERS environment variable
+(`username:password:role,...`, password may be `scrypt:<salt>:<hash>`) will
+pre-create those accounts on first boot instead. Leave it unset to use the
+setup screen. Either way it is ignored once any user exists.
 
 Passwords are scrypt-hashed; login is constant-time and rate-limited.
 """
@@ -91,42 +95,53 @@ def _record_from_secret(secret: str) -> tuple[str, str]:
 
 # --- bootstrap ---------------------------------------------------------
 
+def needs_setup() -> bool:
+    return storage.user_count() == 0
+
+
+def create_first_account(username: str, password: str) -> str:
+    """First-run only: create the initial director. Refuses once any user
+    exists. Returns the canonical username."""
+    if storage.user_count() > 0:
+        raise HTTPException(status_code=409, detail="Setup has already been completed")
+    username = (username or "").strip()
+    if not username or len(username) > 40:
+        raise HTTPException(status_code=422, detail="Username must be 1-40 characters")
+    if len(password or "") < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    salt_hex, hash_hex = hash_new(password)
+    storage.create_user(username, salt_hex, hash_hex, "director")
+    return username
+
+
 def seed_users() -> None:
-    """Populate an empty users table from DASH_USERS, or create a fallback
-    director. No-op once any user exists."""
+    """Optional: pre-create accounts from DASH_USERS on an empty table.
+    No-op if DASH_USERS is unset or any user already exists — the dashboard's
+    setup screen handles the empty case."""
     if storage.user_count() > 0:
         return
     raw = os.environ.get("DASH_USERS", "").strip()
+    if not raw:
+        return
     seeded = []
-    if raw:
-        for chunk in raw.split(","):
-            parts = [p.strip() for p in chunk.split(":")]
-            if len(parts) < 2 or not parts[0] or not parts[1]:
-                continue
-            name = parts[0]
-            if parts[1] == "scrypt" and len(parts) >= 4:
-                secret = ":".join(parts[1:4])
-                role = parts[4] if len(parts) > 4 else "director"
-            else:
-                secret = parts[1]
-                role = parts[2] if len(parts) > 2 else "director"
-            if storage.get_user(name):
-                continue
-            salt_hex, hash_hex = _record_from_secret(secret)
-            storage.create_user(name, salt_hex, hash_hex, role if role in ROLE_CAPS else "admin")
-            seeded.append(f"{name}({role})")
-    if not seeded:
-        pw = secrets.token_urlsafe(12)
-        salt_hex, hash_hex = hash_new(pw)
-        storage.create_user("admin", salt_hex, hash_hex, "director")
-        print("=" * 60)
-        print("  No accounts configured. Created a bootstrap director:")
-        print(f"     username: admin")
-        print(f"     password: {pw}")
-        print("  Log in and change it / add real accounts on the Team screen.")
-        print("=" * 60)
-    else:
-        print(f"Auth: seeded {len(seeded)} account(s) from DASH_USERS: {', '.join(seeded)}")
+    for chunk in raw.split(","):
+        parts = [p.strip() for p in chunk.split(":")]
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            continue
+        name = parts[0]
+        if parts[1] == "scrypt" and len(parts) >= 4:
+            secret = ":".join(parts[1:4])
+            role = parts[4] if len(parts) > 4 else "director"
+        else:
+            secret = parts[1]
+            role = parts[2] if len(parts) > 2 else "director"
+        if storage.get_user(name):
+            continue
+        salt_hex, hash_hex = _record_from_secret(secret)
+        storage.create_user(name, salt_hex, hash_hex, role if role in ROLE_CAPS else "admin")
+        seeded.append(f"{name}({role})")
+    if seeded:
+        print(f"Auth: pre-created {len(seeded)} account(s) from DASH_USERS: {', '.join(seeded)}")
 
 
 # --- login -----------------------------------------------------------

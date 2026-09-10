@@ -274,12 +274,13 @@
 <div class="modal-overlay" id="login-overlay" style="z-index:200;">
   <div class="receipt-card" style="width:360px; text-align:center;">
     <img src="/assets/logo-wordmark.png" alt="codencode.my" style="height:26px; width:auto; margin:4px 0 6px;">
-    <div class="tag" style="font-size:11px; color:var(--dim); margin-bottom:16px;">Finance · sign in</div>
+    <div class="tag" id="login-subtitle" style="font-size:11px; color:var(--dim); margin-bottom:16px;">Finance · sign in</div>
     <form onsubmit="return doLogin(event)" style="display:flex; flex-direction:column; gap:12px; text-align:left;">
       <div class="field"><label>Username</label><input type="text" id="login-user" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="login-pass" autocomplete="current-password" required></div>
+      <div id="login-hint" class="top-note" style="display:none;">First account — you'll be the director. Use at least 8 characters.</div>
       <div id="login-error" style="color:#c23b1f; font-size:12px; min-height:16px;"></div>
-      <button class="pill-btn dark" type="submit" style="justify-content:center; display:flex;">Sign in</button>
+      <button class="pill-btn dark" id="login-submit" type="submit" style="justify-content:center; display:flex;">Sign in</button>
     </form>
   </div>
 </div>
@@ -942,6 +943,16 @@ function applyUser(u){
   gate();
 }
 
+let setupMode = false;
+function setSetupMode(on){
+  setupMode = on;
+  document.getElementById('login-subtitle').textContent = on ? 'Finance · create your account' : 'Finance · sign in';
+  document.getElementById('login-submit').textContent = on ? 'Create account' : 'Sign in';
+  document.getElementById('login-hint').style.display = on ? 'block' : 'none';
+  document.getElementById('login-user').setAttribute('autocomplete', on ? 'username' : 'username');
+  document.getElementById('login-pass').setAttribute('autocomplete', on ? 'new-password' : 'current-password');
+}
+
 async function doLogin(e){
   e.preventDefault();
   const username = document.getElementById('login-user').value;
@@ -949,15 +960,16 @@ async function doLogin(e){
   const err = document.getElementById('login-error');
   err.textContent = '';
   try {
-    const res = await fetch('/api/login', {
+    const res = await fetch(setupMode ? '/api/setup' : '/api/login', {
       method:'POST', headers:{'Content-Type':'application/json'},
       credentials:'same-origin', body: JSON.stringify({username, password}),
     });
     if(!res.ok){
-      err.textContent = (await res.json().catch(()=>({}))).detail || 'Login failed';
+      err.textContent = (await res.json().catch(()=>({}))).detail || (setupMode ? 'Could not create account' : 'Login failed');
       return false;
     }
     document.getElementById('login-pass').value = '';
+    setSetupMode(false);
     applyUser(await res.json());
     hideLogin();
     await loadState();
@@ -1408,9 +1420,14 @@ document.querySelectorAll('table').forEach(t=>{
 (async function init(){
   try {
     const res = await fetch('/api/me', {credentials:'same-origin'});
-    if(res.ok){ applyUser(await res.json()); await loadState(); }
-    else { showLogin(); }
-  } catch(_){ showLogin(); }
+    if(res.ok){ applyUser(await res.json()); await loadState(); return; }
+  } catch(_){}
+  // Not signed in — first run (no accounts yet) shows the create-account screen.
+  try {
+    const s = await fetch('/api/setup', {credentials:'same-origin'}).then(r=>r.json());
+    setSetupMode(!!s.needs_setup);
+  } catch(_){}
+  showLogin();
 })();
 </script>
 

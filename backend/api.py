@@ -32,6 +32,39 @@ def _client_ip(request: Request) -> str:
     return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
 
 
+def _set_session_cookie(resp: JSONResponse, request: Request, username: str):
+    token = auth.issue_token(username)
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    is_https = request.url.scheme == "https" or forwarded == "https"
+    resp.set_cookie(
+        auth.COOKIE_NAME, token, max_age=auth.MAX_AGE, httponly=True,
+        samesite="lax", secure=is_https, path="/",
+    )
+
+
+@router.get("/setup")
+def setup_status():
+    return {"needs_setup": auth.needs_setup()}
+
+
+class Setup(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/setup")
+def do_setup(body: Setup, request: Request):
+    ip = _client_ip(request)
+    if auth.register_login_attempt(ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes.")
+    username = auth.create_first_account(body.username, body.password)
+    auth.clear_login_attempts(ip)
+    resp = JSONResponse({"ok": True, "username": username, "role": "director",
+                         "caps": auth.caps_for("director")})
+    _set_session_cookie(resp, request, username)
+    return resp
+
+
 @router.post("/login")
 def login(body: Login, request: Request):
     ip = _client_ip(request)
@@ -44,17 +77,10 @@ def login(body: Login, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     auth.clear_login_attempts(ip)
-    token = auth.issue_token(username)
     role = storage.get_user(username)["role"]
     resp = JSONResponse({"ok": True, "username": username, "role": role,
                          "caps": auth.caps_for(role)})
-    # Secure cookie in production (https); relaxed for local http development.
-    forwarded = request.headers.get("x-forwarded-proto", "")
-    is_https = request.url.scheme == "https" or forwarded == "https"
-    resp.set_cookie(
-        auth.COOKIE_NAME, token, max_age=auth.MAX_AGE, httponly=True,
-        samesite="lax", secure=is_https, path="/",
-    )
+    _set_session_cookie(resp, request, username)
     return resp
 
 
