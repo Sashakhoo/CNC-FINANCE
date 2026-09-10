@@ -231,6 +231,16 @@ def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
 
 @router.get("/documents/{kind}/{ref_id}", dependencies=[Depends(auth.require_cap("documents"))])
 def generate_document(kind: str, ref_id: int):
+    try:
+        return _generate_document(kind, ref_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(500, f"PDF generation failed: {e}\n{traceback.format_exc()[-1500:]}")
+
+
+def _generate_document(kind: str, ref_id: int):
     if kind == "invoice":
         inv = storage.get_invoice(ref_id)
         if not inv:
