@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15141a">
 <title>CNC Finance — Bento</title>
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/assets/favicon.png">
@@ -77,6 +79,7 @@
   table{width:100%; border-collapse:collapse;}
   th{text-align:left; font-size:10.5px; color:var(--dim); font-weight:700; padding:0 10px 10px 10px; text-transform:uppercase; letter-spacing:0.3px;}
   td{padding:11px 10px; font-size:12.5px; border-top:1px solid var(--line);}
+  td.mono, td .amt, td.amt{white-space:nowrap;}
   tr:first-child td{border-top:none;}
   .amt{font-family:'JetBrains Mono',monospace;}
   .amt-in{color:#3a7a1f; font-family:'JetBrains Mono',monospace;}
@@ -107,6 +110,9 @@
 
   /* Receipt modal */
   .modal-overlay{display:none; position:fixed; inset:0; background:rgba(21,20,26,0.55); z-index:100; align-items:center; justify-content:center; padding:30px;}
+  /* Login gate: opaque + blurred so the ledger behind it is unreadable */
+  #login-overlay{background:rgba(21,20,26,0.80); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);}
+  body.signed-out .main{filter:blur(7px); opacity:0.8; pointer-events:none; user-select:none;}
   .modal-overlay.open{display:flex;}
   .receipt-card{background:#fff; color:var(--ink); width:420px; max-width:100%; border-radius:18px; padding:32px 30px; box-shadow:0 24px 60px rgba(0,0,0,0.3); position:relative; max-height:90vh; overflow-y:auto;}
   .receipt-close{position:absolute; top:16px; right:16px; width:30px; height:30px; border-radius:100px; background:var(--bg); border:none; font-size:15px; color:var(--dim); display:flex; align-items:center; justify-content:center;}
@@ -186,6 +192,79 @@
   @media print{
     .print-all-fin .subview{display:block !important; margin-bottom:26px; page-break-inside:avoid;}
     .print-all-fin .subtabs{display:none !important;}
+  }
+
+  /* ============ RESPONSIVE ============ */
+  /* horizontal-scroll wrapper added around every <table> by JS */
+  .table-wrap{width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+  /* Large monitors — keep the working area from stretching too wide */
+  @media (min-width:1560px){
+    .topbar, .content{max-width:1440px; margin-left:auto; margin-right:auto; width:100%;}
+    .content{padding-right:26px;}
+  }
+
+  /* Laptop / small desktop — loosen the 12-col grid */
+  @media (max-width:1200px){
+    .c-3{grid-column:span 6;} .c-4{grid-column:span 6;} .c-5{grid-column:span 6;}
+    .c-7{grid-column:span 12;} .c-8{grid-column:span 12;} .c-9{grid-column:span 12;}
+  }
+
+  /* Tablet */
+  @media (max-width:900px){
+    .side{width:76px; padding:18px 8px;}
+    .brand-mark{width:38px; height:38px; margin-bottom:14px;}
+    .content{padding:0 16px 40px 0;}
+    .topbar{padding:18px 16px 14px 0;}
+    .bento{gap:12px;}
+    .c-3,.c-4,.c-5,.c-6,.c-7,.c-8,.c-9{grid-column:span 12;}
+    .grid-2{grid-template-columns:1fr;}
+    .stat-mini{flex-wrap:wrap;}
+    .stat-mini .m-card{min-width:140px;}
+    .subtabs{flex-wrap:wrap;}
+  }
+
+  /* Phone */
+  @media (max-width:640px){
+    body{flex-direction:column;}
+    .side{
+      order:2; width:100%; height:auto; flex-direction:row; gap:2px;
+      padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+      position:fixed; left:0; right:0; bottom:0; z-index:60;
+      background:var(--panel); border-top:1px solid var(--line);
+      overflow-x:auto; scrollbar-width:none; box-shadow:0 -4px 20px rgba(20,18,25,.08);
+    }
+    .side::-webkit-scrollbar{display:none;}
+    .brand-mark{display:none;}
+    .nav-pill{flex:0 0 auto; width:auto; padding:7px 11px; border-radius:12px;}
+    .nav-pill span{font-size:8.5px;}
+    .nav-pill svg{width:17px; height:17px;}
+    .main{order:1; padding-bottom:74px;}
+    .topbar{
+      flex-direction:column; align-items:flex-start; gap:10px; padding:16px 14px 10px;
+    }
+    .topbar h1{font-size:18px;}
+    .topbar > div:last-child{width:100%; justify-content:space-between;}
+    .top-note{display:none;}
+    .content{padding:0 14px 30px;}
+    .bento{grid-template-columns:1fr; gap:12px;}
+    .card{padding:16px; border-radius:18px;}
+    .kpi .num{font-size:24px;}
+
+    /* forms: one field per row, full-width controls */
+    form.inline{flex-direction:column; align-items:stretch; gap:10px;}
+    form.inline .field{width:100%;}
+    .field input, .field select{width:100%; min-width:0;}
+    form.inline > button{width:100%;}
+
+    .panel-head{flex-wrap:wrap; gap:6px;}
+    th, td{padding:9px 8px; font-size:12px; white-space:nowrap;}
+    td:nth-child(2){white-space:normal; min-width:150px;}   /* description column wraps */
+    .table-wrap table{min-width:520px;}                     /* force the scroll rather than squash */
+    .stat-mini{flex-direction:column;}
+    .receipt-card, .voucher-card{padding:22px 18px;}
+    .modal-overlay{padding:14px;}
+    #financials-print-area .subtab{font-size:11px; padding:7px 11px;}
   }
 </style>
 </head>
@@ -789,8 +868,20 @@ function switchFinTab(name){
 // Access control: real auth now — a single username/password checked by the
 // backend (backend/auth.py), held in a signed, httpOnly session cookie.
 // The button in the top bar is a Logout control once you're signed in.
-function showLogin(){ document.getElementById('login-overlay').classList.add('open'); }
-function hideLogin(){ document.getElementById('login-overlay').classList.remove('open'); }
+function showLogin(){
+  // Wipe the in-memory cache and re-render so there is genuinely no data in
+  // the DOM behind the (blurred) login card, not just a visual cover.
+  transactions = []; contacts = []; invoices = []; assets = []; notesText = '';
+  currentUser = null;
+  try { render(); } catch(_){}
+  const ta = document.getElementById('notes-textarea'); if(ta) ta.value = '';
+  document.body.classList.add('signed-out');
+  document.getElementById('login-overlay').classList.add('open');
+}
+function hideLogin(){
+  document.body.classList.remove('signed-out');
+  document.getElementById('login-overlay').classList.remove('open');
+}
 
 // Reflect the signed-in user's capabilities in the UI. Every control tagged
 // data-cap="x" is greyed out and disabled unless the user's caps include x.
@@ -1189,6 +1280,16 @@ const _in30 = new Date(Date.now() + 30*864e5).toISOString().slice(0,10);
 document.getElementById('tx-date').value = _today;
 document.getElementById('inv-date').value = _today;
 document.getElementById('inv-due').value = _in30;
+
+// Wrap every table so wide ones scroll horizontally on small screens
+// instead of blowing out the page width.
+document.querySelectorAll('table').forEach(t=>{
+  if(t.parentElement.classList.contains('table-wrap')) return;
+  const w = document.createElement('div');
+  w.className = 'table-wrap';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
 
 // Bootstrap: check the session, then either load real state or show login.
 (async function init(){
