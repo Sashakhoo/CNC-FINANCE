@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 import storage
 import seed
+import auth
 import gemini_parser
 import pdf_generator
 from api import router as api_router
@@ -70,8 +71,9 @@ PENDING = {}
 @app.on_event("startup")
 def on_startup():
     storage.init_db()
+    auth.seed_users()
     if seed.seed_if_empty():
-        print("Seeded historical ledger (Apr–Aug 2026) into an empty database.")
+        print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
 
 
 app.include_router(api_router)

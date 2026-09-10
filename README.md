@@ -108,10 +108,13 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 
 ## Security
 
-- **Auth**: username + password from `DASH_USERS` (no passwords in the repo).
-  Passwords are scrypt-hashed in memory; login is constant-time and
-  rate-limited (8 tries / 5 min / IP → 429). Session is a signed httpOnly
-  `SameSite=Lax` cookie, `Secure` over HTTPS, 7-day default lifetime.
+- **Auth**: database-backed accounts (`users` table), managed by a director
+  on the **Team** screen (add/disable/delete users, set roles, reset
+  passwords; everyone can change their own). First boot seeds from
+  `DASH_USERS` (or prints a random bootstrap password). Passwords are
+  scrypt-hashed; login is constant-time and rate-limited (8 tries / 5 min /
+  IP → 429). Session is a signed httpOnly `SameSite=Lax` cookie, `Secure`
+  over HTTPS, 7-day default lifetime.
 - **Roles**: `director` (full) vs `admin` (create invoices + generate
   documents only). Enforced per endpoint server-side (403), not just in the UI.
 - **Headers**: CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,

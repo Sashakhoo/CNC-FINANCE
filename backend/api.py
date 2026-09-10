@@ -45,7 +45,7 @@ def login(body: Login, request: Request):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     auth.clear_login_attempts(ip)
     token = auth.issue_token(username)
-    role = auth.USERS[username]["role"]
+    role = storage.get_user(username)["role"]
     resp = JSONResponse({"ok": True, "username": username, "role": role,
                          "caps": auth.caps_for(role)})
     # Secure cookie in production (https); relaxed for local http development.
@@ -67,7 +67,105 @@ def logout():
 
 @router.get("/me")
 def me(user: dict = Depends(auth.require_auth)):
-    return {"username": user["username"], "role": user["role"], "caps": user["caps"]}
+    return {"id": user["id"], "username": user["username"],
+            "role": user["role"], "caps": user["caps"]}
+
+
+# --- account: change your own password ----------------------------------
+
+class PwChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/account/password")
+def change_own_password(body: PwChange, user: dict = Depends(auth.require_auth)):
+    if auth.authenticate(user["username"], body.current_password) != user["username"]:
+        raise HTTPException(400, "Current password is incorrect")
+    if len(body.new_password) < 6:
+        raise HTTPException(422, "New password must be at least 6 characters")
+    salt, h = auth.hash_new(body.new_password)
+    storage.set_user_password(user["id"], salt, h)
+    return {"ok": True}
+
+
+# --- users (director only) ---------------------------------------------
+
+class UserIn(BaseModel):
+    username: str
+    password: str
+    role: str = "admin"
+
+
+class UserPatch(BaseModel):
+    role: str | None = None
+    active: bool | None = None
+    password: str | None = None
+
+
+@router.get("/users", dependencies=[Depends(auth.require_cap("users"))])
+def list_users():
+    return storage.list_users()
+
+
+@router.post("/users", dependencies=[Depends(auth.require_cap("users"))])
+def create_user(body: UserIn):
+    name = body.username.strip()
+    if not name or len(name) > 40:
+        raise HTTPException(422, "Username must be 1-40 characters")
+    if body.role not in auth.ASSIGNABLE_ROLES:
+        raise HTTPException(422, f"Role must be one of {auth.ASSIGNABLE_ROLES}")
+    if len(body.password) < 6:
+        raise HTTPException(422, "Password must be at least 6 characters")
+    if storage.get_user(name):
+        raise HTTPException(409, "That username already exists")
+    salt, h = auth.hash_new(body.password)
+    uid = storage.create_user(name, salt, h, body.role)
+    return next(u for u in storage.list_users() if u["id"] == uid)
+
+
+@router.patch("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
+def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth)):
+    target = storage.get_user_by_id(uid)
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    if body.role is not None:
+        if body.role not in auth.ASSIGNABLE_ROLES:
+            raise HTTPException(422, f"Role must be one of {auth.ASSIGNABLE_ROLES}")
+        if target["role"] == "director" and body.role != "director" \
+                and storage.count_active_directors(exclude_id=uid) == 0:
+            raise HTTPException(400, "There must be at least one active director")
+        storage.update_user(uid, role=body.role)
+
+    if body.active is not None:
+        if not body.active and uid == me["id"]:
+            raise HTTPException(400, "You can't deactivate your own account")
+        if not body.active and target["role"] == "director" \
+                and storage.count_active_directors(exclude_id=uid) == 0:
+            raise HTTPException(400, "There must be at least one active director")
+        storage.update_user(uid, active=body.active)
+
+    if body.password is not None:
+        if len(body.password) < 6:
+            raise HTTPException(422, "Password must be at least 6 characters")
+        salt, h = auth.hash_new(body.password)
+        storage.set_user_password(uid, salt, h)
+
+    return next(u for u in storage.list_users() if u["id"] == uid)
+
+
+@router.delete("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
+def remove_user(uid: int, me: dict = Depends(auth.require_auth)):
+    target = storage.get_user_by_id(uid)
+    if not target:
+        return {"ok": True}
+    if uid == me["id"]:
+        raise HTTPException(400, "You can't delete your own account")
+    if target["role"] == "director" and storage.count_active_directors(exclude_id=uid) == 0:
+        raise HTTPException(400, "There must be at least one active director")
+    storage.delete_user(uid)
+    return {"ok": True}
 
 
 # --- aggregate state (one call the dashboard loads on startup) ----------

@@ -91,6 +91,15 @@ def init_db():
             text TEXT NOT NULL DEFAULT '',
             updated_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            salt TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS documents (
             kind TEXT NOT NULL,
             ref_id INTEGER NOT NULL,
@@ -228,6 +237,74 @@ def is_empty() -> bool:
     with get_conn() as conn:
         n = conn.execute("SELECT COUNT(*) AS c FROM transactions").fetchone()["c"]
         return n == 0
+
+
+# --- users -------------------------------------------------------------
+
+def user_count() -> int:
+    with get_conn() as conn:
+        return conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+
+
+def get_user(username: str):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
+        return dict(r) if r else None
+
+
+def get_user_by_id(uid: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        return dict(r) if r else None
+
+
+def list_users() -> list:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, username, role, active, created_at FROM users ORDER BY username COLLATE NOCASE"
+        )]
+
+
+def create_user(username: str, salt: str, hash_hex: str, role: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO users(username, salt, hash, role, active) VALUES (?, ?, ?, ?, 1)",
+            (username.strip(), salt, hash_hex, role),
+        )
+        return cur.lastrowid
+
+
+def set_user_password(uid: int, salt: str, hash_hex: str):
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET salt = ?, hash = ? WHERE id = ?", (salt, hash_hex, uid))
+
+
+def update_user(uid: int, *, role: str = None, active: bool = None):
+    sets, params = [], []
+    if role is not None:
+        sets.append("role = ?"); params.append(role)
+    if active is not None:
+        sets.append("active = ?"); params.append(1 if active else 0)
+    if not sets:
+        return
+    params.append(uid)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+
+
+def delete_user(uid: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+
+
+def count_active_directors(exclude_id: int = None) -> int:
+    q = "SELECT COUNT(*) AS c FROM users WHERE role = 'director' AND active = 1"
+    params = ()
+    if exclude_id is not None:
+        q += " AND id != ?"
+        params = (exclude_id,)
+    with get_conn() as conn:
+        return conn.execute(q, params).fetchone()["c"]
 
 
 def next_counter(name: str) -> int:

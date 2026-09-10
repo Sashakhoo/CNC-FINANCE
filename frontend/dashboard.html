@@ -175,6 +175,7 @@
   .lock-btn{background:var(--panel); border:1px solid var(--line); border-radius:100px; padding:9px 16px; font-size:12px; font-weight:600; box-shadow:var(--shadow); color:var(--ink-2); display:flex; align-items:center; gap:6px;}
   .lock-btn.unlocked{background:var(--lime); color:var(--lime-ink); border:none;}
   .cap-denied{opacity:0.4; pointer-events:none;}
+  .nav-pill.cap-denied{display:none;}
   .lock-banner{font-size:11.5px; color:var(--dim); background:var(--bg); border-radius:100px; padding:6px 14px; display:inline-block; margin-bottom:14px;}
 
   /* Trial balance */
@@ -325,13 +326,18 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V5a2 2 0 0 1 2-2h6l6 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M12 3v5h6"/></svg>
     <span>Company</span>
   </div>
+  <div class="nav-pill" data-view="team" data-cap="users">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 11a3 3 0 1 0 0-6M20 20a5.5 5.5 0 0 0-4-5.3"/></svg>
+    <span>Team</span>
+  </div>
 </div>
 
 <div class="main">
   <div class="topbar">
     <div><h1 id="page-title">Good morning, Natasya</h1><div class="sub">Code N Code Solution · Maybank 551276106077 · Apr–Aug 2026 (from bank statements)</div></div>
-    <div style="display:flex; align-items:center; gap:14px;">
+    <div style="display:flex; align-items:center; gap:10px;">
       <div class="top-note">All figures recalculate live as you add entries →</div>
+      <button class="lock-btn" onclick="openPwModal()" title="Change your password">🔑</button>
       <button class="lock-btn unlocked" id="lock-toggle-btn" onclick="logout()">⎋ Log out</button>
     </div>
   </div>
@@ -610,6 +616,33 @@
       </div>
     </div>
 
+    <!-- TEAM / USER ACCOUNTS (director only) -->
+    <div class="view" id="view-team">
+      <div class="card">
+        <form class="inline" data-cap="users" onsubmit="return addUser(event)">
+          <div class="field"><label>Username</label><input type="text" id="usr-name" required style="min-width:170px;"></div>
+          <div class="field"><label>Password</label><input type="text" id="usr-pass" required placeholder="min 6 chars"></div>
+          <div class="field"><label>Role</label><select id="usr-role"><option value="admin">Admin — invoices &amp; documents only</option><option value="director">Director — full access</option></select></div>
+          <button class="pill-btn dark" type="submit">＋ Add User</button>
+        </form>
+        <div class="panel-head"><span class="panel-title">Accounts</span><span class="top-note">Director sees all &amp; manages users · Admin can only create invoices and generate documents</span></div>
+        <table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody id="usr-body"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal-overlay" id="pw-modal-overlay">
+  <div class="receipt-card" style="width:360px;">
+    <button class="receipt-close" onclick="closePwModal()">✕</button>
+    <div class="receipt-title" style="margin-bottom:16px;">Change your password</div>
+    <form onsubmit="return submitPw(event)" style="display:flex; flex-direction:column; gap:12px;">
+      <div class="field"><label>Current password</label><input type="password" id="pw-current" required></div>
+      <div class="field"><label>New password</label><input type="password" id="pw-new" required minlength="6"></div>
+      <div id="pw-error" style="color:#c23b1f; font-size:12px; min-height:16px;"></div>
+      <button class="pill-btn dark" type="submit" style="justify-content:center; display:flex;">Update password</button>
+    </form>
   </div>
 </div>
 
@@ -710,6 +743,7 @@ async function loadState(){
       'Saved ' + new Date(s.notes.updated_at).toLocaleString('en-MY',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'});
   }
   render();
+  loadUsers();
 }
 
 /* Historical ledger (Apr–Aug 2026, reconciled from the 5 Maybank Islamic
@@ -844,7 +878,8 @@ function switchView(name){
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.nav-pill').forEach(n=>n.classList.remove('active'));
   document.querySelector('.nav-pill[data-view="'+name+'"]').classList.add('active');
-  const titles = {dashboard:'Good morning, Natasya', cico:'Cash In & Out', invoice:'Invoice & Receipt', contacts:'Debtor & Creditor', financials:'Financial Statements', performance:'Performance & Trends', assets:'Assets', tax:'Tax & Zakat', notes:'Notes', company:'Company Profile'};
+  const titles = {dashboard:'Good morning, Natasya', cico:'Cash In & Out', invoice:'Invoice & Receipt', contacts:'Debtor & Creditor', financials:'Financial Statements', performance:'Performance & Trends', assets:'Assets', tax:'Tax & Zakat', notes:'Notes', company:'Company Profile', team:'Team & Access'};
+  if(name === 'team') loadUsers();
   document.getElementById('page-title').textContent = titles[name];
 }
 document.querySelectorAll('.nav-pill').forEach(item=>{
@@ -933,6 +968,84 @@ async function doLogin(e){
 async function logout(){
   await fetch('/api/logout', {method:'POST', credentials:'same-origin'});
   showLogin();
+}
+
+// --- Team / user accounts (director only) -----------------------------
+let users = [];
+async function loadUsers(){
+  if(!currentUser || !(currentUser.caps || []).includes('users')) return;
+  try { users = await api('/users'); } catch(_){ return; }
+  renderUsers();
+}
+function renderUsers(){
+  const body = document.getElementById('usr-body');
+  if(!body) return;
+  body.innerHTML = users.map(u=>{
+    const self = currentUser && u.username === currentUser.username;
+    return `<tr>
+      <td>${u.username}${self ? ' <span class="top-note">(you)</span>' : ''}</td>
+      <td><select class="mono" ${self?'disabled':''} onchange="patchUser(${u.id},{role:this.value})" style="font-size:11px; padding:4px 8px; border-radius:8px;">
+        <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+        <option value="director" ${u.role==='director'?'selected':''}>director</option>
+      </select></td>
+      <td><span class="tag ${u.active?'paid':'overdue'}">${u.active?'ACTIVE':'DISABLED'}</span></td>
+      <td class="mono" style="color:var(--dim);">${(u.created_at||'').slice(0,10)}</td>
+      <td style="white-space:nowrap;">
+        <button class="pill-btn small" onclick="resetUserPw(${u.id},'${u.username}')">Reset PW</button>
+        ${self ? '' : `<button class="pill-btn small" onclick="patchUser(${u.id},{active:${u.active?0:1}})" style="margin-left:6px;">${u.active?'Disable':'Enable'}</button>
+        <button class="pill-btn danger small" onclick="deleteUser(${u.id},'${u.username}')" style="margin-left:6px;">Delete</button>`}
+      </td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty-note">No users.</td></tr>';
+}
+async function addUser(e){
+  e.preventDefault();
+  const body = {
+    username: document.getElementById('usr-name').value,
+    password: document.getElementById('usr-pass').value,
+    role: document.getElementById('usr-role').value,
+  };
+  await api('/users', {method:'POST', body: JSON.stringify(body)});
+  e.target.reset();
+  await loadUsers();
+  return false;
+}
+async function patchUser(id, patch){
+  await api('/users/' + id, {method:'PATCH', body: JSON.stringify(patch)});
+  await loadUsers();
+}
+async function deleteUser(id, name){
+  if(!confirm('Delete account "' + name + '"? This cannot be undone.')) return;
+  await api('/users/' + id, {method:'DELETE'});
+  await loadUsers();
+}
+async function resetUserPw(id, name){
+  const pw = prompt('New password for "' + name + '" (min 6 characters):');
+  if(!pw) return;
+  await api('/users/' + id, {method:'PATCH', body: JSON.stringify({password: pw})});
+  alert('Password updated for ' + name);
+}
+
+// --- change your own password ----------------------------------------
+function openPwModal(){ document.getElementById('pw-error').textContent=''; document.getElementById('pw-modal-overlay').classList.add('open'); }
+function closePwModal(){ document.getElementById('pw-modal-overlay').classList.remove('open'); }
+async function submitPw(e){
+  e.preventDefault();
+  const err = document.getElementById('pw-error');
+  err.textContent = '';
+  try {
+    const res = await fetch('/api/account/password', {
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({
+        current_password: document.getElementById('pw-current').value,
+        new_password: document.getElementById('pw-new').value,
+      }),
+    });
+    if(!res.ok){ err.textContent = (await res.json().catch(()=>({}))).detail || 'Failed'; return false; }
+    e.target.reset();
+    closePwModal();
+    alert('Password updated.');
+  } catch(_){ err.textContent = 'Network error'; }
+  return false;
 }
 
 // Monthly aggregation used by Performance, P&L Monthly, and the Cash In &
