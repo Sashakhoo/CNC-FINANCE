@@ -7,3 +7,4 @@ venv/
 *.db-journal
 backend/cnc.db
 .DS_Store
+_docpreview/

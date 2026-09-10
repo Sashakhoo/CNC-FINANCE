@@ -32,10 +32,12 @@ BASE_CSS = """
 body { font-family: 'DejaVu Sans', sans-serif; color: #15141a; font-size: 11pt; }
 .brand { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
 .brand .mark { width:34px; height:34px; border-radius:9px; background:#0a0e14; color:#00dcb4;
-  display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:15pt; }
-.brand .logo { height:24px; width:auto; }
-.brand .name { font-weight:bold; font-size:14pt; }
-.brand .sub { font-size:8pt; color:#666; margin-top:2px; }
+  display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:15pt; flex-shrink:0; }
+.brand .logo { height:22px; width:auto; flex-shrink:0; }
+.brand .name { font-weight:bold; font-size:13pt; }
+.brand > div { min-width:0; }
+.brand .sub { font-size:7.5pt; color:#666; margin-top:2px; }
+.stamp { white-space:nowrap; flex-shrink:0; }
 .title { text-align:center; font-weight:bold; font-size:11pt; letter-spacing:1px;
   text-transform:uppercase; color:#666; margin:18px 0 4px 0; }
 .docno { text-align:center; font-family:monospace; font-size:9pt; color:#666; margin-bottom:16px; }
