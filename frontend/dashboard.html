@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CmPro — Bento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2efe8; --panel:#ffffff; --ink:#15141a; --ink-2:#3a3846; --dim:#8b8894; --line:#eae6db;
+    --lime:#d7f26d; --lime-ink:#3a4408;
+    --lavender:#d9d3fb; --lavender-ink:#3a3266;
+    --coral:#ffb7a6; --coral-ink:#5c2213;
+    --cyan:#bdeef2; --cyan-ink:#0c3a3d;
+    --yellow:#ffe08a; --yellow-ink:#4a3402;
+    --shadow:0 8px 30px rgba(20,18,25,0.06), 0 2px 8px rgba(20,18,25,0.04);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; font-size:13.5px; display:flex; min-height:100vh;}
+  h1,h2,h3,.num{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  button{font-family:'Inter',sans-serif; cursor:pointer;}
+  input,select{font-family:'Inter',sans-serif;}
+
+  .side{width:96px; flex-shrink:0; padding:24px 14px; display:flex; flex-direction:column; align-items:center; gap:8px;}
+  .brand-mark{width:44px;height:44px;border-radius:16px; background:var(--ink); display:flex;align-items:center;justify-content:center; color:var(--lime); font-weight:700; font-size:17px; margin-bottom:20px;}
+  .nav-pill{width:100%; padding:12px 0; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--dim); cursor:pointer;}
+  .nav-pill.active{background:var(--ink); color:var(--lime); box-shadow:var(--shadow);}
+  .nav-pill svg{width:18px; height:18px;}
+  .nav-pill span{font-size:9px; font-weight:600;}
+
+  .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:24px 26px 18px 0;}
+  .topbar h1{font-size:22px; font-weight:600; letter-spacing:-0.4px;}
+  .topbar .sub{color:var(--dim); font-size:12.5px; margin-top:3px; font-weight:500;}
+  .top-note{font-size:11.5px; color:var(--dim); font-weight:500;}
+  .content{padding:0 26px 50px 0; overflow-y:auto; flex:1;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .bento{display:grid; grid-template-columns:repeat(12,1fr); gap:14px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:var(--shadow);}
+  .card.dark{background:var(--ink); color:#f4f2ea; border:none;}
+  .card.lime{background:var(--lime); color:var(--lime-ink); border:none;}
+  .card.lavender{background:var(--lavender); color:var(--lavender-ink); border:none;}
+  .card.coral{background:var(--coral); color:var(--coral-ink); border:none;}
+  .card.cyan{background:var(--cyan); color:var(--cyan-ink); border:none;}
+  .card.yellow{background:var(--yellow); color:var(--yellow-ink); border:none;}
+  .c-3{grid-column:span 3;} .c-4{grid-column:span 4;} .c-5{grid-column:span 5;}
+  .c-6{grid-column:span 6;} .c-7{grid-column:span 7;} .c-8{grid-column:span 8;}
+  .c-9{grid-column:span 9;} .c-12{grid-column:span 12;}
+  .full-panel{margin-top:14px;}
+
+  .kpi .k-label{font-size:12px; font-weight:600; opacity:0.75;}
+  .kpi .num{font-size:28px; font-weight:700; letter-spacing:-0.7px; margin-top:12px;}
+  .kpi .num .cur{font-size:14px; font-weight:600; opacity:0.6; margin-right:2px;}
+  .pill-status{font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:100px; display:inline-flex; align-items:center; gap:4px; margin-top:12px;}
+  .card.dark .pill-status{background:rgba(215,242,109,0.18); color:var(--lime);}
+  .card:not(.dark) .pill-status{background:rgba(0,0,0,0.08);}
+
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .panel-title{font-size:14.5px; font-weight:600;}
+
+  .pill-btn{background:var(--panel); border:1px solid var(--line); border-radius:100px; padding:9px 16px; font-size:12.5px; font-weight:600; box-shadow:var(--shadow); color:var(--ink-2); border-width:1px;}
+  .pill-btn.dark{background:var(--ink); color:var(--lime); border:none;}
+  .pill-btn.small{padding:6px 12px; font-size:11.5px;}
+  .pill-btn.danger{background:#fff0ee; color:#c23b1f; box-shadow:none; border:1px solid #f6d8d2;}
+
+  form.inline{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label{font-size:10.5px; color:var(--dim); font-weight:700; text-transform:uppercase; letter-spacing:0.2px;}
+  .field input, .field select{background:var(--bg); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:9px 11px; font-size:12.5px; min-width:120px;}
+
+  table{width:100%; border-collapse:collapse;}
+  th{text-align:left; font-size:10.5px; color:var(--dim); font-weight:700; padding:0 10px 10px 10px; text-transform:uppercase; letter-spacing:0.3px;}
+  td{padding:11px 10px; font-size:12.5px; border-top:1px solid var(--line);}
+  tr:first-child td{border-top:none;}
+  .amt{font-family:'JetBrains Mono',monospace;}
+  .amt-in{color:#3a7a1f; font-family:'JetBrains Mono',monospace;}
+  .amt-out{color:#a13d20; font-family:'JetBrains Mono',monospace;}
+  .tag{display:inline-block; font-size:10px; font-weight:700; padding:4px 10px; border-radius:100px;}
+  .tag.in{background:#e7f7c9; color:#3a7a1f;}
+  .tag.out{background:#ffe3dd; color:#a13d20;}
+  .tag.paid{background:#e7f7c9; color:#3a7a1f;}
+  .tag.unpaid{background:#fff1cf; color:#8a6300;}
+  .tag.overdue{background:#ffe3dd; color:#a13d20;}
+  .tag.debtor{background:#fff1cf; color:#8a6300;}
+  .tag.creditor{background:#ffe3dd; color:#a13d20;}
+  .empty-note{color:var(--dim); font-size:12px; padding:6px 0;}
+
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .line-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .line-row:last-child{border-bottom:none;}
+  .line-row.total{font-weight:700; padding-top:12px;}
+  .group-label{font-size:10.5px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.3px; margin:14px 0 4px 0;}
+  .group-label:first-child{margin-top:0;}
+
+  .stat-mini{display:flex; gap:14px;}
+  .stat-mini .m-card{flex:1; background:var(--bg); border-radius:14px; padding:14px 16px;}
+  .stat-mini .m-label{font-size:10.5px; color:var(--dim); font-weight:600;}
+  .stat-mini .m-val{font-size:19px; font-weight:700; margin-top:6px;}
+
+  .pill-btn.receipt{background:var(--lime); color:var(--lime-ink); box-shadow:none; border:none;}
+
+  /* Receipt modal */
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(21,20,26,0.55); z-index:100; align-items:center; justify-content:center; padding:30px;}
+  .modal-overlay.open{display:flex;}
+  .receipt-card{background:#fff; color:var(--ink); width:420px; max-width:100%; border-radius:18px; padding:32px 30px; box-shadow:0 24px 60px rgba(0,0,0,0.3); position:relative; max-height:90vh; overflow-y:auto;}
+  .receipt-close{position:absolute; top:16px; right:16px; width:30px; height:30px; border-radius:100px; background:var(--bg); border:none; font-size:15px; color:var(--dim); display:flex; align-items:center; justify-content:center;}
+  .receipt-brand{display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+  .receipt-brand .mark{width:36px;height:36px;border-radius:12px; background:var(--ink); color:var(--lime); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px;}
+  .receipt-brand .name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;}
+  .receipt-brand .tag{font-size:10.5px; color:var(--dim);}
+  .receipt-title{font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--dim); text-align:center; margin:18px 0 4px 0;}
+  .receipt-no{text-align:center; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--dim); margin-bottom:18px;}
+  .receipt-row{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px;}
+  .receipt-row .rl{color:var(--dim);}
+  .receipt-row .rv{font-weight:600; text-align:right;}
+  .receipt-amount{text-align:center; margin:20px 0;}
+  .receipt-amount .lbl{font-size:11px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;}
+  .receipt-amount .val{font-family:'Space Grotesk',sans-serif; font-size:30px; font-weight:700; margin-top:6px;}
+  .receipt-foot{text-align:center; font-size:11px; color:var(--dim); margin-top:20px; line-height:1.5;}
+  .receipt-actions{display:flex; gap:10px; margin-top:22px;}
+  .receipt-actions .pill-btn{flex:1; justify-content:center; display:flex; text-align:center;}
+
+  @media print{
+    body *{visibility:hidden;}
+    #receipt-modal, #receipt-modal *{visibility:visible;}
+    #receipt-modal{position:fixed; inset:0; background:#fff; padding:40px; display:flex; align-items:flex-start; justify-content:center;}
+    #voucher-modal, #voucher-modal *{visibility:visible;}
+    #voucher-modal{position:fixed; inset:0; background:#fff; padding:40px; display:flex; align-items:flex-start; justify-content:center;}
+    .receipt-close, .receipt-actions{display:none !important;}
+    .receipt-card{box-shadow:none;}
+  }
+
+  /* Voucher modal (Payment Voucher / Cash Voucher) */
+  .voucher-card{background:#fff; color:var(--ink); width:460px; max-width:100%; border-radius:18px; padding:32px 30px; box-shadow:0 24px 60px rgba(0,0,0,0.3); position:relative; max-height:90vh; overflow-y:auto;}
+  .voucher-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;}
+  .voucher-head .name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;}
+  .voucher-head .tag{font-size:10.5px; color:var(--dim); margin-top:2px;}
+  .voucher-stamp{font-size:11px; font-weight:700; padding:5px 11px; border-radius:100px; text-transform:uppercase; letter-spacing:0.4px;}
+  .voucher-stamp.pv{background:var(--coral); color:var(--coral-ink);}
+  .voucher-stamp.cv{background:var(--lime); color:var(--lime-ink);}
+  .voucher-no{font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--dim); margin:16px 0 14px 0; text-align:right;}
+  .voucher-row{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--line); font-size:12.5px;}
+  .voucher-row .rl{color:var(--dim);}
+  .voucher-row .rv{font-weight:600; text-align:right;}
+  .voucher-amount{text-align:center; margin:18px 0; padding:16px; background:var(--bg); border-radius:12px;}
+  .voucher-amount .lbl{font-size:10.5px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;}
+  .voucher-amount .val{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; margin-top:4px;}
+  .sig-row{display:flex; gap:20px; margin-top:34px;}
+  .sig-box{flex:1; text-align:center;}
+  .sig-line{border-top:1px solid var(--ink-2); margin-bottom:6px; padding-top:26px;}
+  .sig-label{font-size:10.5px; color:var(--dim); font-weight:600;}
+  .voucher-actions{display:flex; gap:10px; margin-top:22px;}
+  .voucher-actions .pill-btn{flex:1; justify-content:center; display:flex; text-align:center;}
+
+  /* Sub-tabs (inside Cash In & Out and Financials) */
+  .subtabs{display:flex; gap:6px; background:var(--bg); border-radius:100px; padding:4px; width:fit-content; margin-bottom:16px;}
+  .subtab{padding:8px 15px; border-radius:100px; font-size:12px; font-weight:600; color:var(--dim); cursor:pointer;}
+  .subtab.active{background:var(--ink); color:var(--lime);}
+  .subview{display:none;}
+  .subview.active{display:block;}
+
+  /* Lock / access control */
+  .lock-btn{background:var(--panel); border:1px solid var(--line); border-radius:100px; padding:9px 16px; font-size:12px; font-weight:600; box-shadow:var(--shadow); color:var(--ink-2); display:flex; align-items:center; gap:6px;}
+  .lock-btn.unlocked{background:var(--lime); color:var(--lime-ink); border:none;}
+  body.locked .guard{opacity:0.45; pointer-events:none;}
+  .lock-banner{font-size:11.5px; color:var(--dim); background:var(--bg); border-radius:100px; padding:6px 14px; display:inline-block; margin-bottom:14px;}
+
+  /* Trial balance */
+  .tb-table td, .tb-table th{text-align:right;}
+  .tb-table td:nth-child(1), .tb-table td:nth-child(2), .tb-table th:nth-child(1), .tb-table th:nth-child(2){text-align:left;}
+  .tb-table tr.grp td{font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.3px; color:var(--dim); padding-top:16px; border-top:none;}
+  .tb-table tr.total td{font-weight:700; border-top:2px solid var(--ink);}
+  .tally-pill{font-size:11px; font-weight:700; padding:6px 13px; border-radius:100px; display:inline-flex; align-items:center; gap:6px;}
+  .tally-pill.ok{background:#e7f7c9; color:#3a7a1f;}
+  .tally-pill.no{background:#ffe3dd; color:#a13d20;}
+
+  /* Notes */
+  #notes-textarea{width:100%; min-height:260px; background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:16px; font-family:'Inter',sans-serif; font-size:13px; color:var(--ink); resize:vertical;}
+
+  @media print{
+    .print-all-fin .subview{display:block !important; margin-bottom:26px; page-break-inside:avoid;}
+    .print-all-fin .subtabs{display:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="login-overlay" style="z-index:200;">
+  <div class="receipt-card" style="width:360px; text-align:center;">
+    <div class="receipt-brand" style="justify-content:center;">
+      <div class="mark">C</div>
+      <div style="text-align:left;"><div class="name">CmPro</div><div class="tag">Code N Code Solution</div></div>
+    </div>
+    <div class="receipt-title" style="margin-bottom:16px;">Sign in</div>
+    <form onsubmit="return doLogin(event)" style="display:flex; flex-direction:column; gap:12px; text-align:left;">
+      <div class="field"><label>Username</label><input type="text" id="login-user" autocomplete="username" required></div>
+      <div class="field"><label>Password</label><input type="password" id="login-pass" autocomplete="current-password" required></div>
+      <div id="login-error" style="color:#c23b1f; font-size:12px; min-height:16px;"></div>
+      <button class="pill-btn dark" type="submit" style="justify-content:center; display:flex;">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div class="side">
+  <div class="brand-mark">C</div>
+  <div class="nav-pill active" data-view="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+    <span>Home</span>
+  </div>
+  <div class="nav-pill" data-view="cico">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="12" rx="3"/><circle cx="12" cy="13" r="2"/></svg>
+    <span>Cash</span>
+  </div>
+  <div class="nav-pill" data-view="invoice">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    <span>Invoice</span>
+  </div>
+  <div class="nav-pill" data-view="contacts">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/></svg>
+    <span>Contacts</span>
+  </div>
+  <div class="nav-pill" data-view="financials">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 4v16"/></svg>
+    <span>Reports</span>
+  </div>
+  <div class="nav-pill" data-view="performance">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+    <span>Trends</span>
+  </div>
+  <div class="nav-pill" data-view="assets">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8M12 8v8"/></svg>
+    <span>Assets</span>
+  </div>
+  <div class="nav-pill" data-view="tax">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4Z"/></svg>
+    <span>Tax</span>
+  </div>
+  <div class="nav-pill" data-view="notes">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/></svg>
+    <span>Notes</span>
+  </div>
+  <div class="nav-pill" data-view="company">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V5a2 2 0 0 1 2-2h6l6 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M12 3v5h6"/></svg>
+    <span>Company</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div><h1 id="page-title">Good morning, Natasya</h1><div class="sub">Code N Code Solution · Maybank 551276106077 · Apr–Aug 2026 (from bank statements)</div></div>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="top-note">All figures recalculate live as you add entries →</div>
+      <button class="lock-btn unlocked" id="lock-toggle-btn" onclick="logout()">⎋ Log out</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <div class="bento">
+        <div class="card dark kpi c-4"><div class="k-label">Cash Balance</div><div class="num" id="kpi-cash"><span class="cur">RM</span>0</div><div class="pill-status">As of 31 Aug</div></div>
+        <div class="card lavender kpi c-4"><div class="k-label">Total Debtors</div><div class="num" id="kpi-debtors"><span class="cur">RM</span>0</div><div class="pill-status">No open AR on bank feed</div></div>
+        <div class="card coral kpi c-4"><div class="k-label">Total Creditors</div><div class="num" id="kpi-creditors"><span class="cur">RM</span>0</div><div class="pill-status">No open AP on bank feed</div></div>
+
+        <div class="card lime c-5"><div class="panel-head"><span class="panel-title">Net P&amp;L (Apr–Aug)</span></div>
+          <div class="num" style="font-size:26px;" id="kpi-netpl"><span class="cur">RM</span>0</div>
+        </div>
+        <div class="card c-7">
+          <div class="panel-head"><span class="panel-title">Expense Breakdown</span></div>
+          <div id="expense-bars"></div>
+        </div>
+
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Recent Transactions</span><span class="top-note" style="cursor:pointer;" onclick="switchView('cico')">View all →</span></div>
+          <table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th style="text-align:right;">Amount</th></tr></thead><tbody id="dash-tx-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CASH IN & OUT -->
+    <div class="view" id="view-cico">
+      <div class="subtabs">
+        <div class="subtab active" data-cico-tab="ledger" onclick="switchCicoTab('ledger')">Ledger</div>
+        <div class="subtab" data-cico-tab="summary" onclick="switchCicoTab('summary')">Summary</div>
+      </div>
+
+      <div class="subview active" id="cico-ledger">
+        <div class="card">
+          <form class="inline guard" onsubmit="return addTransaction(event)">
+            <div class="field"><label>Date</label><input type="date" id="tx-date" required></div>
+            <div class="field"><label>Description</label><input type="text" id="tx-desc" placeholder="e.g. Rental payment" required style="min-width:220px;"></div>
+            <div class="field"><label>Type</label><select id="tx-type"><option value="in">Cash In</option><option value="out">Cash Out</option></select></div>
+            <div class="field"><label>Category</label><input type="text" id="tx-category" placeholder="Sales, Rental…" required></div>
+            <div class="field"><label>Amount (RM)</label><input type="number" id="tx-amount" step="0.01" min="0" required></div>
+            <button class="pill-btn dark" type="submit">＋ Add Entry</button>
+          </form>
+          <div class="panel-head"><span class="panel-title">All Transactions</span><span class="top-note" id="tx-count"></span></div>
+          <table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="tx-body"></tbody></table>
+        </div>
+      </div>
+
+      <div class="subview" id="cico-summary">
+        <div class="bento">
+          <div class="card c-6">
+            <div class="panel-head"><span class="panel-title">By Category — Cash In</span></div>
+            <div id="summary-in-cats"></div>
+          </div>
+          <div class="card coral c-6">
+            <div class="panel-head"><span class="panel-title">By Category — Cash Out</span></div>
+            <div id="summary-out-cats"></div>
+          </div>
+          <div class="card c-12">
+            <div class="panel-head"><span class="panel-title">Monthly Rollup</span></div>
+            <table><thead><tr><th>Month</th><th style="text-align:right;">Cash In</th><th style="text-align:right;">Cash Out</th><th style="text-align:right;">Net</th></tr></thead><tbody id="cico-monthly-body"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVOICE & RECEIPT -->
+    <div class="view" id="view-invoice">
+      <div class="card">
+        <form class="inline guard" onsubmit="return addInvoice(event)">
+          <div class="field"><label>Contact</label><select id="inv-contact"></select></div>
+          <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
+          <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
+          <div class="field"><label>Amount (RM)</label><input type="number" id="inv-amount" step="0.01" min="0" required></div>
+          <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
+        </form>
+        <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Recovered from invoice-tagged bank transfers</span></div>
+        <table><thead><tr><th>No.</th><th>Contact</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- DEBTOR & CREDITOR -->
+    <div class="view" id="view-contacts">
+      <div class="card">
+        <form class="inline guard" onsubmit="return addContact(event)">
+          <div class="field"><label>Name</label><input type="text" id="ct-name" placeholder="Company name" required style="min-width:200px;"></div>
+          <div class="field"><label>Type</label><select id="ct-type"><option value="debtor">Debtor</option><option value="creditor">Creditor</option></select></div>
+          <div class="field"><label>Opening Balance (RM)</label><input type="number" id="ct-balance" step="0.01" min="0" required></div>
+          <button class="pill-btn dark" type="submit">＋ Add Contact</button>
+        </form>
+        <div class="panel-head"><span class="panel-title">Contacts</span><span class="top-note">Bank statements only show settled transfers — no open balances to seed</span></div>
+        <table><thead><tr><th>Name</th><th>Type</th><th>Account Code</th><th style="text-align:right;">Balance</th><th></th></tr></thead><tbody id="ct-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- FINANCIAL STATEMENTS -->
+    <div class="view" id="view-financials">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
+        <div class="subtabs">
+          <div class="subtab active" data-fin-tab="bs" onclick="switchFinTab('bs')">Balance Sheet</div>
+          <div class="subtab" data-fin-tab="plyear" onclick="switchFinTab('plyear')">P&amp;L Yearly</div>
+          <div class="subtab" data-fin-tab="plmonth" onclick="switchFinTab('plmonth')">P&amp;L Monthly</div>
+          <div class="subtab" data-fin-tab="plsummary" onclick="switchFinTab('plsummary')">P&amp;L Summary</div>
+          <div class="subtab" data-fin-tab="tb" onclick="switchFinTab('tb')">Trial Balance</div>
+          <div class="subtab" data-fin-tab="cf" onclick="switchFinTab('cf')">Cash Flow</div>
+        </div>
+        <button class="pill-btn dark" onclick="exportAllFinancials()">🖨 Export All (PDF)</button>
+      </div>
+
+      <div id="financials-print-area">
+        <div class="subview active" id="fin-bs">
+          <div class="card">
+            <div class="panel-head"><span class="panel-title">Statement of Financial Position</span></div>
+            <div class="group-label">Assets</div>
+            <div class="line-row"><span>Cash and bank balances</span><span class="amt" id="bs-cash">RM 0</span></div>
+            <div class="line-row"><span>Trade debtors</span><span class="amt" id="bs-debtors">RM 0</span></div>
+            <div class="line-row"><span>Fixed assets (net book value)</span><span class="amt" id="bs-nbv">RM 0</span></div>
+            <div class="line-row total"><span>Total Assets</span><span class="amt" id="bs-total-assets">RM 0</span></div>
+            <div class="group-label">Equity &amp; Liabilities</div>
+            <div class="line-row"><span>Trade creditors</span><span class="amt" id="bs-creditors">RM 0</span></div>
+            <div class="line-row"><span>Owner's Equity (plug)</span><span class="amt" id="bs-equity">RM 0</span></div>
+            <div class="line-row total"><span>Total Equity &amp; Liabilities</span><span class="amt" id="bs-total-eq">RM 0</span></div>
+          </div>
+        </div>
+
+        <div class="subview" id="fin-plyear">
+          <div class="card cyan">
+            <div class="panel-head"><span class="panel-title">Profit &amp; Loss — Yearly (full range)</span></div>
+            <div class="group-label">Income</div>
+            <div class="line-row"><span>Total Cash In</span><span class="amt" id="pl-in">RM 0</span></div>
+            <div class="group-label">Expenses by Category</div>
+            <div id="pl-expenses"></div>
+            <div class="line-row"><span>Total Cash Out</span><span class="amt" id="pl-out">RM 0</span></div>
+            <div class="line-row total"><span>Net Profit / (Loss)</span><span class="amt" id="pl-net">RM 0</span></div>
+          </div>
+        </div>
+
+        <div class="subview" id="fin-plmonth">
+          <div class="card">
+            <div class="panel-head"><span class="panel-title">Profit &amp; Loss — Monthly</span></div>
+            <table><thead><tr><th>Month</th><th style="text-align:right;">Revenue</th><th style="text-align:right;">Expenses</th><th style="text-align:right;">Net Profit</th></tr></thead><tbody id="pl-monthly-body"></tbody></table>
+          </div>
+        </div>
+
+        <div class="subview" id="fin-plsummary">
+          <div class="card lavender">
+            <div class="panel-head"><span class="panel-title">Profit &amp; Loss — Summary</span></div>
+            <div class="stat-mini">
+              <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Total Revenue</div><div class="m-val" id="pls-rev">RM 0</div></div>
+              <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Total Expenses</div><div class="m-val" id="pls-exp">RM 0</div></div>
+              <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Net Profit</div><div class="m-val" id="pls-net">RM 0</div></div>
+            </div>
+            <div class="group-label" style="margin-top:18px;">Top Revenue Categories</div>
+            <div id="pls-rev-cats"></div>
+            <div class="group-label">Top Expense Categories</div>
+            <div id="pls-exp-cats"></div>
+          </div>
+        </div>
+
+        <div class="subview" id="fin-tb">
+          <div class="card">
+            <div class="panel-head"><span class="panel-title">Trial Balance</span><span id="tb-tally"></span></div>
+            <table class="tb-table"><thead><tr><th>Code</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody id="tb-body"></tbody></table>
+          </div>
+        </div>
+
+        <div class="subview" id="fin-cf">
+          <div class="card">
+            <div class="panel-head"><span class="panel-title">Cash Flow Summary</span></div>
+            <div class="stat-mini">
+              <div class="m-card"><div class="m-label">Opening Cash (1 Apr)</div><div class="m-val" id="cf-open">RM 0</div></div>
+              <div class="m-card"><div class="m-label">Net Change</div><div class="m-val" id="cf-change">RM 0</div></div>
+              <div class="m-card"><div class="m-label">Closing Cash (31 Aug)</div><div class="m-val" id="cf-close">RM 0</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERFORMANCE / TRENDS -->
+    <div class="view" id="view-performance">
+      <div class="bento">
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Monthly Trend — Revenue vs Expenses</span></div>
+          <div id="perf-chart" style="display:flex; align-items:flex-end; gap:18px; height:160px; padding:0 4px;"></div>
+        </div>
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Performance by Month</span></div>
+          <table><thead><tr><th>Month</th><th style="text-align:right;">Revenue</th><th style="text-align:right;">Expenses</th><th style="text-align:right;">Net Profit</th><th style="text-align:right;">Closing Cash</th></tr></thead><tbody id="perf-table-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ASSETS -->
+    <div class="view" id="view-assets">
+      <div class="card">
+        <form class="inline guard" onsubmit="return addAsset(event)">
+          <div class="field"><label>Asset Name</label><input type="text" id="as-name" required style="min-width:200px;"></div>
+          <div class="field"><label>Category</label><input type="text" id="as-category" placeholder="IT Equipment…" required></div>
+          <div class="field"><label>Cost (RM)</label><input type="number" id="as-cost" step="0.01" min="0" required></div>
+          <div class="field"><label>Accum. Depreciation (RM)</label><input type="number" id="as-dep" step="0.01" min="0" value="0"></div>
+          <button class="pill-btn dark" type="submit">＋ Add Asset</button>
+        </form>
+        <div class="panel-head"><span class="panel-title">Fixed Asset Register</span><span class="top-note">Not derivable from bank statements — add manually</span></div>
+        <table><thead><tr><th>Asset</th><th>Category</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Depreciation</th><th style="text-align:right;">Net Book Value</th><th></th></tr></thead><tbody id="as-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- TAX & ZAKAT -->
+    <div class="view" id="view-tax">
+      <div class="card yellow">
+        <div class="panel-head"><span class="panel-title">Tax &amp; Zakat Calculator</span></div>
+        <form class="inline" onsubmit="return false;">
+          <div class="field"><label>Tax Rate (%)</label><input type="number" id="tax-rate" value="24" step="0.1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Zakat Rate (%)</label><input type="number" id="zakat-rate" value="2.5" step="0.1" oninput="render()" style="background:#fff;"></div>
+        </form>
+        <div class="stat-mini">
+          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Net Profit before Tax &amp; Zakat</div><div class="m-val" id="tax-base">RM 0</div></div>
+          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Estimated Tax Payable</div><div class="m-val" id="tax-payable">RM 0</div></div>
+          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Estimated Zakat Payable</div><div class="m-val" id="zakat-payable">RM 0</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="view" id="view-notes">
+      <div class="card">
+        <div class="panel-head"><span class="panel-title">Notes</span><span class="top-note" id="notes-saved-at">Not saved yet</span></div>
+        <textarea id="notes-textarea" class="guard" placeholder="Free-form notes — reminders, follow-ups, things to tell your accountant…"></textarea>
+        <div style="margin-top:12px;"><button class="pill-btn dark guard" onclick="saveNotes()">💾 Save Notes</button></div>
+      </div>
+    </div>
+
+    <!-- COMPANY / COVER PAGE -->
+    <div class="view" id="view-company">
+      <div class="bento">
+        <div class="card dark c-12" style="display:flex; align-items:center; gap:20px;">
+          <div style="width:64px;height:64px;border-radius:18px; background:var(--lime); color:var(--lime-ink); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; flex-shrink:0;">C</div>
+          <div>
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700;">CODE N CODE SOLUTION</div>
+            <div style="font-size:12.5px; opacity:0.7; margin-top:4px;">Registration No. 202603072017 (AS0511861-M) · Sole Proprietorship</div>
+          </div>
+          <div class="pill-status" style="margin-left:auto; margin-top:0;">ACTIVE</div>
+        </div>
+
+        <div class="card c-6">
+          <div class="panel-head"><span class="panel-title">Business Information</span></div>
+          <div class="line-row"><span>Business Name</span><span class="amt" style="font-weight:600;">CODE N CODE SOLUTION</span></div>
+          <div class="line-row"><span>Registration No.</span><span class="amt">202603072017 (AS0511861-M)</span></div>
+          <div class="line-row"><span>Business Type</span><span class="amt">Sole Proprietorship</span></div>
+          <div class="line-row"><span>Nature of Business</span><span class="amt">Education in Computer Knowledge</span></div>
+          <div class="line-row"><span>Branches</span><span class="amt">None registered</span></div>
+        </div>
+
+        <div class="card lavender c-6">
+          <div class="panel-head"><span class="panel-title">Registration Timeline</span></div>
+          <div class="line-row"><span>Business Commenced</span><span class="amt">14 Mar 2026</span></div>
+          <div class="line-row"><span>Date Registered</span><span class="amt">16 Mar 2026</span></div>
+          <div class="line-row"><span>Registration Expires</span><span class="amt">15 Mar 2027</span></div>
+          <div class="line-row"><span>Last Amended</span><span class="amt">01 Jul 2026</span></div>
+          <div class="line-row total"><span>Status</span><span class="amt">Active</span></div>
+        </div>
+
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Registered Business Address</span></div>
+          <div style="font-size:13.5px; line-height:1.6;">
+            1st Floor – Room 16, 117,<br>
+            Jalan Mutiara Emas 10/19,<br>
+            Taman Mount Austin,<br>
+            81100 Johor Bahru, Johor, Malaysia
+          </div>
+          <div class="top-note" style="margin-top:14px;">Sourced from SSM (Suruhanjaya Syarikat Malaysia) business registration extract. This address and registration number now appear on all generated receipts and vouchers.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal-overlay" id="receipt-modal-overlay">
+  <div class="receipt-card" id="receipt-modal">
+    <button class="receipt-close" onclick="closeReceipt()">✕</button>
+    <div class="receipt-brand">
+      <div class="mark">C</div>
+      <div><div class="name">Code N Code Solution</div><div class="tag">Reg. No. AS0511861-M · Taman Mount Austin, Johor Bahru</div></div>
+    </div>
+    <div class="receipt-title">Official Receipt</div>
+    <div class="receipt-no" id="rcpt-no">RCP-0000</div>
+    <div class="receipt-row"><span class="rl">Date</span><span class="rv" id="rcpt-date">—</span></div>
+    <div class="receipt-row"><span class="rl">Received From</span><span class="rv" id="rcpt-payer">—</span></div>
+    <div class="receipt-row"><span class="rl">Description</span><span class="rv" id="rcpt-desc">—</span></div>
+    <div class="receipt-row"><span class="rl">Payment Method</span><span class="rv">Bank Transfer</span></div>
+    <div class="receipt-amount">
+      <div class="lbl">Amount Received</div>
+      <div class="val" id="rcpt-amount">RM 0</div>
+    </div>
+    <div class="receipt-foot">This receipt is computer-generated and confirms payment received.<br>Thank you for learning with Codencode.</div>
+    <div class="receipt-actions">
+      <button class="pill-btn" onclick="closeReceipt()">Close</button>
+      <button class="pill-btn dark" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="voucher-modal-overlay">
+  <div class="voucher-card" id="voucher-modal">
+    <button class="receipt-close" onclick="closeVoucher()">✕</button>
+    <div class="voucher-head">
+      <div><div class="name">Code N Code Solution</div><div class="tag">Reg. No. AS0511861-M · Taman Mount Austin, Johor Bahru</div></div>
+      <span class="voucher-stamp" id="vch-stamp">VOUCHER</span>
+    </div>
+    <div class="voucher-no" id="vch-no">—</div>
+    <div class="voucher-row"><span class="rl">Date</span><span class="rv" id="vch-date">—</span></div>
+    <div class="voucher-row"><span class="rl" id="vch-party-label">Paid To</span><span class="rv" id="vch-party">—</span></div>
+    <div class="voucher-row"><span class="rl">Description</span><span class="rv" id="vch-desc">—</span></div>
+    <div class="voucher-row"><span class="rl">Account / Category</span><span class="rv" id="vch-category">—</span></div>
+    <div class="voucher-amount">
+      <div class="lbl" id="vch-amount-label">Amount Paid</div>
+      <div class="val" id="vch-amount">RM 0</div>
+    </div>
+    <div class="sig-row">
+      <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Prepared By</div></div>
+      <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Approved By</div></div>
+    </div>
+    <div class="voucher-actions">
+      <button class="pill-btn" onclick="closeVoucher()">Close</button>
+      <button class="pill-btn dark" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const openingCash = 0; // account opened 1 Apr 2026 with RM 0.00 (per statement)
+
+// ── API layer ─────────────────────────────────────────────────────────
+// State now lives in the backend SQLite DB (backend/storage.py). These
+// arrays are just a local cache of the last /api/state response; every
+// mutation POSTs/DELETEs to the API and then re-pulls fresh state.
+async function api(path, opts){
+  const res = await fetch('/api' + path, {
+    headers: {'Content-Type':'application/json'},
+    credentials: 'same-origin',
+    ...opts,
+  });
+  if(res.status === 401){ showLogin(); throw new Error('not authenticated'); }
+  if(!res.ok){
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch(e){}
+    alert('Error: ' + msg);
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+let transactions = [];
+let contacts = [];
+let invoices = [];
+let assets = [];
+let notesText = '';
+
+async function loadState(){
+  const s = await api('/state');
+  // dashboard uses `desc`; API uses `description`
+  transactions = s.transactions.map(t=>({...t, desc: t.description}));
+  contacts = s.contacts;
+  invoices = s.invoices;
+  assets = s.assets;
+  notesText = (s.notes && s.notes.text) || '';
+  Object.assign(categoryCodeMap, s.category_codes || {});
+  const ta = document.getElementById('notes-textarea');
+  if(ta) ta.value = notesText;
+  if(s.notes && s.notes.updated_at){
+    document.getElementById('notes-saved-at').textContent =
+      'Saved ' + new Date(s.notes.updated_at).toLocaleString('en-MY',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'});
+  }
+  render();
+}
+
+/* Historical ledger (Apr–Aug 2026, reconciled from the 5 Maybank Islamic
+   statements) now lives in the backend DB and is loaded via /api/state —
+   see backend/seed.py. The block below is retained only as a comment for
+   reference.
+
+  {id:1,  date:'2026-08-30', desc:'Teacher payment — Tan Rou Ka (Vibe Coding, BJ Eng)', type:'out', category:'Payroll', amount:240.00},
+  {id:2,  date:'2026-08-29', desc:'Balance transfer — Wong Yoke Soon', type:'out', category:'Other Expense', amount:12.00},
+  {id:3,  date:'2026-08-28', desc:'Rental — Havona Management (September)', type:'out', category:'Rental', amount:336.00},
+  {id:4,  date:'2026-08-25', desc:'Invoice #159 — Muhammad Firdaus', type:'in', category:'Consulting Revenue', amount:1350.00},
+  {id:5,  date:'2026-08-25', desc:'Payment gateway fee — Bayarcash', type:'out', category:'Payment Gateway', amount:80.00},
+  {id:6,  date:'2026-08-24', desc:'Invoice #161 — Siti Hajar Binti (Haifa Adelea)', type:'in', category:'Consulting Revenue', amount:1500.00},
+  {id:7,  date:'2026-08-21', desc:'Invoice #162 — Koh Wen Han (AI for Workplace)', type:'in', category:'Consulting Revenue', amount:388.00},
+  {id:8,  date:'2026-08-20', desc:'QR payment (unidentified merchant)', type:'out', category:'Other Expense', amount:1.70},
+  {id:9,  date:'2026-08-19', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:10.20},
+  {id:10, date:'2026-08-19', desc:'Merchandise — Hive United (Polo tee custom)', type:'out', category:'Merchandise', amount:210.00},
+  {id:11, date:'2026-08-17', desc:'Invoice #156 — Restoran Tong', type:'in', category:'Consulting Revenue', amount:800.00},
+  {id:12, date:'2026-08-17', desc:'Invoice #157 — Restoran Tong', type:'in', category:'Consulting Revenue', amount:488.00},
+  {id:13, date:'2026-08-16', desc:'Invoice #155 — Ooi Kah Seong (AI for Work)', type:'in', category:'Consulting Revenue', amount:388.00},
+  {id:14, date:'2026-08-10', desc:'Refund — Mohd Zaid Bin Awi (Syasya, 4th class)', type:'out', category:'Refund Given', amount:250.00},
+  {id:15, date:'2026-08-09', desc:'Printing — TNT Instant Print', type:'out', category:'Printing', amount:7.00},
+  {id:16, date:'2026-08-04', desc:'Salary/payment — Johore Bahru Foon Y (NSJB, July)', type:'in', category:'Other Income', amount:522.00},
+  {id:17, date:'2026-08-01', desc:'Teacher salary — Tan Rou Ka (Python Fundamental)', type:'out', category:'Payroll', amount:330.00},
+  {id:18, date:'2026-08-01', desc:'Invoice #117 — CC Crest Consultancy', type:'in', category:'Consulting Revenue', amount:800.00},
+  {id:19, date:'2026-07-31', desc:'Vibe Coding course fee — Lim Yoke Lian', type:'in', category:'Course Revenue', amount:800.00},
+  {id:20, date:'2026-07-30', desc:'AI Automation project — Constance (Chan Siew Fuin)', type:'in', category:'Consulting Revenue', amount:488.00},
+  {id:21, date:'2026-07-28', desc:'FPX refund (buyer)', type:'in', category:'Refund', amount:21.17},
+  {id:22, date:'2026-07-28', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:30.25},
+  {id:23, date:'2026-07-27', desc:'Invoice #117 — CC Crest Consultancy', type:'in', category:'Consulting Revenue', amount:800.00},
+  {id:24, date:'2026-07-27', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:21.17},
+  {id:25, date:'2026-07-24', desc:'Payment received — Khor Yee Ran (Yoke Soon)', type:'in', category:'Other Income', amount:150.00},
+  {id:26, date:'2026-07-24', desc:'Class fee — Mohd Zaid Bin Awi (Class 4)', type:'in', category:'Course Revenue', amount:250.00},
+  {id:27, date:'2026-07-23', desc:'Vibe Coding course fee — Wei De Luxury Car', type:'in', category:'Course Revenue', amount:800.00},
+  {id:28, date:'2026-07-22', desc:'Rental — Havona Management (Aug, move-in)', type:'out', category:'Rental', amount:1243.93},
+  {id:29, date:'2026-07-19', desc:'Vibe Coding course fee — Eng Buan Jeng', type:'in', category:'Course Revenue', amount:500.00},
+  {id:30, date:'2026-07-18', desc:'Courier — I&E Express', type:'out', category:'Courier/Postage', amount:7.00},
+  {id:31, date:'2026-07-16', desc:'Class fee — Mohd Zaid Bin Awi (Syasya)', type:'in', category:'Course Revenue', amount:250.00},
+  {id:32, date:'2026-07-14', desc:'Withdrawal — Natasya Izzaty Khoo (Name card balance)', type:'out', category:'Marketing', amount:20.00},
+  {id:33, date:'2026-07-14', desc:'Withdrawal — Natasya Izzaty Khoo (Clothes)', type:'out', category:'Owner Withdrawal', amount:118.00},
+  {id:34, date:'2026-07-07', desc:'FPX M2U refund', type:'in', category:'Refund', amount:8.50},
+  {id:35, date:'2026-07-07', desc:'Class fee — Mohd Zaid Bin Awi (Syasya)', type:'in', category:'Course Revenue', amount:250.00},
+  {id:36, date:'2026-07-04', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:57.95},
+  {id:37, date:'2026-07-04', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:33.00},
+  {id:38, date:'2026-07-03', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:8.50},
+  {id:39, date:'2026-07-02', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:8.50},
+  {id:40, date:'2026-07-02', desc:'Salary/payment — Johore Bahru Foon Y (NSJB, June)', type:'in', category:'Other Income', amount:174.00},
+  {id:41, date:'2026-07-01', desc:'Wage payout — Tan Rou Ka (June)', type:'out', category:'Payroll', amount:570.00},
+  {id:42, date:'2026-07-01', desc:'Wage payout — June (received back, internal)', type:'in', category:'Payroll', amount:570.00},
+  {id:43, date:'2026-07-01', desc:'Wage payout — June (reversed, internal)', type:'out', category:'Payroll', amount:570.00},
+  {id:44, date:'2026-06-29', desc:'Wage payment — Nurin Aisyah Najwa (Vibe Coding)', type:'out', category:'Payroll', amount:240.00},
+  {id:45, date:'2026-06-26', desc:'Shopee Mobile Malaysia purchase', type:'out', category:'Supplies', amount:64.82},
+  {id:46, date:'2026-06-17', desc:'Python class fee — Zaidawi Enterprise (Syasya)', type:'in', category:'Course Revenue', amount:250.00},
+  {id:47, date:'2026-06-07', desc:'Referral fee paid — Michael Cheah Hou Yang', type:'out', category:'Referral Expense', amount:1200.00},
+  {id:48, date:'2026-06-07', desc:'Referral fee reversed (internal)', type:'out', category:'Referral Income', amount:1200.00},
+  {id:49, date:'2026-06-07', desc:'Referral fee received (Code N Code Solution)', type:'in', category:'Referral Income', amount:1200.00},
+  {id:50, date:'2026-05-28', desc:'Transfer received — Gao Carey Yueming', type:'in', category:'Other Income', amount:6000.00},
+  {id:51, date:'2026-05-16', desc:'Vibe Coding course fee — Muhammad Firdaus (Fathi)', type:'in', category:'Course Revenue', amount:800.00},
+  {id:52, date:'2026-05-15', desc:'Transfer to Ngoifongting (DuitNow QR)', type:'out', category:'Other Expense', amount:12.00},
+  {id:53, date:'2026-04-23', desc:'Transfer to Muhamad Afiq Omar B (MAE QR)', type:'out', category:'Other Expense', amount:150.00},
+  {id:54, date:'2026-04-15', desc:'Annual bank card fee', type:'out', category:'Bank Charges', amount:8.00},
+  {id:55, date:'2026-04-14', desc:'Transfer received — Lim Ban Soon (DuitNow QR)', type:'in', category:'Other Income', amount:1549.00},
+  {id:56, date:'2026-04-14', desc:'Transfer received — Mohd Khairul Afzan (DuitNow QR)', type:'in', category:'Other Income', amount:0.01},
+*/
+
+function fmt(n){ return 'RM ' + Number(n).toLocaleString('en-MY',{minimumFractionDigits:0, maximumFractionDigits:0}); }
+
+// --- Chart of accounts (auto-provisioning) ---------------------------------
+// Mirrors the xlsm's AddCreditButton_Click macro: every category and every
+// debtor/creditor contact automatically gets a Trial Balance account code
+// the first time it's seen, instead of needing to be set up manually.
+const knownExpenseCodes = {
+  'Payroll':'6001','Rental':'6002','Bank Charges':'6003','Supplies':'6004',
+  'Referral Expense':'6005','Marketing':'6006','Merchandise':'6007',
+  'Courier/Postage':'6008','Owner Withdrawal':'6009','Refund Given':'6010',
+  'Payment Gateway':'6011','Printing':'6012','Other Expense':'6099'
+};
+const knownIncomeCodes = {
+  'Course Revenue':'4001','Consulting Revenue':'4002','Referral Income':'4003',
+  'Other Income':'4004','Refund':'4005'
+};
+let nextExpenseCode = 6100, nextIncomeCode = 4100;
+let categoryCodeMap = {};
+function codeForCategory(cat, type){
+  if(categoryCodeMap[cat]) return categoryCodeMap[cat];
+  let code;
+  if(type==='out') code = knownExpenseCodes[cat] || String(nextExpenseCode++);
+  else code = knownIncomeCodes[cat] || String(nextIncomeCode++);
+  categoryCodeMap[cat] = code;
+  return code;
+}
+let nextDebtorCode = 1201, nextCreditorCode = 2101;
+function provisionContactCode(contact){
+  if(contact.code) return contact.code;
+  contact.code = contact.type==='debtor' ? String(nextDebtorCode++) : String(nextCreditorCode++);
+  return contact.code;
+}
+// Documents (Receipt / Cash Voucher / Payment Voucher) are now rendered by
+// the backend — the SAME backend/pdf_generator functions the Telegram bot
+// uses, with numbers from the SAME storage.counters sequences. Each button
+// opens the generated PDF in a new tab; re-opening reuses the same number.
+function openReceipt(txId){ window.open('/api/documents/receipt/' + txId, '_blank'); }
+function openVoucher(txId, type){
+  const kind = type === 'payment' ? 'payment-voucher' : 'cash-voucher';
+  window.open('/api/documents/' + kind + '/' + txId, '_blank');
+}
+function openInvoiceDoc(invId){ window.open('/api/documents/invoice/' + invId, '_blank'); }
+function closeReceipt(){ document.getElementById('receipt-modal-overlay').classList.remove('open'); }
+function closeVoucher(){ document.getElementById('voucher-modal-overlay').classList.remove('open'); }
+
+// Notes — persisted to the backend (single free-text row).
+async function saveNotes(){
+  const text = document.getElementById('notes-textarea').value;
+  const res = await api('/notes', { method:'PUT', body: JSON.stringify({text}) });
+  notesText = text;
+  document.getElementById('notes-saved-at').textContent =
+    'Saved ' + new Date(res.updated_at).toLocaleString('en-MY',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'});
+}
+
+// Export All (PDF): temporarily renders every Financials sub-tab at once
+// (instead of just the active one) so the browser's print/Save-as-PDF
+// dialog captures the full statement set in one document.
+function exportAllFinancials(){
+  const area = document.getElementById('financials-print-area');
+  area.classList.add('print-all-fin');
+  window.print();
+  setTimeout(()=>area.classList.remove('print-all-fin'), 500);
+}
+
+function switchView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.nav-pill').forEach(n=>n.classList.remove('active'));
+  document.querySelector('.nav-pill[data-view="'+name+'"]').classList.add('active');
+  const titles = {dashboard:'Good morning, Natasya', cico:'Cash In & Out', invoice:'Invoice & Receipt', contacts:'Debtor & Creditor', financials:'Financial Statements', performance:'Performance & Trends', assets:'Assets', tax:'Tax & Zakat', notes:'Notes', company:'Company Profile'};
+  document.getElementById('page-title').textContent = titles[name];
+}
+document.querySelectorAll('.nav-pill').forEach(item=>{
+  item.addEventListener('click', ()=>switchView(item.dataset.view));
+});
+
+function switchCicoTab(name){
+  document.querySelectorAll('#view-cico .subview').forEach(v=>v.classList.remove('active'));
+  document.getElementById('cico-'+name).classList.add('active');
+  document.querySelectorAll('#view-cico .subtab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('#view-cico .subtab[data-cico-tab="'+name+'"]').classList.add('active');
+}
+
+function switchFinTab(name){
+  document.querySelectorAll('#view-financials .subview').forEach(v=>v.classList.remove('active'));
+  document.getElementById('fin-'+name).classList.add('active');
+  document.querySelectorAll('#view-financials .subtab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('#view-financials .subtab[data-fin-tab="'+name+'"]').classList.add('active');
+}
+
+// Access control: real auth now — a single username/password checked by the
+// backend (backend/auth.py), held in a signed, httpOnly session cookie.
+// The button in the top bar is a Logout control once you're signed in.
+function showLogin(){ document.getElementById('login-overlay').classList.add('open'); }
+function hideLogin(){ document.getElementById('login-overlay').classList.remove('open'); }
+
+async function doLogin(e){
+  e.preventDefault();
+  const username = document.getElementById('login-user').value;
+  const password = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  try {
+    const res = await fetch('/api/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      credentials:'same-origin', body: JSON.stringify({username, password}),
+    });
+    if(!res.ok){
+      err.textContent = (await res.json().catch(()=>({}))).detail || 'Login failed';
+      return false;
+    }
+    document.getElementById('login-pass').value = '';
+    hideLogin();
+    await loadState();
+  } catch(_){ err.textContent = 'Network error'; }
+  return false;
+}
+
+async function logout(){
+  await fetch('/api/logout', {method:'POST', credentials:'same-origin'});
+  showLogin();
+}
+
+// Monthly aggregation used by Performance, P&L Monthly, and the Cash In &
+// Out Summary tab.
+function monthlyBreakdown(){
+  const map = {};
+  transactions.forEach(tx=>{
+    const key = tx.date.slice(0,7); // YYYY-MM
+    if(!map[key]) map[key] = {in:0, out:0};
+    map[key][tx.type] += Number(tx.amount);
+  });
+  const openingBal = openingCash;
+  const months = Object.keys(map).sort();
+  let running = openingBal;
+  return months.map(key=>{
+    const {in:cin, out:cout} = map[key];
+    running += cin - cout;
+    const [y,m] = key.split('-');
+    const label = new Date(y, m-1, 1).toLocaleString('en-MY',{month:'short', year:'numeric'});
+    return {key, label, in:cin, out:cout, net:cin-cout, closing: running};
+  });
+}
+
+function totals(){
+  const totalIn = transactions.filter(t=>t.type==='in').reduce((s,t)=>s+Number(t.amount),0);
+  const totalOut = transactions.filter(t=>t.type==='out').reduce((s,t)=>s+Number(t.amount),0);
+  const cashBalance = openingCash + totalIn - totalOut;
+  const totalDebtors = contacts.filter(c=>c.type==='debtor').reduce((s,c)=>s+Number(c.balance),0);
+  const totalCreditors = contacts.filter(c=>c.type==='creditor').reduce((s,c)=>s+Number(c.balance),0);
+  const totalNBV = assets.reduce((s,a)=>s+(Number(a.cost)-Number(a.dep)),0);
+  const netPL = totalIn - totalOut;
+  return {totalIn, totalOut, cashBalance, totalDebtors, totalCreditors, totalNBV, netPL};
+}
+
+async function addTransaction(e){
+  e.preventDefault();
+  const body = {
+    date: document.getElementById('tx-date').value,
+    description: document.getElementById('tx-desc').value,
+    type: document.getElementById('tx-type').value,
+    category: document.getElementById('tx-category').value,
+    amount: parseFloat(document.getElementById('tx-amount').value),
+  };
+  await api('/transactions', { method:'POST', body: JSON.stringify(body) });
+  e.target.reset();
+  await loadState();
+  return false;
+}
+async function deleteTransaction(id){
+  if(!confirm('Delete this transaction?')) return;
+  await api('/transactions/' + id, { method:'DELETE' });
+  await loadState();
+}
+
+async function addContact(e){
+  e.preventDefault();
+  const body = {
+    name: document.getElementById('ct-name').value,
+    type: document.getElementById('ct-type').value,
+    balance: parseFloat(document.getElementById('ct-balance').value) || 0,
+  };
+  await api('/contacts', { method:'POST', body: JSON.stringify(body) });
+  e.target.reset();
+  await loadState();
+  return false;
+}
+async function deleteContact(id){
+  if(!confirm('Delete this contact?')) return;
+  await api('/contacts/' + id, { method:'DELETE' });
+  await loadState();
+}
+
+async function addInvoice(e){
+  e.preventDefault();
+  const sel = document.getElementById('inv-contact');
+  const contactName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+  const body = {
+    contact: contactName,
+    date: document.getElementById('inv-date').value,
+    due: document.getElementById('inv-due').value,
+    amount: parseFloat(document.getElementById('inv-amount').value),
+  };
+  await api('/invoices', { method:'POST', body: JSON.stringify(body) });
+  e.target.reset();
+  await loadState();
+  return false;
+}
+async function markPaid(id){
+  await api('/invoices/' + id + '/pay', { method:'POST' });
+  await loadState();
+}
+async function deleteInvoice(id){
+  if(!confirm('Delete this invoice?')) return;
+  await api('/invoices/' + id, { method:'DELETE' });
+  await loadState();
+}
+
+async function addAsset(e){
+  e.preventDefault();
+  const body = {
+    name: document.getElementById('as-name').value,
+    category: document.getElementById('as-category').value,
+    cost: parseFloat(document.getElementById('as-cost').value),
+    dep: parseFloat(document.getElementById('as-dep').value || 0),
+  };
+  await api('/assets', { method:'POST', body: JSON.stringify(body) });
+  e.target.reset();
+  await loadState();
+  return false;
+}
+async function deleteAsset(id){
+  if(!confirm('Delete this asset?')) return;
+  await api('/assets/' + id, { method:'DELETE' });
+  await loadState();
+}
+
+function render(){
+  const t = totals();
+
+  document.getElementById('kpi-cash').innerHTML = '<span class="cur">RM</span>' + t.cashBalance.toLocaleString('en-MY');
+  document.getElementById('kpi-debtors').innerHTML = '<span class="cur">RM</span>' + t.totalDebtors.toLocaleString('en-MY');
+  document.getElementById('kpi-creditors').innerHTML = '<span class="cur">RM</span>' + t.totalCreditors.toLocaleString('en-MY');
+  document.getElementById('kpi-netpl').innerHTML = '<span class="cur">RM</span>' + t.netPL.toLocaleString('en-MY');
+
+  const cats = {};
+  transactions.filter(x=>x.type==='out').forEach(x=>{ cats[x.category] = (cats[x.category]||0) + Number(x.amount); });
+  const maxCat = Math.max(1, ...Object.values(cats));
+  let barsHtml = '';
+  Object.entries(cats).sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
+    const pct = Math.round(amt/maxCat*100);
+    barsHtml += `<div style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; font-weight:500;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
+      <div style="height:7px; background:var(--bg); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--ink); border-radius:100px;"></div></div>
+    </div>`;
+  });
+  document.getElementById('expense-bars').innerHTML = barsHtml || '<div class="empty-note">No expenses recorded yet.</div>';
+
+  document.getElementById('dash-tx-body').innerHTML = transactions.slice(0,5).map(tx=>`
+    <tr><td class="mono" style="color:var(--dim);">${tx.date}</td><td>${tx.desc}</td>
+    <td><span class="tag ${tx.type}">${tx.type==='in'?'CASH IN':'CASH OUT'}</span></td>
+    <td style="text-align:right;" class="amt-${tx.type}">${tx.type==='in'?'+':'−'} ${fmt(tx.amount)}</td></tr>`).join('');
+
+  document.getElementById('tx-count').textContent = transactions.length + ' entries';
+  document.getElementById('tx-body').innerHTML = transactions.map(tx=>`
+    <tr><td class="mono" style="color:var(--dim);">${tx.date}</td><td>${tx.desc}</td><td>${tx.category}</td>
+    <td><span class="tag ${tx.type}">${tx.type==='in'?'CASH IN':'CASH OUT'}</span></td>
+    <td style="text-align:right;" class="amt-${tx.type}">${tx.type==='in'?'+':'−'} ${fmt(tx.amount)}</td>
+    <td style="white-space:nowrap;">
+    ${tx.type==='in' ? `<button class="pill-btn receipt small" onclick="openReceipt(${tx.id})">🧾 Receipt</button>
+    <button class="pill-btn small" onclick="openVoucher(${tx.id},'cash')" style="margin-left:6px;">📗 Cash Voucher</button>` : ''}
+    ${tx.type==='out' ? `<button class="pill-btn small" onclick="openVoucher(${tx.id},'payment')">📕 Payment Voucher</button>` : ''}
+    <button class="pill-btn danger small guard" onclick="deleteTransaction(${tx.id})" style="margin-left:6px;">Delete</button></td></tr>`).join('');
+
+  document.getElementById('ct-body').innerHTML = contacts.length ? contacts.map(c=>`
+    <tr><td>${c.name}</td><td><span class="tag ${c.type}">${c.type.toUpperCase()}</span></td>
+    <td class="mono" style="color:var(--dim);">${provisionContactCode(c)}</td>
+    <td style="text-align:right;" class="amt">${fmt(c.balance)}</td>
+    <td><button class="pill-btn danger small guard" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('')
+    : `<tr><td colspan="5" class="empty-note">No contacts yet — add an outstanding debtor or creditor above.</td></tr>`;
+
+  const debtorOptions = contacts.filter(c=>c.type==='debtor').map(c=>`<option>${c.name}</option>`).join('');
+  document.getElementById('inv-contact').innerHTML = debtorOptions || '<option>No debtors yet</option>';
+
+  document.getElementById('inv-body').innerHTML = invoices.map(i=>{
+    const statusClass = i.status.toLowerCase();
+    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
+    <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span></td>
+    <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
+    <td style="white-space:nowrap;"><button class="pill-btn small" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
+    ${i.status!=='Paid' ? `<button class="pill-btn small guard" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
+    <button class="pill-btn danger small guard" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
+  }).join('');
+
+  document.getElementById('as-body').innerHTML = assets.length ? assets.map(a=>`
+    <tr><td>${a.name}</td><td>${a.category}</td><td style="text-align:right;" class="amt">${fmt(a.cost)}</td>
+    <td style="text-align:right;" class="amt">${fmt(a.dep)}</td>
+    <td style="text-align:right;" class="amt">${fmt(a.cost-a.dep)}</td>
+    <td><button class="pill-btn danger small guard" onclick="deleteAsset(${a.id})">Delete</button></td></tr>`).join('')
+    : `<tr><td colspan="6" class="empty-note">No assets yet — add a fixed asset above.</td></tr>`;
+
+  document.getElementById('bs-cash').textContent = fmt(t.cashBalance);
+  document.getElementById('bs-debtors').textContent = fmt(t.totalDebtors);
+  document.getElementById('bs-nbv').textContent = fmt(t.totalNBV);
+  const totalAssets = t.cashBalance + t.totalDebtors + t.totalNBV;
+  document.getElementById('bs-total-assets').textContent = fmt(totalAssets);
+  document.getElementById('bs-creditors').textContent = fmt(t.totalCreditors);
+  const equityPlug = totalAssets - t.totalCreditors;
+  document.getElementById('bs-equity').textContent = fmt(equityPlug);
+  document.getElementById('bs-total-eq').textContent = fmt(t.totalCreditors + equityPlug);
+
+  document.getElementById('pl-in').textContent = fmt(t.totalIn);
+  document.getElementById('pl-expenses').innerHTML = Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>
+    `<div class="line-row"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>`).join('') || '<div class="line-row"><span class="empty-note">No expenses recorded</span><span></span></div>';
+  document.getElementById('pl-out').textContent = fmt(t.totalOut);
+  document.getElementById('pl-net').textContent = fmt(t.netPL);
+
+  document.getElementById('cf-open').textContent = fmt(openingCash);
+  document.getElementById('cf-change').textContent = fmt(t.totalIn - t.totalOut);
+  document.getElementById('cf-close').textContent = fmt(t.cashBalance);
+
+  const taxRate = parseFloat(document.getElementById('tax-rate').value || 0);
+  const zakatRate = parseFloat(document.getElementById('zakat-rate').value || 0);
+  const base = Math.max(0, t.netPL);
+  document.getElementById('tax-base').textContent = fmt(base);
+  document.getElementById('tax-payable').textContent = fmt(base * taxRate / 100);
+  document.getElementById('zakat-payable').textContent = fmt(base * zakatRate / 100);
+
+  renderMonthlyViews(t, cats);
+  renderTrialBalance(t);
+}
+
+function renderMonthlyViews(t, outCats){
+  const months = monthlyBreakdown();
+
+  // Performance / Trends
+  const maxVal = Math.max(1, ...months.map(m=>Math.max(m.in,m.out)));
+  document.getElementById('perf-chart').innerHTML = months.map(m=>`
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+      <div style="display:flex; align-items:flex-end; gap:5px; height:120px;">
+        <div style="width:22px; border-radius:5px 5px 2px 2px; background:var(--ink); height:${Math.round(m.in/maxVal*100)}%;" title="Revenue ${fmt(m.in)}"></div>
+        <div style="width:22px; border-radius:5px 5px 2px 2px; background:var(--coral); height:${Math.round(m.out/maxVal*100)}%;" title="Expenses ${fmt(m.out)}"></div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; font-weight:600; color:var(--dim);">${m.label}</div>
+      <div style="font-size:10px; margin-top:2px; color:${m.net>=0?'#3a7a1f':'#a13d20'};">${m.net>=0?'+':''}${fmt(m.net)}</div>
+    </div>`).join('') || '<div class="empty-note">No transactions yet.</div>';
+
+  document.getElementById('perf-table-body').innerHTML = months.map(m=>`
+    <tr><td>${m.label}</td><td style="text-align:right;" class="amt-in">${fmt(m.in)}</td>
+    <td style="text-align:right;" class="amt-out">${fmt(m.out)}</td>
+    <td style="text-align:right;" class="amt" style="color:${m.net>=0?'#3a7a1f':'#a13d20'};">${fmt(m.net)}</td>
+    <td style="text-align:right;" class="amt">${fmt(m.closing)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty-note">No transactions yet.</td></tr>';
+
+  // Cash In & Out → Summary sub-tab
+  const inCats = {}; transactions.filter(x=>x.type==='in').forEach(x=>{ inCats[x.category]=(inCats[x.category]||0)+Number(x.amount); });
+  const maxIn = Math.max(1, ...Object.values(inCats));
+  document.getElementById('summary-in-cats').innerHTML = Object.entries(inCats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+    <div style="margin-bottom:11px;"><div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
+    <div style="height:6px; background:var(--bg); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.round(amt/maxIn*100)}%; background:var(--ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No income recorded.</div>';
+  const maxOut = Math.max(1, ...Object.values(outCats));
+  document.getElementById('summary-out-cats').innerHTML = Object.entries(outCats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+    <div style="margin-bottom:11px;"><div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
+    <div style="height:6px; background:rgba(0,0,0,0.08); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.round(amt/maxOut*100)}%; background:var(--coral-ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No expenses recorded.</div>';
+  document.getElementById('cico-monthly-body').innerHTML = months.map(m=>`
+    <tr><td>${m.label}</td><td style="text-align:right;" class="amt-in">${fmt(m.in)}</td><td style="text-align:right;" class="amt-out">${fmt(m.out)}</td><td style="text-align:right;" class="amt">${fmt(m.net)}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty-note">No transactions yet.</td></tr>';
+
+  // P&L Monthly (Financials tab)
+  document.getElementById('pl-monthly-body').innerHTML = months.map(m=>`
+    <tr><td>${m.label}</td><td style="text-align:right;" class="amt-in">${fmt(m.in)}</td><td style="text-align:right;" class="amt-out">${fmt(m.out)}</td><td style="text-align:right;" class="amt">${fmt(m.net)}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty-note">No transactions yet.</td></tr>';
+
+  // P&L Summary (Financials tab)
+  document.getElementById('pls-rev').textContent = fmt(t.totalIn);
+  document.getElementById('pls-exp').textContent = fmt(t.totalOut);
+  document.getElementById('pls-net').textContent = fmt(t.netPL);
+  const top = (obj,n)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);
+  document.getElementById('pls-rev-cats').innerHTML = top(inCats,3).map(([cat,amt])=>
+    `<div class="line-row"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>`).join('') || '<div class="empty-note">No income recorded.</div>';
+  document.getElementById('pls-exp-cats').innerHTML = top(outCats,3).map(([cat,amt])=>
+    `<div class="line-row"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>`).join('') || '<div class="empty-note">No expenses recorded.</div>';
+}
+
+function renderTrialBalance(t){
+  const inCats = {}; transactions.filter(x=>x.type==='in').forEach(x=>{ inCats[x.category]=(inCats[x.category]||0)+Number(x.amount); });
+  const outCats = {}; transactions.filter(x=>x.type==='out').forEach(x=>{ outCats[x.category]=(outCats[x.category]||0)+Number(x.amount); });
+
+  let rows = '';
+  let totalDebit = 0, totalCredit = 0;
+
+  rows += `<tr class="grp"><td colspan="4">Cash &amp; Bank</td></tr>`;
+  rows += `<tr><td class="mono">1600</td><td>Cash in Hand &amp; at Bank</td><td class="amt">${t.cashBalance>=0?fmt(t.cashBalance):'—'}</td><td class="amt">${t.cashBalance<0?fmt(-t.cashBalance):'—'}</td></tr>`;
+  totalDebit += Math.max(0,t.cashBalance); totalCredit += Math.max(0,-t.cashBalance);
+
+  rows += `<tr class="grp"><td colspan="4">Trade Debtors</td></tr>`;
+  const debtorContacts = contacts.filter(c=>c.type==='debtor');
+  if(debtorContacts.length){
+    debtorContacts.forEach(c=>{
+      rows += `<tr><td class="mono">${provisionContactCode(c)}</td><td>${c.name}</td><td class="amt">${fmt(c.balance)}</td><td class="amt">—</td></tr>`;
+      totalDebit += Number(c.balance);
+    });
+  } else {
+    rows += `<tr><td class="mono">1200</td><td>Trade Debtors (control account)</td><td class="amt">${fmt(t.totalDebtors)}</td><td class="amt">—</td></tr>`;
+    totalDebit += t.totalDebtors;
+  }
+
+  rows += `<tr class="grp"><td colspan="4">Fixed Assets</td></tr>`;
+  if(assets.length){
+    assets.forEach(a=>{
+      rows += `<tr><td class="mono">1100</td><td>${a.name} (NBV)</td><td class="amt">${fmt(a.cost-a.dep)}</td><td class="amt">—</td></tr>`;
+    });
+  } else {
+    rows += `<tr><td class="mono">1100</td><td>Fixed Assets (control account)</td><td class="amt">${fmt(t.totalNBV)}</td><td class="amt">—</td></tr>`;
+  }
+  totalDebit += t.totalNBV;
+
+  rows += `<tr class="grp"><td colspan="4">Trade Creditors</td></tr>`;
+  const creditorContacts = contacts.filter(c=>c.type==='creditor');
+  if(creditorContacts.length){
+    creditorContacts.forEach(c=>{
+      rows += `<tr><td class="mono">${provisionContactCode(c)}</td><td>${c.name}</td><td class="amt">—</td><td class="amt">${fmt(c.balance)}</td></tr>`;
+      totalCredit += Number(c.balance);
+    });
+  } else {
+    rows += `<tr><td class="mono">2100</td><td>Trade Creditors (control account)</td><td class="amt">—</td><td class="amt">${fmt(t.totalCreditors)}</td></tr>`;
+    totalCredit += t.totalCreditors;
+  }
+
+  rows += `<tr class="grp"><td colspan="4">Income</td></tr>`;
+  Object.entries(inCats).forEach(([cat,amt])=>{
+    rows += `<tr><td class="mono">${codeForCategory(cat,'in')}</td><td>${cat}</td><td class="amt">—</td><td class="amt">${fmt(amt)}</td></tr>`;
+    totalCredit += amt;
+  });
+
+  rows += `<tr class="grp"><td colspan="4">Expenses</td></tr>`;
+  Object.entries(outCats).forEach(([cat,amt])=>{
+    rows += `<tr><td class="mono">${codeForCategory(cat,'out')}</td><td>${cat}</td><td class="amt">${fmt(amt)}</td><td class="amt">—</td></tr>`;
+    totalDebit += amt;
+  });
+
+  // Owner's Equity plug — guarantees the trial balance tallies, same role
+  // as the xlsm's "Accumulated Profit & Loss" plug on the Balance Sheet.
+  const diff = totalCredit - totalDebit;
+  if(diff !== 0){
+    rows += `<tr class="grp"><td colspan="4">Equity</td></tr>`;
+    if(diff > 0){
+      rows += `<tr><td class="mono">3000</td><td>Owner's Equity (plug)</td><td class="amt">${fmt(diff)}</td><td class="amt">—</td></tr>`;
+      totalDebit += diff;
+    } else {
+      rows += `<tr><td class="mono">3000</td><td>Owner's Equity (plug)</td><td class="amt">—</td><td class="amt">${fmt(-diff)}</td></tr>`;
+      totalCredit += -diff;
+    }
+  }
+
+  rows += `<tr class="total"><td colspan="2">TOTAL</td><td class="amt">${fmt(totalDebit)}</td><td class="amt">${fmt(totalCredit)}</td></tr>`;
+  document.getElementById('tb-body').innerHTML = rows;
+
+  const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
+  document.getElementById('tb-tally').innerHTML = `<span class="tally-pill ${balanced?'ok':'no'}">${balanced?'✓ Tallied':'✕ Not tallied'}</span>`;
+}
+
+const _today = new Date().toISOString().slice(0,10);
+const _in30 = new Date(Date.now() + 30*864e5).toISOString().slice(0,10);
+document.getElementById('tx-date').value = _today;
+document.getElementById('inv-date').value = _today;
+document.getElementById('inv-due').value = _in30;
+
+// Bootstrap: check the session, then either load real state or show login.
+(async function init(){
+  try {
+    const res = await fetch('/api/me', {credentials:'same-origin'});
+    if(res.ok){ await loadState(); }
+    else { showLogin(); }
+  } catch(_){ showLogin(); }
+})();
+</script>
+
+</body>
+</html>

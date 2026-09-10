@@ -1,0 +1,78 @@
+"""
+Extracts a structured transaction (date, type, category, amount, payer/payee,
+description) from a free-text message or a photo of a receipt, using a
+Gemini Flash-Lite tier model — the cheapest currently-available option that
+still accepts images.
+
+IMPORTANT: Gemini model names and pricing change frequently. Check
+https://ai.google.dev/gemini-api/docs/models before deploying and set
+GEMINI_MODEL in .env to whatever is current — don't assume the default
+below is still the cheapest or even still available.
+"""
+import os
+import json
+import base64
+import httpx
+
+from storage import CATEGORY_CHOICES
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+EXTRACTION_PROMPT = f"""You are a bookkeeping assistant for a Malaysian sole
+proprietorship that runs coding/AI education courses and consulting projects
+(business name: Code N Code Solution). Extract ONE financial transaction
+from the user's message or the attached receipt/photo.
+
+Respond with ONLY valid JSON (no markdown fences, no commentary), matching
+exactly this shape:
+{{
+  "date": "YYYY-MM-DD",
+  "type": "in" or "out",
+  "category": one of {CATEGORY_CHOICES},
+  "amount": number,
+  "payer_or_payee": "name mentioned, or null",
+  "description": "short human-readable description"
+}}
+
+Rules:
+- "in" = money received (course fees, consulting invoices, refunds received).
+- "out" = money paid (rental, payroll, supplies, refunds given).
+- If no date is stated, use today's date: {{today}}.
+- Pick the single closest category from the allowed list — never invent a new one.
+- If you cannot confidently find an amount, set "amount" to null and explain
+  nothing else — the amount field alone signals a failed extraction.
+"""
+
+
+async def _call_gemini(parts: list, today: str) -> dict:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+    prompt = EXTRACTION_PROMPT.replace("{today}", today)
+    payload = {
+        "contents": [{"parts": [{"text": prompt}] + parts}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(GEMINI_URL, params={"key": GEMINI_API_KEY}, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    return json.loads(text)
+
+
+async def parse_text(message: str, today: str) -> dict:
+    return await _call_gemini([{"text": f"Message from user: {message}"}], today)
+
+
+async def parse_image(image_bytes: bytes, mime_type: str, caption: str, today: str) -> dict:
+    parts = [{
+        "inline_data": {
+            "mime_type": mime_type,
+            "data": base64.b64encode(image_bytes).decode("ascii"),
+        }
+    }]
+    if caption:
+        parts.append({"text": f"Caption from user: {caption}"})
+    return await _call_gemini(parts, today)
