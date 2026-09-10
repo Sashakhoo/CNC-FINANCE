@@ -792,6 +792,20 @@ function switchFinTab(name){
 function showLogin(){ document.getElementById('login-overlay').classList.add('open'); }
 function hideLogin(){ document.getElementById('login-overlay').classList.remove('open'); }
 
+// Reflect the signed-in user + their permission level in the UI. Non-write
+// roles get the `locked` body class, which greys out every `.guard` control
+// (add/delete/save buttons and forms). The backend enforces this too — 403
+// on any write — so this is just so view-only users aren't clicking dead UI.
+let currentUser = null;
+function applyUser(u){
+  currentUser = u;
+  const btn = document.getElementById('lock-toggle-btn');
+  if(u){
+    btn.textContent = '⎋ ' + u.username + (u.can_write ? '' : ' (view only)') + ' · Log out';
+    document.body.classList.toggle('locked', !u.can_write);
+  }
+}
+
 async function doLogin(e){
   e.preventDefault();
   const username = document.getElementById('login-user').value;
@@ -808,6 +822,7 @@ async function doLogin(e){
       return false;
     }
     document.getElementById('login-pass').value = '';
+    applyUser(await res.json());
     hideLogin();
     await loadState();
   } catch(_){ err.textContent = 'Network error'; }
@@ -1168,7 +1183,7 @@ document.getElementById('inv-due').value = _in30;
 (async function init(){
   try {
     const res = await fetch('/api/me', {credentials:'same-origin'});
-    if(res.ok){ await loadState(); }
+    if(res.ok){ applyUser(await res.json()); await loadState(); }
     else { showLogin(); }
   } catch(_){ showLogin(); }
 })();
