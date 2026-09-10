@@ -168,7 +168,7 @@
   /* Lock / access control */
   .lock-btn{background:var(--panel); border:1px solid var(--line); border-radius:100px; padding:9px 16px; font-size:12px; font-weight:600; box-shadow:var(--shadow); color:var(--ink-2); display:flex; align-items:center; gap:6px;}
   .lock-btn.unlocked{background:var(--lime); color:var(--lime-ink); border:none;}
-  body.locked .guard{opacity:0.45; pointer-events:none;}
+  .cap-denied{opacity:0.4; pointer-events:none;}
   .lock-banner{font-size:11.5px; color:var(--dim); background:var(--bg); border-radius:100px; padding:6px 14px; display:inline-block; margin-bottom:14px;}
 
   /* Trial balance */
@@ -290,7 +290,7 @@
 
       <div class="subview active" id="cico-ledger">
         <div class="card">
-          <form class="inline guard" onsubmit="return addTransaction(event)">
+          <form class="inline" data-cap="transactions" onsubmit="return addTransaction(event)">
             <div class="field"><label>Date</label><input type="date" id="tx-date" required></div>
             <div class="field"><label>Description</label><input type="text" id="tx-desc" placeholder="e.g. Rental payment" required style="min-width:220px;"></div>
             <div class="field"><label>Type</label><select id="tx-type"><option value="in">Cash In</option><option value="out">Cash Out</option></select></div>
@@ -324,7 +324,7 @@
     <!-- INVOICE & RECEIPT -->
     <div class="view" id="view-invoice">
       <div class="card">
-        <form class="inline guard" onsubmit="return addInvoice(event)">
+        <form class="inline" data-cap="invoices" onsubmit="return addInvoice(event)">
           <div class="field"><label>Contact</label><select id="inv-contact"></select></div>
           <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
           <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
@@ -339,7 +339,7 @@
     <!-- DEBTOR & CREDITOR -->
     <div class="view" id="view-contacts">
       <div class="card">
-        <form class="inline guard" onsubmit="return addContact(event)">
+        <form class="inline" data-cap="contacts" onsubmit="return addContact(event)">
           <div class="field"><label>Name</label><input type="text" id="ct-name" placeholder="Company name" required style="min-width:200px;"></div>
           <div class="field"><label>Type</label><select id="ct-type"><option value="debtor">Debtor</option><option value="creditor">Creditor</option></select></div>
           <div class="field"><label>Opening Balance (RM)</label><input type="number" id="ct-balance" step="0.01" min="0" required></div>
@@ -451,7 +451,7 @@
     <!-- ASSETS -->
     <div class="view" id="view-assets">
       <div class="card">
-        <form class="inline guard" onsubmit="return addAsset(event)">
+        <form class="inline" data-cap="assets" onsubmit="return addAsset(event)">
           <div class="field"><label>Asset Name</label><input type="text" id="as-name" required style="min-width:200px;"></div>
           <div class="field"><label>Category</label><input type="text" id="as-category" placeholder="IT Equipment…" required></div>
           <div class="field"><label>Cost (RM)</label><input type="number" id="as-cost" step="0.01" min="0" required></div>
@@ -483,8 +483,8 @@
     <div class="view" id="view-notes">
       <div class="card">
         <div class="panel-head"><span class="panel-title">Notes</span><span class="top-note" id="notes-saved-at">Not saved yet</span></div>
-        <textarea id="notes-textarea" class="guard" placeholder="Free-form notes — reminders, follow-ups, things to tell your accountant…"></textarea>
-        <div style="margin-top:12px;"><button class="pill-btn dark guard" onclick="saveNotes()">💾 Save Notes</button></div>
+        <textarea id="notes-textarea" data-cap="notes" placeholder="Free-form notes — reminders, follow-ups, things to tell your accountant…"></textarea>
+        <div style="margin-top:12px;"><button class="pill-btn dark" data-cap="notes" onclick="saveNotes()">💾 Save Notes</button></div>
       </div>
     </div>
 
@@ -792,18 +792,28 @@ function switchFinTab(name){
 function showLogin(){ document.getElementById('login-overlay').classList.add('open'); }
 function hideLogin(){ document.getElementById('login-overlay').classList.remove('open'); }
 
-// Reflect the signed-in user + their permission level in the UI. Non-write
-// roles get the `locked` body class, which greys out every `.guard` control
-// (add/delete/save buttons and forms). The backend enforces this too — 403
-// on any write — so this is just so view-only users aren't clicking dead UI.
+// Reflect the signed-in user's capabilities in the UI. Every control tagged
+// data-cap="x" is greyed out and disabled unless the user's caps include x.
+// director gets all caps; admin gets only invoices + documents. The backend
+// enforces the same rules (403), so this is just to hide dead UI.
 let currentUser = null;
+function gate(){
+  const caps = (currentUser && currentUser.caps) || [];
+  document.querySelectorAll('[data-cap]').forEach(el=>{
+    const denied = !caps.includes(el.dataset.cap);
+    el.classList.toggle('cap-denied', denied);
+    if('disabled' in el) el.disabled = denied;
+    el.querySelectorAll && el.querySelectorAll('input,select,textarea,button').forEach(c=>c.disabled = denied);
+  });
+}
 function applyUser(u){
   currentUser = u;
   const btn = document.getElementById('lock-toggle-btn');
   if(u){
-    btn.textContent = '⎋ ' + u.username + (u.can_write ? '' : ' (view only)') + ' · Log out';
-    document.body.classList.toggle('locked', !u.can_write);
+    const role = u.role ? ' · ' + u.role : '';
+    btn.textContent = '⎋ ' + u.username + role + ' · Log out';
   }
+  gate();
 }
 
 async function doLogin(e){
@@ -980,16 +990,16 @@ function render(){
     <td><span class="tag ${tx.type}">${tx.type==='in'?'CASH IN':'CASH OUT'}</span></td>
     <td style="text-align:right;" class="amt-${tx.type}">${tx.type==='in'?'+':'−'} ${fmt(tx.amount)}</td>
     <td style="white-space:nowrap;">
-    ${tx.type==='in' ? `<button class="pill-btn receipt small" onclick="openReceipt(${tx.id})">🧾 Receipt</button>
-    <button class="pill-btn small" onclick="openVoucher(${tx.id},'cash')" style="margin-left:6px;">📗 Cash Voucher</button>` : ''}
-    ${tx.type==='out' ? `<button class="pill-btn small" onclick="openVoucher(${tx.id},'payment')">📕 Payment Voucher</button>` : ''}
-    <button class="pill-btn danger small guard" onclick="deleteTransaction(${tx.id})" style="margin-left:6px;">Delete</button></td></tr>`).join('');
+    ${tx.type==='in' ? `<button class="pill-btn receipt small" data-cap="documents" onclick="openReceipt(${tx.id})">🧾 Receipt</button>
+    <button class="pill-btn small" data-cap="documents" onclick="openVoucher(${tx.id},'cash')" style="margin-left:6px;">📗 Cash Voucher</button>` : ''}
+    ${tx.type==='out' ? `<button class="pill-btn small" data-cap="documents" onclick="openVoucher(${tx.id},'payment')">📕 Payment Voucher</button>` : ''}
+    <button class="pill-btn danger small" data-cap="transactions" onclick="deleteTransaction(${tx.id})" style="margin-left:6px;">Delete</button></td></tr>`).join('');
 
   document.getElementById('ct-body').innerHTML = contacts.length ? contacts.map(c=>`
     <tr><td>${c.name}</td><td><span class="tag ${c.type}">${c.type.toUpperCase()}</span></td>
     <td class="mono" style="color:var(--dim);">${provisionContactCode(c)}</td>
     <td style="text-align:right;" class="amt">${fmt(c.balance)}</td>
-    <td><button class="pill-btn danger small guard" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('')
+    <td><button class="pill-btn danger small" data-cap="contacts" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('')
     : `<tr><td colspan="5" class="empty-note">No contacts yet — add an outstanding debtor or creditor above.</td></tr>`;
 
   const debtorOptions = contacts.filter(c=>c.type==='debtor').map(c=>`<option>${c.name}</option>`).join('');
@@ -1000,16 +1010,16 @@ function render(){
     return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span></td>
     <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
-    <td style="white-space:nowrap;"><button class="pill-btn small" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
-    ${i.status!=='Paid' ? `<button class="pill-btn small guard" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
-    <button class="pill-btn danger small guard" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
+    <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
+    ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
+    <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
   }).join('');
 
   document.getElementById('as-body').innerHTML = assets.length ? assets.map(a=>`
     <tr><td>${a.name}</td><td>${a.category}</td><td style="text-align:right;" class="amt">${fmt(a.cost)}</td>
     <td style="text-align:right;" class="amt">${fmt(a.dep)}</td>
     <td style="text-align:right;" class="amt">${fmt(a.cost-a.dep)}</td>
-    <td><button class="pill-btn danger small guard" onclick="deleteAsset(${a.id})">Delete</button></td></tr>`).join('')
+    <td><button class="pill-btn danger small" data-cap="assets" onclick="deleteAsset(${a.id})">Delete</button></td></tr>`).join('')
     : `<tr><td colspan="6" class="empty-note">No assets yet — add a fixed asset above.</td></tr>`;
 
   document.getElementById('bs-cash').textContent = fmt(t.cashBalance);
@@ -1041,6 +1051,7 @@ function render(){
 
   renderMonthlyViews(t, cats);
   renderTrialBalance(t);
+  gate();
 }
 
 function renderMonthlyViews(t, outCats){

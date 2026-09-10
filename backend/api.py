@@ -29,13 +29,16 @@ class Login(BaseModel):
 
 @router.post("/login")
 def login(body: Login, request: Request):
-    username = auth.authenticate(body.username, body.password)
+    try:
+        username = auth.authenticate(body.username, body.password)
+    except auth.NoAccess:
+        raise HTTPException(status_code=403, detail="This account has no access. Ask the director.")
     if not username:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = auth.issue_token(username)
     role = auth.USERS[username]["role"]
     resp = JSONResponse({"ok": True, "username": username, "role": role,
-                         "can_write": role in auth.WRITE_ROLES})
+                         "caps": auth.caps_for(role)})
     # Secure cookie in production (https); relaxed for local http development.
     forwarded = request.headers.get("x-forwarded-proto", "")
     is_https = request.url.scheme == "https" or forwarded == "https"
@@ -55,8 +58,7 @@ def logout():
 
 @router.get("/me")
 def me(user: dict = Depends(auth.require_auth)):
-    return {"username": user["username"], "role": user["role"],
-            "can_write": user["role"] in auth.WRITE_ROLES}
+    return {"username": user["username"], "role": user["role"], "caps": user["caps"]}
 
 
 # --- aggregate state (one call the dashboard loads on startup) ----------
@@ -89,7 +91,7 @@ def get_transactions():
     return storage.list_transactions()
 
 
-@router.post("/transactions", dependencies=[Depends(auth.require_write)])
+@router.post("/transactions", dependencies=[Depends(auth.require_cap("transactions"))])
 def create_transaction(body: TxIn):
     if body.type not in ("in", "out"):
         raise HTTPException(422, "type must be 'in' or 'out'")
@@ -100,7 +102,7 @@ def create_transaction(body: TxIn):
     return storage.get_transaction(tx_id)
 
 
-@router.delete("/transactions/{tx_id}", dependencies=[Depends(auth.require_write)])
+@router.delete("/transactions/{tx_id}", dependencies=[Depends(auth.require_cap("transactions"))])
 def remove_transaction(tx_id: int):
     storage.delete_row("transactions", tx_id)
     return {"ok": True}
@@ -119,14 +121,14 @@ def get_contacts():
     return storage.list_contacts()
 
 
-@router.post("/contacts", dependencies=[Depends(auth.require_write)])
+@router.post("/contacts", dependencies=[Depends(auth.require_cap("contacts"))])
 def create_contact(body: ContactIn):
     if body.type not in ("debtor", "creditor"):
         raise HTTPException(422, "type must be 'debtor' or 'creditor'")
     return storage.insert_contact(body.name, body.type, body.balance)
 
 
-@router.delete("/contacts/{cid}", dependencies=[Depends(auth.require_write)])
+@router.delete("/contacts/{cid}", dependencies=[Depends(auth.require_cap("contacts"))])
 def remove_contact(cid: int):
     storage.delete_row("contacts", cid)
     return {"ok": True}
@@ -146,7 +148,7 @@ def get_invoices():
     return storage.list_invoices()
 
 
-@router.post("/invoices", dependencies=[Depends(auth.require_write)])
+@router.post("/invoices", dependencies=[Depends(auth.require_cap("invoices"))])
 def create_invoice(body: InvoiceIn):
     storage.find_or_create_contact(body.contact, "debtor")
     number = storage.next_document_number("INV")
@@ -154,7 +156,7 @@ def create_invoice(body: InvoiceIn):
     return storage.get_invoice(iid)
 
 
-@router.post("/invoices/{iid}/pay", dependencies=[Depends(auth.require_write)])
+@router.post("/invoices/{iid}/pay", dependencies=[Depends(auth.require_cap("invoices"))])
 def pay_invoice(iid: int):
     inv = storage.mark_invoice_paid(iid)
     if not inv:
@@ -162,7 +164,7 @@ def pay_invoice(iid: int):
     return inv
 
 
-@router.delete("/invoices/{iid}", dependencies=[Depends(auth.require_write)])
+@router.delete("/invoices/{iid}", dependencies=[Depends(auth.require_cap("invoices"))])
 def remove_invoice(iid: int):
     storage.delete_row("invoices", iid)
     return {"ok": True}
@@ -182,13 +184,13 @@ def get_assets():
     return storage.list_assets()
 
 
-@router.post("/assets", dependencies=[Depends(auth.require_write)])
+@router.post("/assets", dependencies=[Depends(auth.require_cap("assets"))])
 def create_asset(body: AssetIn):
     aid = storage.insert_asset(body.name, body.category, body.cost, body.dep)
     return next(a for a in storage.list_assets() if a["id"] == aid)
 
 
-@router.delete("/assets/{aid}", dependencies=[Depends(auth.require_write)])
+@router.delete("/assets/{aid}", dependencies=[Depends(auth.require_cap("assets"))])
 def remove_asset(aid: int):
     storage.delete_row("assets", aid)
     return {"ok": True}
@@ -205,7 +207,7 @@ def read_notes():
     return storage.get_notes()
 
 
-@router.put("/notes", dependencies=[Depends(auth.require_write)])
+@router.put("/notes", dependencies=[Depends(auth.require_cap("notes"))])
 def write_notes(body: NotesIn):
     return storage.save_notes(body.text)
 
@@ -227,7 +229,7 @@ def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
     )
 
 
-@router.get("/documents/{kind}/{ref_id}", dependencies=[Depends(auth.require_auth)])
+@router.get("/documents/{kind}/{ref_id}", dependencies=[Depends(auth.require_cap("documents"))])
 def generate_document(kind: str, ref_id: int):
     if kind == "invoice":
         inv = storage.get_invoice(ref_id)
