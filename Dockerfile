@@ -22,7 +22,11 @@ COPY . .
 
 WORKDIR /app/backend
 ENV PYTHONUNBUFFERED=1
+# --proxy-headers + this env so request.url.scheme / X-Forwarded-Proto is
+# trusted behind Railway's TLS edge (needed for the Secure cookie + HSTS).
+# Set via env, not a CLI flag, to avoid shell-quoting the "*".
+ENV FORWARDED_ALLOW_IPS="*"
 EXPOSE 8000
-# --proxy-headers so request.url.scheme / X-Forwarded-Proto is trusted behind
-# Railway's TLS-terminating edge (needed for the Secure cookie + HSTS logic).
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# No `cd` here — WORKDIR already points at /app/backend. `sh -c` only so
+# ${PORT} expands.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers"]
