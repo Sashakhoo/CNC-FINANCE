@@ -27,14 +27,23 @@ class Login(BaseModel):
     password: str
 
 
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
+
+
 @router.post("/login")
 def login(body: Login, request: Request):
+    ip = _client_ip(request)
+    if auth.register_login_attempt(ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes and try again.")
     try:
         username = auth.authenticate(body.username, body.password)
     except auth.NoAccess:
         raise HTTPException(status_code=403, detail="This account has no access. Ask the director.")
     if not username:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    auth.clear_login_attempts(ip)
     token = auth.issue_token(username)
     role = auth.USERS[username]["role"]
     resp = JSONResponse({"ok": True, "username": username, "role": role,
@@ -235,9 +244,10 @@ def generate_document(kind: str, ref_id: int):
         return _generate_document(kind, ref_id)
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        raise HTTPException(500, f"PDF generation failed: {e}\n{traceback.format_exc()[-1500:]}")
+    except Exception:
+        import logging
+        logging.getLogger("cnc.pdf").exception("PDF generation failed for %s/%s", kind, ref_id)
+        raise HTTPException(500, "Could not generate the document. Check the server logs.")
 
 
 def _generate_document(kind: str, ref_id: int):

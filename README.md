@@ -68,26 +68,34 @@ git push -u origin main
 2. **Attach a Volume** to the service (right-click the service, or `Cmd/Ctrl+K`
    → "volume"), mount path `/data`. This keeps the SQLite file across redeploys.
 3. **Variables** (service → Variables → Raw Editor) — set:
-   | Variable | Value |
-   |---|---|
-   | `DB_PATH` | `/data/cnc.db` |
-   | `DASH_USERNAME` | your login name |
-   | `DASH_PASSWORD` | a strong password |
-   | `SESSION_SECRET` | `python -c "import secrets;print(secrets.token_hex(32))"` |
-   | `TELEGRAM_BOT_TOKEN` | from @BotFather |
-   | `ALLOWED_USER_IDS` | your numeric Telegram id (from @userinfobot) |
-   | `GEMINI_API_KEY` | from aistudio.google.com/apikey |
-   | `GEMINI_MODEL` | current cheap vision model (check the Gemini docs) |
-   | `PUBLIC_URL` | the Railway URL, e.g. `https://cnc-finance-production.up.railway.app` |
+   | Variable | Value | Required |
+   |---|---|---|
+   | `DB_PATH` | `/data/cnc.db` | yes |
+   | `DASH_USERS` | `sashakhoo:<strong>:director,accounts:<strong>:admin` — passwords with no `:` or `,` | yes (no login without it) |
+   | `SESSION_SECRET` | `python -c "import secrets;print(secrets.token_hex(32))"` | yes |
+   | `PUBLIC_URL` | the Railway URL, e.g. `https://finance.codencode.my` | yes |
+   | `TELEGRAM_BOT_TOKEN` | from @BotFather | bot only |
+   | `TELEGRAM_WEBHOOK_SECRET` | `python -c "import secrets;print(secrets.token_urlsafe(24))"` | bot only |
+   | `ALLOWED_USER_IDS` | your numeric Telegram id (from @userinfobot) | bot only |
+   | `GEMINI_API_KEY` | from aistudio.google.com/apikey | bot only |
+   | `GEMINI_MODEL` | current cheap vision model (check the Gemini docs) | bot only |
+
+   To keep passwords off the server entirely, hash them locally
+   (`python backend/hash_password.py`) and use
+   `sashakhoo:scrypt:<salt>:<hash>:director` instead.
 4. Deploy. Check `https://<PUBLIC_URL>/health` returns `{"status":"ok"}`.
 
 ### 3. Register the Telegram webhook (once, after first deploy)
 
+Run it with the secret so the endpoint rejects forged calls:
+
 ```bash
-curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<PUBLIC_URL>/telegram/webhook"
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://<PUBLIC_URL>/telegram/webhook" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
 
-(or run `PUBLIC_URL=... TELEGRAM_BOT_TOKEN=... python backend/main.py` locally).
+(or run `PUBLIC_URL=... TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... python backend/main.py` locally).
 
 ## What changed from the mockup
 
@@ -95,6 +103,20 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<P
   hits `/api/*` and re-renders from the response.
 - Receipt / Cash Voucher / Payment Voucher / invoice buttons now open a
   backend-rendered PDF (same code the Telegram bot uses).
-- The `zc123` `window.prompt()` lock is replaced by a real username +
-  password login behind a signed httpOnly session cookie.
+- The `zc123` `window.prompt()` lock is replaced by real auth.
 - `storage.py` gained `assets`, `notes`, and `documents` tables.
+
+## Security
+
+- **Auth**: username + password from `DASH_USERS` (no passwords in the repo).
+  Passwords are scrypt-hashed in memory; login is constant-time and
+  rate-limited (8 tries / 5 min / IP → 429). Session is a signed httpOnly
+  `SameSite=Lax` cookie, `Secure` over HTTPS, 7-day default lifetime.
+- **Roles**: `director` (full) vs `admin` (create invoices + generate
+  documents only). Enforced per endpoint server-side (403), not just in the UI.
+- **Headers**: CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy`, HSTS on HTTPS. API docs (`/docs`, `/openapi.json`) disabled.
+- **Telegram webhook**: verified against `TELEGRAM_WEBHOOK_SECRET`; the bot
+  only acts for `ALLOWED_USER_IDS`.
+- **DB**: parameterised queries throughout; table names allow-listed.
+- Errors are logged server-side, not returned to the client.

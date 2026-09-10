@@ -16,7 +16,7 @@ import pathlib
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import storage
@@ -30,11 +30,36 @@ FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE_API = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 ALLOWED_USER_IDS = {
     int(x) for x in os.environ.get("ALLOWED_USER_IDS", "").split(",") if x.strip()
 }
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+# --- security headers ------------------------------------------------------
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # The dashboard is a single self-contained file plus Google Fonts.
+    resp.headers.setdefault("Content-Security-Policy", (
+        "default-src 'self'; "
+        "img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    ))
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    if proto == "https":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
 
 # In-memory "pending confirmation" store: message_id -> parsed transaction.
 # Fine for a single-instance deploy; move to Redis/DB if you scale to
@@ -146,6 +171,13 @@ def is_allowed(user_id):
 
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request):
+    # Telegram echoes the secret set via setWebhook(secret_token=...) in this
+    # header — reject anything that doesn't carry it, so the endpoint can't be
+    # driven by random POSTs (which would still cost Gemini calls).
+    if TELEGRAM_WEBHOOK_SECRET:
+        if request.headers.get("x-telegram-bot-api-secret-token") != TELEGRAM_WEBHOOK_SECRET:
+            return JSONResponse({"ok": False}, status_code=403)
+
     update = await request.json()
 
     if "callback_query" in update:
@@ -283,8 +315,13 @@ if __name__ == "__main__":
 
     async def set_webhook():
         public_url = os.environ["PUBLIC_URL"].rstrip("/")
+        payload = {"url": f"{public_url}/telegram/webhook"}
+        if TELEGRAM_WEBHOOK_SECRET:
+            payload["secret_token"] = TELEGRAM_WEBHOOK_SECRET
+        else:
+            print("note: TELEGRAM_WEBHOOK_SECRET not set — webhook will accept unauthenticated POSTs.")
         async with httpx.AsyncClient() as client:
-            r = await client.post(f"{TELEGRAM_API}/setWebhook", json={"url": f"{public_url}/telegram/webhook"})
+            r = await client.post(f"{TELEGRAM_API}/setWebhook", json=payload)
             print(r.json())
 
     asyncio.run(set_webhook())
