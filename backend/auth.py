@@ -1,5 +1,5 @@
 """
-Minimal single-user auth for the CmPro dashboard — replaces the mockup's
+Minimal single-user auth for the CNC dashboard — replaces the mockup's
 hardcoded `zc123` window.prompt() lock.
 
 One username + password (set DASH_USERNAME / DASH_PASSWORD as Railway env
@@ -17,7 +17,7 @@ from fastapi import Request, HTTPException
 USERNAME = os.environ.get("DASH_USERNAME", "admin")
 PASSWORD = os.environ.get("DASH_PASSWORD", "")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "")
-COOKIE_NAME = "cmpro_session"
+COOKIE_NAME = "cnc_session"
 MAX_AGE = 60 * 60 * 24 * 14  # 14 days
 
 if not SESSION_SECRET:
@@ -27,7 +27,7 @@ if not SESSION_SECRET:
 if not PASSWORD:
     print("⚠️  DASH_PASSWORD not set — the dashboard login will reject every attempt until it is.")
 
-_serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="cmpro-session")
+_serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="cnc-session")
 
 
 def check_credentials(username: str, password: str) -> bool:

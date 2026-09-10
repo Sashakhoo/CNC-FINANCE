@@ -1,4 +1,4 @@
-# CmPro
+# CNC Finance
 
 Bookkeeping system for Code N Code Solution (Codencode). One FastAPI app
 serves three things off one SQLite database:
@@ -54,28 +54,23 @@ Same pipeline as `codencode.sg` / `gocare.my` / `cccrest.my`.
 
 ### 1. Push to GitHub
 
-Create a new **private** repo `cmpro` under the `codencodemy` account
-(empty — no README/licence), then from this folder:
+Repo: `https://github.com/Sashakhoo/CNC-FINANCE.git`
 
 ```bash
-git init
-git add -A
-git commit -m "CmPro: wire dashboard to backend API + auth + deploy config"
-git branch -M main
-git remote add origin https://github.com/codencodemy/cmpro.git
+git remote add origin https://github.com/Sashakhoo/CNC-FINANCE.git
 git push -u origin main
 ```
 
 ### 2. Railway service
 
-1. **New Project → Deploy from GitHub repo → `codencodemy/cmpro`.**
+1. **New Project → Deploy from GitHub repo → `Sashakhoo/CNC-FINANCE`.**
    Railway auto-detects `nixpacks.toml` / `railway.json`.
-2. **Add a Volume** to the service, mount path `/data`
-   (Settings → Volumes). This keeps the SQLite file across redeploys.
-3. **Variables** (Settings → Variables) — set:
+2. **Attach a Volume** to the service (right-click the service, or `Cmd/Ctrl+K`
+   → "volume"), mount path `/data`. This keeps the SQLite file across redeploys.
+3. **Variables** (service → Variables → Raw Editor) — set:
    | Variable | Value |
    |---|---|
-   | `DB_PATH` | `/data/cmpro.db` |
+   | `DB_PATH` | `/data/cnc.db` |
    | `DASH_USERNAME` | your login name |
    | `DASH_PASSWORD` | a strong password |
    | `SESSION_SECRET` | `python -c "import secrets;print(secrets.token_hex(32))"` |
@@ -83,7 +78,7 @@ git push -u origin main
    | `ALLOWED_USER_IDS` | your numeric Telegram id (from @userinfobot) |
    | `GEMINI_API_KEY` | from aistudio.google.com/apikey |
    | `GEMINI_MODEL` | current cheap vision model (check the Gemini docs) |
-   | `PUBLIC_URL` | the Railway URL, e.g. `https://cmpro-production.up.railway.app` |
+   | `PUBLIC_URL` | the Railway URL, e.g. `https://cnc-finance-production.up.railway.app` |
 4. Deploy. Check `https://<PUBLIC_URL>/health` returns `{"status":"ok"}`.
 
 ### 3. Register the Telegram webhook (once, after first deploy)

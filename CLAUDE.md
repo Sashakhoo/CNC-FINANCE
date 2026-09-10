@@ -1,4 +1,7 @@
-# CmPro — Project Brief for Claude Code
+# CNC Finance — Project Brief for Claude Code
+
+(Formerly "CmPro". The original Excel workbook is still named `CmPro.xlsm`
+on disk — that filename is left as-is below where it refers to the real file.)
 
 ## What this is
 

@@ -1,7 +1,7 @@
 """
-SQLite storage for the CmPro Telegram bot.
+SQLite storage for the CNC Finance system (Telegram bot + dashboard).
 
-This mirrors the same data model used in the CmPro dashboard mockup
+This mirrors the same data model used in the CNC dashboard mockup
 (transactions / contacts / invoices), so this database can later become
 the single source of truth the dashboard reads from too — swap this
 module for a Postgres version without touching main.py's logic.
@@ -10,7 +10,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = os.environ.get("DB_PATH", "./cmpro.db")
+DB_PATH = os.environ.get("DB_PATH", "./cnc.db")
 
 # Known category -> account code map, same as the dashboard's chart of
 # accounts. Anything not in here gets an auto-assigned code the first

@@ -1,5 +1,5 @@
 """
-CmPro Telegram bot — send a message or a receipt photo, confirm what got
+CNC Finance Telegram bot — send a message or a receipt photo, confirm what got
 parsed, and it logs the transaction plus generates the matching PDF
 (Receipt for cash in, Payment Voucher for cash out, Cash Voucher on
 request) straight back into the chat.

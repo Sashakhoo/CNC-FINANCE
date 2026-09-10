@@ -1,5 +1,5 @@
 """
-JSON API for the CmPro dashboard. Every endpoint mirrors one of the
+JSON API for the CNC dashboard. Every endpoint mirrors one of the
 dashboard's old in-memory array operations (addTransaction, deleteContact,
 markPaid, addAsset, saveNotes …) — the dashboard now fetch()es these
 instead of mutating JS arrays.

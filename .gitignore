@@ -5,5 +5,5 @@ venv/
 .env
 *.db
 *.db-journal
-backend/cmpro.db
+backend/cnc.db
 .DS_Store

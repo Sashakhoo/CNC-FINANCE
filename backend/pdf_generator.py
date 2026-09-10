@@ -1,6 +1,6 @@
 """
 Renders receipts, payment/cash vouchers, and invoices to PDF bytes using
-WeasyPrint, with the same letterhead and layout language as the CmPro
+WeasyPrint, with the same letterhead and layout language as the CNC
 dashboard mockup (dark IDE mint accent, Space Grotesk headings).
 """
 def _render(html: str) -> bytes:
