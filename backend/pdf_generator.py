@@ -3,11 +3,25 @@ Renders receipts, payment/cash vouchers, and invoices to PDF bytes using
 WeasyPrint, with the same letterhead and layout language as the CNC
 dashboard mockup (dark IDE mint accent, Space Grotesk headings).
 """
+import base64
+import pathlib
+
 def _render(html: str) -> bytes:
     # Imported lazily so the app can boot (and the dashboard/API run) on a
     # machine without the native Pango/Cairo libs — only PDF calls need them.
     from weasyprint import HTML
     return HTML(string=html).write_pdf()
+
+
+def _logo_data_uri() -> str:
+    p = pathlib.Path(__file__).resolve().parent.parent / "frontend" / "assets" / "logo-wordmark.png"
+    try:
+        return "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+
+
+LOGO_URI = _logo_data_uri()
 
 
 BUSINESS_NAME = "Code N Code Solution"
@@ -19,6 +33,7 @@ body { font-family: 'DejaVu Sans', sans-serif; color: #15141a; font-size: 11pt; 
 .brand { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
 .brand .mark { width:34px; height:34px; border-radius:9px; background:#0a0e14; color:#00dcb4;
   display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:15pt; }
+.brand .logo { height:24px; width:auto; }
 .brand .name { font-weight:bold; font-size:14pt; }
 .brand .sub { font-size:8pt; color:#666; margin-top:2px; }
 .title { text-align:center; font-weight:bold; font-size:11pt; letter-spacing:1px;
@@ -42,10 +57,16 @@ table.rows td.value { text-align:right; font-weight:bold; }
 """
 
 
+def _brand_mark():
+    if LOGO_URI:
+        return f'<img class="logo" src="{LOGO_URI}" alt="codencode.my">'
+    return '<div class="mark">C</div>'
+
+
 def _header_html():
     return f"""
     <div class="brand">
-      <div class="mark">C</div>
+      {_brand_mark()}
       <div><div class="name">{BUSINESS_NAME}</div><div class="sub">{BUSINESS_SUB}</div></div>
     </div>
     """
@@ -83,7 +104,7 @@ def render_voucher_pdf(voucher_no: str, voucher_type: str, date: str, party: str
     html = f"""
     <html><head><style>{BASE_CSS}</style></head><body>
       <div class="brand">
-        <div class="mark">C</div>
+        {_brand_mark()}
         <div><div class="name">{BUSINESS_NAME}</div><div class="sub">{BUSINESS_SUB}</div></div>
         <span class="stamp {stamp_class}" style="margin-left:auto;">{title}</span>
       </div>

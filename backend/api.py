@@ -33,7 +33,9 @@ def login(body: Login, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = auth.issue_token(username)
-    resp = JSONResponse({"ok": True, "username": username, "role": auth.USERS[username]["role"]})
+    role = auth.USERS[username]["role"]
+    resp = JSONResponse({"ok": True, "username": username, "role": role,
+                         "can_write": role in auth.WRITE_ROLES})
     # Secure cookie in production (https); relaxed for local http development.
     forwarded = request.headers.get("x-forwarded-proto", "")
     is_https = request.url.scheme == "https" or forwarded == "https"

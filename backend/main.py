@@ -17,6 +17,7 @@ import pathlib
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 import storage
 import seed
@@ -56,9 +57,17 @@ def health():
     return {"status": "ok"}
 
 
+app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     return FileResponse(FRONTEND_DIR / "dashboard.html")
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse(FRONTEND_DIR / "assets" / "favicon.ico")
 
 
 # --- Telegram helpers -------------------------------------------------------

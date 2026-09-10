@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>CNC Finance — Bento</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -23,7 +25,8 @@
   input,select{font-family:'Inter',sans-serif;}
 
   .side{width:96px; flex-shrink:0; padding:24px 14px; display:flex; flex-direction:column; align-items:center; gap:8px;}
-  .brand-mark{width:44px;height:44px;border-radius:16px; background:var(--ink); display:flex;align-items:center;justify-content:center; color:var(--lime); font-weight:700; font-size:17px; margin-bottom:20px;}
+  .brand-mark{width:44px;height:44px;border-radius:16px; background:var(--ink); display:flex;align-items:center;justify-content:center; margin-bottom:20px;}
+  .brand-mark img{width:28px; height:28px; object-fit:contain;}
   .nav-pill{width:100%; padding:12px 0; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--dim); cursor:pointer;}
   .nav-pill.active{background:var(--ink); color:var(--lime); box-shadow:var(--shadow);}
   .nav-pill svg{width:18px; height:18px;}
@@ -190,11 +193,8 @@
 
 <div class="modal-overlay" id="login-overlay" style="z-index:200;">
   <div class="receipt-card" style="width:360px; text-align:center;">
-    <div class="receipt-brand" style="justify-content:center;">
-      <div class="mark">C</div>
-      <div style="text-align:left;"><div class="name">CNC Finance</div><div class="tag">Code N Code Solution</div></div>
-    </div>
-    <div class="receipt-title" style="margin-bottom:16px;">Sign in</div>
+    <img src="/assets/logo-wordmark.png" alt="codencode.my" style="height:26px; width:auto; margin:4px 0 6px;">
+    <div class="tag" style="font-size:11px; color:var(--dim); margin-bottom:16px;">Finance · sign in</div>
     <form onsubmit="return doLogin(event)" style="display:flex; flex-direction:column; gap:12px; text-align:left;">
       <div class="field"><label>Username</label><input type="text" id="login-user" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="login-pass" autocomplete="current-password" required></div>
@@ -205,7 +205,7 @@
 </div>
 
 <div class="side">
-  <div class="brand-mark">C</div>
+  <div class="brand-mark"><img src="/assets/logo-icon-light.png" alt="codencode"></div>
   <div class="nav-pill active" data-view="dashboard">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
     <span>Home</span>
@@ -492,7 +492,7 @@
     <div class="view" id="view-company">
       <div class="bento">
         <div class="card dark c-12" style="display:flex; align-items:center; gap:20px;">
-          <div style="width:64px;height:64px;border-radius:18px; background:var(--lime); color:var(--lime-ink); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; flex-shrink:0;">C</div>
+          <div style="width:64px;height:64px;border-radius:18px; background:#0a0e14; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><img src="/assets/logo-icon-light.png" alt="codencode" style="width:40px;height:40px;object-fit:contain;"></div>
           <div>
             <div style="font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700;">CODE N CODE SOLUTION</div>
             <div style="font-size:12.5px; opacity:0.7; margin-top:4px;">Registration No. 202603072017 (AS0511861-M) · Sole Proprietorship</div>
