@@ -1,21 +1,21 @@
 # Railway / Nixpacks build config.
-# WeasyPrint needs native Pango/Cairo/GDK-Pixbuf libraries at runtime —
-# these are not pip-installable, hence the nixPkgs list below.
+# WeasyPrint needs native Pango/Cairo/GDK-Pixbuf shared libraries at runtime.
+# We install them as Debian packages (aptPkgs) so they land on the standard
+# loader path where WeasyPrint's ctypes lookups expect them.
 
 [phases.setup]
-nixPkgs = [
-  "python312",
-  "pango",
-  "cairo",
-  "gdk-pixbuf",
-  "libffi",
-  "fontconfig",
-  "harfbuzz",
-  "gobject-introspection",
+aptPkgs = [
+  "libpango-1.0-0",
+  "libpangocairo-1.0-0",
+  "libgdk-pixbuf-2.0-0",
+  "libcairo2",
+  "libffi-dev",
+  "libharfbuzz0b",
+  "fonts-dejavu-core",
+  "shared-mime-info",
 ]
 
-[phases.install]
-cmds = ["python -m venv /opt/venv && /opt/venv/bin/pip install --upgrade pip && /opt/venv/bin/pip install -r backend/requirements.txt"]
-
+# Nixpacks auto-detects Python from the root requirements.txt and builds a
+# venv on PATH. We only override the start command.
 [start]
-cmd = "cd backend && /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+cmd = "cd backend && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
