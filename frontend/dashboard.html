@@ -411,11 +411,15 @@
     <div class="view" id="view-invoice">
       <div class="card">
         <form class="inline" data-cap="invoices" onsubmit="return addInvoice(event)">
-          <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:190px;"><datalist id="inv-contact-list"></datalist></div>
+          <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
+          <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
+          <div class="field"><label>Phone (if new)</label><input type="text" id="inv-phone" placeholder="optional"></div>
           <div class="field"><label>What's it for</label><input type="text" id="inv-desc" placeholder="e.g. Vibe Coding - 4 Sessions" style="min-width:200px;"></div>
           <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
           <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
           <div class="field"><label>Amount (RM)</label><input type="number" id="inv-amount" step="0.01" min="0" required></div>
+          <div class="field"><label>Discount %</label><input type="number" id="inv-discount" step="0.1" min="0" max="100" value="0" style="min-width:80px;"></div>
+          <div class="field"><label>Remarks</label><input type="text" id="inv-remarks" placeholder="optional — schedule, notes…" style="min-width:180px;"></div>
           <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
         </form>
         <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
@@ -427,13 +431,15 @@
     <div class="view" id="view-contacts">
       <div class="card">
         <form class="inline" data-cap="contacts" onsubmit="return addContact(event)">
-          <div class="field"><label>Name</label><input type="text" id="ct-name" placeholder="Company name" required style="min-width:200px;"></div>
+          <div class="field"><label>Name</label><input type="text" id="ct-name" placeholder="Company name" required style="min-width:180px;"></div>
           <div class="field"><label>Type</label><select id="ct-type"><option value="debtor">Debtor</option><option value="creditor">Creditor</option></select></div>
+          <div class="field"><label>Email</label><input type="email" id="ct-email" placeholder="optional"></div>
+          <div class="field"><label>Phone</label><input type="text" id="ct-phone" placeholder="optional"></div>
           <div class="field"><label>Opening Balance (RM)</label><input type="number" id="ct-balance" step="0.01" min="0" required></div>
           <button class="pill-btn dark" type="submit">＋ Add Contact</button>
         </form>
-        <div class="panel-head"><span class="panel-title">Contacts</span><span class="top-note">Bank statements only show settled transfers — no open balances to seed</span></div>
-        <table><thead><tr><th>Name</th><th>Type</th><th>Account Code</th><th style="text-align:right;">Balance</th><th></th></tr></thead><tbody id="ct-body"></tbody></table>
+        <div class="panel-head"><span class="panel-title">Contacts</span><span class="top-note">Email/phone show up on invoices automatically</span></div>
+        <table><thead><tr><th>Name</th><th>Type</th><th>Email</th><th>Phone</th><th>Account Code</th><th style="text-align:right;">Balance</th><th></th></tr></thead><tbody id="ct-body"></tbody></table>
       </div>
     </div>
 
@@ -1136,6 +1142,8 @@ async function addContact(e){
   const body = {
     name: document.getElementById('ct-name').value,
     type: document.getElementById('ct-type').value,
+    email: document.getElementById('ct-email').value.trim(),
+    phone: document.getElementById('ct-phone').value.trim(),
     balance: parseFloat(document.getElementById('ct-balance').value) || 0,
   };
   await api('/contacts', { method:'POST', body: JSON.stringify(body) });
@@ -1153,10 +1161,14 @@ async function addInvoice(e){
   e.preventDefault();
   const body = {
     contact: document.getElementById('inv-contact').value.trim(),
+    email: document.getElementById('inv-email').value.trim(),
+    phone: document.getElementById('inv-phone').value.trim(),
     description: document.getElementById('inv-desc').value.trim(),
     date: document.getElementById('inv-date').value,
     due: document.getElementById('inv-due').value,
     amount: parseFloat(document.getElementById('inv-amount').value),
+    discount_pct: parseFloat(document.getElementById('inv-discount').value) || 0,
+    remarks: document.getElementById('inv-remarks').value.trim(),
   };
   await api('/invoices', { method:'POST', body: JSON.stringify(body) });
   e.target.reset();
@@ -1234,10 +1246,12 @@ function render(){
 
   document.getElementById('ct-body').innerHTML = contacts.length ? contacts.map(c=>`
     <tr><td>${c.name}</td><td><span class="tag ${c.type}">${c.type.toUpperCase()}</span></td>
+    <td class="mono" style="color:var(--dim);">${c.email || '—'}</td>
+    <td class="mono" style="color:var(--dim);">${c.phone || '—'}</td>
     <td class="mono" style="color:var(--dim);">${provisionContactCode(c)}</td>
     <td style="text-align:right;" class="amt">${fmt(c.balance)}</td>
     <td><button class="pill-btn danger small" data-cap="contacts" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('')
-    : `<tr><td colspan="5" class="empty-note">No contacts yet — add an outstanding debtor or creditor above.</td></tr>`;
+    : `<tr><td colspan="7" class="empty-note">No contacts yet — add an outstanding debtor or creditor above.</td></tr>`;
 
   document.getElementById('inv-contact-list').innerHTML =
     contacts.map(c=>`<option value="${c.name}">`).join('');

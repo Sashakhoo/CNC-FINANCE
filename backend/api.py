@@ -272,6 +272,8 @@ class ContactIn(BaseModel):
     name: str
     type: str
     balance: float = 0.0
+    email: str | None = None
+    phone: str | None = None
 
 
 @router.get("/contacts", dependencies=[Depends(auth.require_auth)])
@@ -283,7 +285,8 @@ def get_contacts():
 def create_contact(body: ContactIn):
     if body.type not in ("debtor", "creditor"):
         raise HTTPException(422, "type must be 'debtor' or 'creditor'")
-    return storage.insert_contact(body.name, body.type, body.balance)
+    return storage.insert_contact(body.name, body.type, body.balance,
+                                   email=body.email or "", phone=body.phone or "")
 
 
 @router.delete("/contacts/{cid}", dependencies=[Depends(auth.require_cap("contacts"))])
@@ -300,6 +303,10 @@ class InvoiceIn(BaseModel):
     due: str
     amount: float
     description: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    discount_pct: float = 0.0
+    remarks: str | None = None
 
 
 @router.get("/invoices", dependencies=[Depends(auth.require_auth)])
@@ -309,10 +316,11 @@ def get_invoices():
 
 @router.post("/invoices", dependencies=[Depends(auth.require_cap("invoices"))])
 def create_invoice(body: InvoiceIn):
-    storage.find_or_create_contact(body.contact, "debtor")
+    storage.find_or_create_contact(body.contact, "debtor", email=body.email or "", phone=body.phone or "")
     number = storage.next_document_number("INV")
     iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount,
-                                  status="Pending", description=body.description or "")
+                                  status="Pending", description=body.description or "",
+                                  discount_pct=body.discount_pct or 0, remarks=body.remarks or "")
     return storage.get_invoice(iid)
 
 
@@ -408,9 +416,12 @@ def _generate_document(kind: str, ref_id: int):
         inv = storage.get_invoice(ref_id)
         if not inv:
             raise HTTPException(404, "Invoice not found")
+        contact = storage.get_contact_by_name(inv["contact"], "debtor") or {}
         pdf = pdf_generator.render_invoice_pdf(
             inv["number"], inv["contact"], inv["date"], inv["due"], inv["amount"],
             description=inv.get("description"), status=inv.get("status"),
+            email=contact.get("email"), phone=contact.get("phone"),
+            discount_pct=inv.get("discount_pct") or 0, remarks=inv.get("remarks"),
         )
         return _pdf_response(pdf, f"{inv['number']}.pdf")
 

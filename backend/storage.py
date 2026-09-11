@@ -60,7 +60,9 @@ def init_db():
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('debtor','creditor')),
             balance REAL NOT NULL DEFAULT 0,
-            code TEXT
+            code TEXT,
+            email TEXT DEFAULT '',
+            phone TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS invoices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +72,9 @@ def init_db():
             due TEXT,
             amount REAL NOT NULL,
             status TEXT NOT NULL DEFAULT 'Pending',
-            description TEXT NOT NULL DEFAULT ''
+            description TEXT NOT NULL DEFAULT '',
+            discount_pct REAL NOT NULL DEFAULT 0,
+            remarks TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS counters (
             name TEXT PRIMARY KEY,
@@ -110,11 +114,23 @@ def init_db():
         );
         """)
         conn.execute("INSERT OR IGNORE INTO notes(id, text, updated_at) VALUES (1, '', NULL)")
-        # Additive column for databases created before `description` existed
-        # on invoices — CREATE TABLE IF NOT EXISTS above won't alter them.
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(invoices)")}
-        if "description" not in cols:
-            conn.execute("ALTER TABLE invoices ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        # Additive columns for databases created before these existed —
+        # CREATE TABLE IF NOT EXISTS above won't alter an existing table.
+        inv_cols = {r["name"] for r in conn.execute("PRAGMA table_info(invoices)")}
+        for col, ddl in (
+            ("description", "ALTER TABLE invoices ADD COLUMN description TEXT NOT NULL DEFAULT ''"),
+            ("discount_pct", "ALTER TABLE invoices ADD COLUMN discount_pct REAL NOT NULL DEFAULT 0"),
+            ("remarks", "ALTER TABLE invoices ADD COLUMN remarks TEXT NOT NULL DEFAULT ''"),
+        ):
+            if col not in inv_cols:
+                conn.execute(ddl)
+        contact_cols = {r["name"] for r in conn.execute("PRAGMA table_info(contacts)")}
+        for col, ddl in (
+            ("email", "ALTER TABLE contacts ADD COLUMN email TEXT DEFAULT ''"),
+            ("phone", "ALTER TABLE contacts ADD COLUMN phone TEXT DEFAULT ''"),
+        ):
+            if col not in contact_cols:
+                conn.execute(ddl)
 
 
 # --- Generic list / delete helpers ---------------------------------------
@@ -152,12 +168,20 @@ def delete_row(table: str, row_id: int):
         conn.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))
 
 
-def insert_contact(name: str, contact_type: str, balance: float = 0.0):
-    row = find_or_create_contact(name, contact_type)
+def insert_contact(name: str, contact_type: str, balance: float = 0.0, email: str = "", phone: str = ""):
+    row = find_or_create_contact(name, contact_type, email=email, phone=phone)
     if balance:
         with get_conn() as conn:
             conn.execute("UPDATE contacts SET balance = ? WHERE id = ?", (balance, row["id"]))
     return get_contact(row["id"])
+
+
+def get_contact_by_name(name: str, contact_type: str):
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT * FROM contacts WHERE name = ? AND type = ?", (name, contact_type)
+        ).fetchone()
+        return dict(r) if r else None
 
 
 def get_contact(cid: int):
@@ -386,29 +410,39 @@ def update_transaction(tx_id: int, fields: dict):
         conn.execute(f"UPDATE transactions SET {', '.join(sets)} WHERE id = ?", params)
 
 
-def find_or_create_contact(name: str, contact_type: str):
+def find_or_create_contact(name: str, contact_type: str, email: str = "", phone: str = ""):
     """Auto chart-of-accounts provisioning for contacts: looks up a debtor/
-    creditor by name, or creates it with a fresh 1200-/2100-series code."""
+    creditor by name, or creates it with a fresh 1200-/2100-series code.
+    If the contact already exists and a new email/phone is supplied while
+    the stored one is blank, fills it in (never overwrites a set value)."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM contacts WHERE name = ? AND type = ?", (name, contact_type)
         ).fetchone()
         if row:
+            if email and not row["email"]:
+                conn.execute("UPDATE contacts SET email = ? WHERE id = ?", (email, row["id"]))
+            if phone and not row["phone"]:
+                conn.execute("UPDATE contacts SET phone = ? WHERE id = ?", (phone, row["id"]))
+            if (email and not row["email"]) or (phone and not row["phone"]):
+                row = conn.execute("SELECT * FROM contacts WHERE id = ?", (row["id"],)).fetchone()
             return row
         seq_name = "debtor_code_seq" if contact_type == "debtor" else "creditor_code_seq"
         base = 1201 if contact_type == "debtor" else 2101
         code = str(base + next_counter(seq_name) - 1)
         cur = conn.execute(
-            "INSERT INTO contacts(name, type, balance, code) VALUES (?, ?, 0, ?)",
-            (name, contact_type, code)
+            "INSERT INTO contacts(name, type, balance, code, email, phone) VALUES (?, ?, 0, ?, ?, ?)",
+            (name, contact_type, code, email or "", phone or "")
         )
         return conn.execute("SELECT * FROM contacts WHERE id = ?", (cur.lastrowid,)).fetchone()
 
 
-def insert_invoice(number, contact, date, due, amount, status="Pending", description="") -> int:
+def insert_invoice(number, contact, date, due, amount, status="Pending", description="",
+                   discount_pct=0.0, remarks="") -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO invoices(number, contact, date, due, amount, status, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (number, contact, date, due, amount, status, description or "")
+            "INSERT INTO invoices(number, contact, date, due, amount, status, description, discount_pct, remarks) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (number, contact, date, due, amount, status, description or "", discount_pct or 0, remarks or "")
         )
         return cur.lastrowid

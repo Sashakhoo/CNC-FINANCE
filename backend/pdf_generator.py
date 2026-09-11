@@ -168,14 +168,24 @@ def _items_table(rows: list, subnotes: list) -> str:
     """
 
 
-def _totals(subtotal: float, total: float, paid: float | None, due_label: str, due: float | None) -> str:
-    rows = [f'<div class="row"><span>Subtotal:</span><span>{_rm(subtotal)}</span></div>',
-            f'<div class="row grand"><span>Total:</span><span>{_rm(total)}</span></div>']
+def _totals(subtotal: float, total: float, paid: float | None, due_label: str, due: float | None,
+           discount_pct: float = 0.0) -> str:
+    rows = [f'<div class="row"><span>Subtotal:</span><span>{_rm(subtotal)}</span></div>']
+    if discount_pct:
+        discount_amt = subtotal * discount_pct / 100
+        rows.append(f'<div class="row"><span>Discount {discount_pct:g}%:</span><span>-{_rm(discount_amt)}</span></div>')
+    rows.append(f'<div class="row grand"><span>Total:</span><span>{_rm(total)}</span></div>')
     if paid is not None:
         rows.append(f'<div class="row"><span>Amount Paid:</span><span>{_rm(paid)}</span></div>')
     if due is not None:
         rows.append(f'<div class="row due"><span>{_esc(due_label)}</span><span>{_rm(due)}</span></div>')
     return f'<h2 class="sec">AMOUNT</h2><div class="totals">{"".join(rows)}</div>'
+
+
+def _remarks_block(remarks: str) -> str:
+    if not remarks:
+        return ""
+    return f'<h2 class="sec">REMARKS</h2><div class="muted">{_esc(remarks)}</div>'
 
 
 def _payment_block(reference: str) -> str:
@@ -225,15 +235,19 @@ def render_receipt_pdf(receipt_no: str, date: str, payer: str, description: str,
 
 
 def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amount: float,
-                       description: str = None, status: str = "Pending") -> bytes:
+                       description: str = None, status: str = "Pending",
+                       email: str = None, phone: str = None,
+                       discount_pct: float = 0.0, remarks: str = None) -> bytes:
     paid = (status or "").lower() == "paid"
     status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
+    total = amount * (1 - (discount_pct or 0) / 100)
     return _page(
         _header("INVOICE", invoice_no,
                 [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))], status_pill),
-        _party_block("BILL TO", contact or "—", []),
+        _party_block("BILL TO", contact or "—", [email, phone]),
         _items_table([(description or "Course / consulting services", 1, amount, amount)], []),
-        _totals(amount, amount, amount if paid else 0.0, "Balance Due:", 0.0 if paid else amount),
+        _totals(amount, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total, discount_pct),
+        _remarks_block(remarks),
         _payment_block(invoice_no),
         _footer(invoice_no),
     )
