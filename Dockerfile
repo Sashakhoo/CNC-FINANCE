@@ -3,15 +3,24 @@
 # are available (the recurring pain point on buildpack/Nixpacks builds).
 FROM python:3.12-slim
 
+# Full runtime dependency set for WeasyPrint (Pango / Cairo / GLib / HarfBuzz
+# / Fontconfig). libglib2.0-0 (libgobject) and libharfbuzz-subset0 are the
+# ones most often missing — WeasyPrint dlopen()s them via ctypes at render
+# time, so a missing one is a runtime crash, not a build error.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libpango-1.0-0 \
       libpangocairo-1.0-0 \
-      libgdk-pixbuf-2.0-0 \
+      libpangoft2-1.0-0 \
       libcairo2 \
-      libffi-dev \
+      libgdk-pixbuf-2.0-0 \
+      libglib2.0-0 \
       libharfbuzz0b \
+      libharfbuzz-subset0 \
+      libfontconfig1 \
+      libffi8 \
       shared-mime-info \
-      fonts-dejavu-core \
+      fonts-dejavu \
+      fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
