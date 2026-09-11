@@ -368,10 +368,12 @@ def generate_document(kind: str, ref_id: int):
         return _generate_document(kind, ref_id)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         import logging
         logging.getLogger("cnc.pdf").exception("PDF generation failed for %s/%s", kind, ref_id)
-        raise HTTPException(500, "Could not generate the document. Check the server logs.")
+        # Authenticated (director/admin) endpoint — surface the cause so the
+        # owner can see it without digging through deploy logs.
+        raise HTTPException(500, f"PDF generation failed: {type(e).__name__}: {e}")
 
 
 def _generate_document(kind: str, ref_id: int):
