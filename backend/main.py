@@ -243,7 +243,7 @@ async def telegram_webhook(request: Request):
             return {"ok": True}
         storage.find_or_create_contact(contact_name, "debtor")
         no = storage.next_document_number("INV")
-        storage.insert_invoice(no, contact_name, today, due, amount, status="Unpaid", description=description)
+        storage.insert_invoice(no, contact_name, today, due, amount, status="Pending", description=description)
         pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
         caption = f"{no} — {contact_name} — RM {amount:,.2f}, due {due}"
         await tg_send_document(chat_id, f"{no}.pdf", pdf, caption=caption)

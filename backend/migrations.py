@@ -33,11 +33,20 @@ _RECATEGORISE_2026_09 = {
 }
 
 
-def run_migrations() -> None:
-    mid = "2026-09-recategorise-consulting-revenue"
+def _migration_ran(mid: str) -> bool:
     with storage.get_conn() as conn:
-        if _applied(conn, mid):
-            return
+        return _applied(conn, mid)
+
+
+def _finish(mid: str):
+    with storage.get_conn() as conn:
+        _mark(conn, mid)
+
+
+def _recategorise_consulting_revenue():
+    mid = "2026-09-recategorise-consulting-revenue"
+    if _migration_ran(mid):
+        return
     storage.category_code("Workshop Revenue", "in")  # provision the new code
     with storage.get_conn() as conn:
         n = 0
@@ -48,5 +57,21 @@ def run_migrations() -> None:
                 (cat, date, desc),
             )
             n += cur.rowcount
-        _mark(conn, mid)
+    _finish(mid)
     print(f"Migration {mid}: recategorised {n} transaction(s)")
+
+
+def _rename_unpaid_to_pending():
+    mid = "2026-09-invoice-status-unpaid-to-pending"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        cur = conn.execute("UPDATE invoices SET status = 'Pending' WHERE status = 'Unpaid'")
+        n = cur.rowcount
+    _finish(mid)
+    print(f"Migration {mid}: updated {n} invoice(s)")
+
+
+def run_migrations() -> None:
+    _recategorise_consulting_revenue()
+    _rename_unpaid_to_pending()

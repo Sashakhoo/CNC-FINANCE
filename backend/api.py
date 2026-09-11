@@ -312,7 +312,7 @@ def create_invoice(body: InvoiceIn):
     storage.find_or_create_contact(body.contact, "debtor")
     number = storage.next_document_number("INV")
     iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount,
-                                  status="Unpaid", description=body.description or "")
+                                  status="Pending", description=body.description or "")
     return storage.get_invoice(iid)
 
 

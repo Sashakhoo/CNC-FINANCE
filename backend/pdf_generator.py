@@ -225,7 +225,7 @@ def render_receipt_pdf(receipt_no: str, date: str, payer: str, description: str,
 
 
 def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amount: float,
-                       description: str = None, status: str = "Unpaid") -> bytes:
+                       description: str = None, status: str = "Pending") -> bytes:
     paid = (status or "").lower() == "paid"
     status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
     return _page(

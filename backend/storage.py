@@ -69,7 +69,7 @@ def init_db():
             date TEXT NOT NULL,
             due TEXT,
             amount REAL NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Unpaid',
+            status TEXT NOT NULL DEFAULT 'Pending',
             description TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS counters (
@@ -405,7 +405,7 @@ def find_or_create_contact(name: str, contact_type: str):
         return conn.execute("SELECT * FROM contacts WHERE id = ?", (cur.lastrowid,)).fetchone()
 
 
-def insert_invoice(number, contact, date, due, amount, status="Unpaid", description="") -> int:
+def insert_invoice(number, contact, date, due, amount, status="Pending", description="") -> int:
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO invoices(number, contact, date, due, amount, status, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
