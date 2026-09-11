@@ -315,6 +315,14 @@ class InvoiceIn(BaseModel):
     discount_pct: float = 0.0
     remarks: str | None = None
     items: list[InvoiceItemIn] | None = None
+    # Matches the xlsm Invoice template's fields — all optional.
+    attention: str | None = None
+    company: str | None = None
+    address: str | None = None
+    reference_no: str | None = None
+    sales_type: str | None = None
+    sales_person: str | None = None
+    tax_pct: float = 0.0
 
 
 @router.get("/invoices", dependencies=[Depends(auth.require_auth)])
@@ -332,7 +340,10 @@ def create_invoice(body: InvoiceIn):
     iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount,
                                   status="Pending", description=body.description or "",
                                   discount_pct=body.discount_pct or 0, remarks=body.remarks or "",
-                                  items=items)
+                                  items=items, attention=body.attention or "", company=body.company or "",
+                                  address=body.address or "", reference_no=body.reference_no or "",
+                                  sales_type=body.sales_type or "", sales_person=body.sales_person or "",
+                                  tax_pct=body.tax_pct or 0)
     return storage.get_invoice(iid)
 
 
@@ -494,6 +505,9 @@ def _generate_document(kind: str, ref_id: int):
             email=contact.get("email"), phone=contact.get("phone"),
             discount_pct=inv.get("discount_pct") or 0, remarks=inv.get("remarks"),
             items=inv.get("items"),
+            attention=inv.get("attention"), company=inv.get("company"), address=inv.get("address"),
+            reference_no=inv.get("reference_no"), sales_type=inv.get("sales_type"),
+            sales_person=inv.get("sales_person"), tax_pct=inv.get("tax_pct") or 0,
         )
         return _pdf_response(pdf, f"{inv['number']}.pdf")
 

@@ -169,11 +169,15 @@ def _items_table(rows: list, subnotes: list) -> str:
 
 
 def _totals(subtotal: float, total: float, paid: float | None, due_label: str, due: float | None,
-           discount_pct: float = 0.0) -> str:
+           discount_pct: float = 0.0, tax_pct: float = 0.0) -> str:
     rows = [f'<div class="row"><span>Subtotal:</span><span>{_rm(subtotal)}</span></div>']
     if discount_pct:
         discount_amt = subtotal * discount_pct / 100
         rows.append(f'<div class="row"><span>Discount {discount_pct:g}%:</span><span>-{_rm(discount_amt)}</span></div>')
+    if tax_pct:
+        after_discount = subtotal * (1 - (discount_pct or 0) / 100)
+        tax_amt = after_discount * tax_pct / 100
+        rows.append(f'<div class="row"><span>Tax {tax_pct:g}%:</span><span>+{_rm(tax_amt)}</span></div>')
     rows.append(f'<div class="row grand"><span>Total:</span><span>{_rm(total)}</span></div>')
     if paid is not None:
         rows.append(f'<div class="row"><span>Amount Paid:</span><span>{_rm(paid)}</span></div>')
@@ -241,10 +245,16 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
                        description: str = None, status: str = "Pending",
                        email: str = None, phone: str = None,
                        discount_pct: float = 0.0, remarks: str = None,
-                       items: list = None) -> bytes:
+                       items: list = None, attention: str = None, company: str = None,
+                       address: str = None, reference_no: str = None, sales_type: str = None,
+                       sales_person: str = None, tax_pct: float = 0.0) -> bytes:
     """`items`, if given, is a list of {description, qty, unit_price} dicts
     rendered as separate rows (matching a multi-service quotation/invoice).
-    Falls back to a single row built from description/amount otherwise."""
+    Falls back to a single row built from description/amount otherwise.
+
+    attention/company/address/reference_no/sales_type/sales_person/tax_pct
+    mirror the xlsm Invoice template's fields — each is optional and simply
+    omitted from the PDF when blank."""
     paid = (status or "").lower() == "paid"
     status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
     if items:
@@ -254,13 +264,23 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
     else:
         rows = [(description or "Course / consulting services", 1, amount, amount)]
         subtotal = amount
-    total = subtotal * (1 - (discount_pct or 0) / 100)
+    after_discount = subtotal * (1 - (discount_pct or 0) / 100)
+    total = after_discount * (1 + (tax_pct or 0) / 100)
+    meta_rows = [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))]
+    if reference_no:
+        meta_rows.append(("Reference No", reference_no))
+    if sales_type:
+        meta_rows.append(("Sales Type", sales_type))
+    if sales_person:
+        meta_rows.append(("Sales Person", sales_person))
+    party_name = company or contact or "—"
+    party_lines = [attention and f"Attn: {attention}", address, email, phone]
     return _page(
-        _header("INVOICE", invoice_no,
-                [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))], status_pill),
-        _party_block("BILL TO", contact or "—", [email, phone]),
+        _header("INVOICE", invoice_no, meta_rows, status_pill),
+        _party_block("BILL TO", party_name, party_lines),
         _items_table(rows, []),
-        _totals(subtotal, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total, discount_pct),
+        _totals(subtotal, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total,
+                discount_pct, tax_pct),
         _remarks_block(remarks),
         _payment_block(invoice_no),
         _footer(invoice_no),
@@ -310,3 +330,66 @@ def render_voucher_pdf(voucher_no: str, voucher_type: str, date: str, party: str
         sig,
         _footer(voucher_no),
     )
+
+
+# --- certificate --------------------------------------------------------
+
+CERT_CSS = f"""
+@page {{ size: A4 landscape; margin: 0; }}
+* {{ box-sizing: border-box; }}
+body {{ font-family: 'DejaVu Sans Mono', 'Courier New', monospace; color: {INK}; }}
+.cert-frame {{ width: 297mm; height: 210mm; padding: 14mm 18mm; position: relative;
+              border: 3px solid {INK}; }}
+.cert-frame::before {{ content: ''; position: absolute; inset: 6mm; border: 1px solid {MINT}; }}
+.cert-inner {{ position: relative; height: 100%; display: flex; flex-direction: column;
+              align-items: center; text-align: center; justify-content: space-between; }}
+.cert-top {{ padding-top: 6mm; }}
+.cert-logo {{ height: 24px; margin-bottom: 10px; }}
+.cert-biz {{ font-size: 8pt; color: #555; letter-spacing: 0.5px; }}
+.cert-title {{ font-size: 30pt; font-weight: bold; letter-spacing: 4px; margin-top: 14mm; }}
+.cert-rule {{ width: 90px; height: 4px; background: {MINT}; margin: 10px auto 0; }}
+.cert-sub {{ font-size: 9.5pt; color: #555; margin-top: 14px; letter-spacing: 0.5px; }}
+.cert-name {{ font-size: 24pt; font-weight: bold; margin-top: 10px; padding-bottom: 6px;
+             border-bottom: 2px solid {INK}; display: inline-block; }}
+.cert-body {{ font-size: 10pt; color: #333; margin-top: 16px; max-width: 480px; line-height: 1.7; }}
+.cert-course {{ font-size: 15pt; font-weight: bold; margin-top: 6px; color: {MINT_DARK}; }}
+.cert-bottom {{ width: 100%; display: flex; justify-content: space-between; align-items: flex-end;
+               padding-bottom: 6mm; }}
+.cert-sig {{ text-align: left; font-size: 8.5pt; }}
+.cert-sig .line {{ width: 160px; border-top: 1px solid {INK}; margin-bottom: 4px; }}
+.cert-meta {{ text-align: right; font-size: 7.5pt; color: #777; }}
+"""
+
+
+def render_certificate_pdf(student_name: str, course_title: str, completion_date: str,
+                           cert_no: str) -> bytes:
+    """A landscape A4 certificate of completion, in the same house style as
+    the other documents (mint/ink, codencode.my wordmark). `cert_no` is
+    meant to come from the shared counters sequence (e.g. next_document_number
+    ('CERT')) so certificates are numbered consistently, same as
+    receipts/invoices/vouchers."""
+    logo = f'<img class="cert-logo" src="{LOGO_URI}">' if LOGO_URI else ""
+    html = f"""
+    <div class="cert-frame"><div class="cert-inner">
+      <div class="cert-top">
+        {logo}
+        <div class="cert-biz">{_esc(BUSINESS_NAME)} &middot; {_esc(BUSINESS_SITE)}</div>
+        <div class="cert-title">CERTIFICATE</div>
+        <div class="cert-rule"></div>
+        <div class="cert-sub">OF COMPLETION</div>
+      </div>
+      <div>
+        <div class="cert-body">This certifies that</div>
+        <div class="cert-name">{_esc(student_name)}</div>
+        <div class="cert-body">has successfully completed</div>
+        <div class="cert-course">{_esc(course_title)}</div>
+        <div class="cert-body">on {_fmt_date(completion_date)}</div>
+      </div>
+      <div class="cert-bottom">
+        <div class="cert-sig"><div class="line"></div>Authorised Signature — {_esc(BUSINESS_NAME)}</div>
+        <div class="cert-meta">{_esc(cert_no)}<br>{_esc(BUSINESS_SITE)}</div>
+      </div>
+    </div></div>
+    """
+    return _render(f"<html><head><meta charset='utf-8'><style>{CERT_CSS}</style></head>"
+                   f"<body>{html}</body></html>")

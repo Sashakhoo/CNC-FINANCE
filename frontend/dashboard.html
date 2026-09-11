@@ -99,8 +99,11 @@
   .line-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
   .line-row:last-child{border-bottom:none;}
   .line-row.total{font-weight:700; padding-top:12px;}
+  .line-row.subtotal{font-weight:600; border-bottom:1px solid var(--ink); padding-top:6px;}
+  .line-row.indent{padding-left:14px;}
   .group-label{font-size:10.5px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.3px; margin:14px 0 4px 0;}
   .group-label:first-child{margin-top:0;}
+  .subgroup-label{font-size:10px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.2px; margin:10px 0 2px 14px;}
 
   .stat-mini{display:flex; gap:14px;}
   .stat-mini .m-card{flex:1; background:var(--bg); border-radius:14px; padding:14px 16px;}
@@ -183,6 +186,7 @@
   .tb-table td, .tb-table th{text-align:right;}
   .tb-table td:nth-child(1), .tb-table td:nth-child(2), .tb-table th:nth-child(1), .tb-table th:nth-child(2){text-align:left;}
   .tb-table tr.grp td{font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.3px; color:var(--dim); padding-top:16px; border-top:none;}
+  .tb-table tr.subtotal td{font-weight:600; font-size:11.5px; border-top:1px solid var(--line); color:var(--ink); padding-top:6px; padding-bottom:10px;}
   .tb-table tr.total td{font-weight:700; border-top:2px solid var(--ink);}
   .tally-pill{font-size:11px; font-weight:700; padding:6px 13px; border-radius:100px; display:inline-flex; align-items:center; gap:6px;}
   .tally-pill.ok{background:#e7f7c9; color:#3a7a1f;}
@@ -418,7 +422,26 @@
             <div class="field"><label>Phone (if new)</label><input type="text" id="inv-phone" placeholder="optional"></div>
             <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
             <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
+          </div>
+
+          <div class="inline" style="margin-top:10px; margin-bottom:0;">
+            <div class="field"><label>Attention</label><input type="text" id="inv-attention" placeholder="Person to address, if different"></div>
+            <div class="field"><label>Company</label><input type="text" id="inv-company" placeholder="optional — defaults to Contact"></div>
+            <div class="field"><label>Address</label><input type="text" id="inv-address" placeholder="optional" style="min-width:180px;"></div>
+            <div class="field"><label>Reference No.</label><input type="text" id="inv-reference" placeholder="optional — manual PO/ref"></div>
+            <div class="field"><label>Sales Type</label>
+              <select id="inv-sales-type">
+                <option value="">—</option>
+                <option>Course</option>
+                <option>Consulting</option>
+                <option>Workshop</option>
+                <option>Cash</option>
+                <option>Credit</option>
+              </select>
+            </div>
+            <div class="field"><label>Sales Person</label><input type="text" id="inv-sales-person" placeholder="optional"></div>
             <div class="field"><label>Discount %</label><input type="number" id="inv-discount" step="0.1" min="0" max="100" value="0" style="min-width:80px;" oninput="recalcInvSubtotal()"></div>
+            <div class="field"><label>Tax %</label><input type="number" id="inv-tax" step="0.1" min="0" max="100" value="0" style="min-width:80px;" oninput="recalcInvSubtotal()"></div>
           </div>
 
           <div style="margin-top:16px;">
@@ -474,13 +497,23 @@
           <div class="card">
             <div class="panel-head"><span class="panel-title">Statement of Financial Position</span></div>
             <div class="group-label">Assets</div>
-            <div class="line-row"><span>Cash and bank balances</span><span class="amt" id="bs-cash">RM 0</span></div>
-            <div class="line-row"><span>Trade debtors</span><span class="amt" id="bs-debtors">RM 0</span></div>
-            <div class="line-row"><span>Fixed assets (net book value)</span><span class="amt" id="bs-nbv">RM 0</span></div>
+            <div class="subgroup-label">Non-Current Assets</div>
+            <div class="line-row indent"><span>Property, plant &amp; equipment (net book value)</span><span class="amt" id="bs-nbv">RM 0</span></div>
+            <div class="line-row subtotal indent"><span>Total Non-Current Assets</span><span class="amt" id="bs-total-noncurrent">RM 0</span></div>
+            <div class="subgroup-label">Current Assets</div>
+            <div class="line-row indent"><span>Cash and bank balances</span><span class="amt" id="bs-cash">RM 0</span></div>
+            <div class="line-row indent"><span>Trade debtors</span><span class="amt" id="bs-debtors">RM 0</span></div>
+            <div class="line-row subtotal indent"><span>Total Current Assets</span><span class="amt" id="bs-total-current">RM 0</span></div>
             <div class="line-row total"><span>Total Assets</span><span class="amt" id="bs-total-assets">RM 0</span></div>
+
             <div class="group-label">Equity &amp; Liabilities</div>
-            <div class="line-row"><span>Trade creditors</span><span class="amt" id="bs-creditors">RM 0</span></div>
-            <div class="line-row"><span>Owner's Equity (plug)</span><span class="amt" id="bs-equity">RM 0</span></div>
+            <div class="subgroup-label">Shareholder's Equity</div>
+            <div class="line-row indent"><span>Accumulated Profit &amp; Loss (brought forward)</span><span class="amt" id="bs-equity-accum">RM 0</span></div>
+            <div class="line-row indent"><span>(+) Current Period Net Profit / (Loss)</span><span class="amt" id="bs-equity-current">RM 0</span></div>
+            <div class="line-row subtotal indent"><span>Total Equity</span><span class="amt" id="bs-total-equity">RM 0</span></div>
+            <div class="subgroup-label">Current Liabilities</div>
+            <div class="line-row indent"><span>Trade creditors</span><span class="amt" id="bs-creditors">RM 0</span></div>
+            <div class="line-row subtotal indent"><span>Total Current Liabilities</span><span class="amt" id="bs-total-curliab">RM 0</span></div>
             <div class="line-row total"><span>Total Equity &amp; Liabilities</span><span class="amt" id="bs-total-eq">RM 0</span></div>
           </div>
         </div>
@@ -1205,9 +1238,13 @@ function recalcInvSubtotal(){
     subtotal += amt;
   });
   const discount = parseFloat(document.getElementById('inv-discount').value) || 0;
-  const total = subtotal * (1 - discount / 100);
+  const tax = parseFloat(document.getElementById('inv-tax').value) || 0;
+  const total = subtotal * (1 - discount / 100) * (1 + tax / 100);
   document.getElementById('inv-subtotal-preview').textContent = fmt(total);
-  document.getElementById('inv-discount-preview').textContent = discount ? `(after ${discount}% off)` : '';
+  const bits = [];
+  if(discount) bits.push(`${discount}% off`);
+  if(tax) bits.push(`+${tax}% tax`);
+  document.getElementById('inv-discount-preview').textContent = bits.length ? `(after ${bits.join(', ')})` : '';
 }
 
 async function addInvoice(e){
@@ -1225,7 +1262,14 @@ async function addInvoice(e){
     date: document.getElementById('inv-date').value,
     due: document.getElementById('inv-due').value,
     discount_pct: parseFloat(document.getElementById('inv-discount').value) || 0,
+    tax_pct: parseFloat(document.getElementById('inv-tax').value) || 0,
     remarks: document.getElementById('inv-remarks').value.trim(),
+    attention: document.getElementById('inv-attention').value.trim(),
+    company: document.getElementById('inv-company').value.trim(),
+    address: document.getElementById('inv-address').value.trim(),
+    reference_no: document.getElementById('inv-reference').value.trim(),
+    sales_type: document.getElementById('inv-sales-type').value,
+    sales_person: document.getElementById('inv-sales-person').value.trim(),
     items,
   };
   await api('/invoices', { method:'POST', body: JSON.stringify(body) });
@@ -1233,7 +1277,14 @@ async function addInvoice(e){
   document.getElementById('inv-email').value = '';
   document.getElementById('inv-phone').value = '';
   document.getElementById('inv-discount').value = 0;
+  document.getElementById('inv-tax').value = 0;
   document.getElementById('inv-remarks').value = '';
+  document.getElementById('inv-attention').value = '';
+  document.getElementById('inv-company').value = '';
+  document.getElementById('inv-address').value = '';
+  document.getElementById('inv-reference').value = '';
+  document.getElementById('inv-sales-type').value = '';
+  document.getElementById('inv-sales-person').value = '';
   document.getElementById('inv-date').value = _today;
   document.getElementById('inv-due').value = _in30;
   resetInvItemRows();
@@ -1332,7 +1383,8 @@ function render(){
     const syncBadge = i.lms_sync_note
       ? `<span class="empty-note" title="${i.lms_sync_note.replace(/"/g,'&quot;')}" style="margin-left:6px;">🎓 LMS</span>`
       : '';
-    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
+    const refLine = i.reference_no ? `<br><span class="empty-note">Ref: ${i.reference_no}</span>` : '';
+    return `<tr><td class="mono">${i.number}${refLine}</td><td>${i.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span>${syncBadge}</td>
     <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
@@ -1348,14 +1400,33 @@ function render(){
     <td><button class="pill-btn danger small" data-cap="assets" onclick="deleteAsset(${a.id})">Delete</button></td></tr>`).join('')
     : `<tr><td colspan="6" class="empty-note">No assets yet — add a fixed asset above.</td></tr>`;
 
+  // Non-current assets
+  document.getElementById('bs-nbv').textContent = fmt(t.totalNBV);
+  document.getElementById('bs-total-noncurrent').textContent = fmt(t.totalNBV);
+  // Current assets
   document.getElementById('bs-cash').textContent = fmt(t.cashBalance);
   document.getElementById('bs-debtors').textContent = fmt(t.totalDebtors);
-  document.getElementById('bs-nbv').textContent = fmt(t.totalNBV);
-  const totalAssets = t.cashBalance + t.totalDebtors + t.totalNBV;
+  const totalCurrentAssets = t.cashBalance + t.totalDebtors;
+  document.getElementById('bs-total-current').textContent = fmt(totalCurrentAssets);
+  const totalAssets = totalCurrentAssets + t.totalNBV;
   document.getElementById('bs-total-assets').textContent = fmt(totalAssets);
-  document.getElementById('bs-creditors').textContent = fmt(t.totalCreditors);
+
+  // Equity — the plug that forces Assets = Equity + Liabilities (same role
+  // as the xlsm's "Accumulated Profit & Loss" plug) is split into the
+  // current period's actual net P&L (t.netPL, already computed) plus
+  // whatever's left over as brought-forward accumulated profit, so the
+  // breakdown mirrors the xlsm's Capital / Accumulated P&L / Last Profit
+  // lines instead of collapsing them into one opaque number.
   const equityPlug = totalAssets - t.totalCreditors;
-  document.getElementById('bs-equity').textContent = fmt(equityPlug);
+  const currentNetPL = t.netPL;
+  const accumulatedPL = equityPlug - currentNetPL;
+  document.getElementById('bs-equity-accum').textContent = fmt(accumulatedPL);
+  document.getElementById('bs-equity-current').textContent = fmt(currentNetPL);
+  document.getElementById('bs-total-equity').textContent = fmt(equityPlug);
+
+  // Current liabilities
+  document.getElementById('bs-creditors').textContent = fmt(t.totalCreditors);
+  document.getElementById('bs-total-curliab').textContent = fmt(t.totalCreditors);
   document.getElementById('bs-total-eq').textContent = fmt(t.totalCreditors + equityPlug);
 
   document.getElementById('pl-in').textContent = fmt(t.totalIn);
@@ -1439,54 +1510,58 @@ function renderTrialBalance(t){
   let rows = '';
   let totalDebit = 0, totalCredit = 0;
 
-  rows += `<tr class="grp"><td colspan="4">Cash &amp; Bank</td></tr>`;
-  rows += `<tr><td class="mono">1600</td><td>Cash in Hand &amp; at Bank</td><td class="amt">${t.cashBalance>=0?fmt(t.cashBalance):'—'}</td><td class="amt">${t.cashBalance<0?fmt(-t.cashBalance):'—'}</td></tr>`;
-  totalDebit += Math.max(0,t.cashBalance); totalCredit += Math.max(0,-t.cashBalance);
-
-  rows += `<tr class="grp"><td colspan="4">Trade Debtors</td></tr>`;
-  const debtorContacts = contacts.filter(c=>c.type==='debtor');
-  if(debtorContacts.length){
-    debtorContacts.forEach(c=>{
-      rows += `<tr><td class="mono">${provisionContactCode(c)}</td><td>${c.name}</td><td class="amt">${fmt(c.balance)}</td><td class="amt">—</td></tr>`;
-      totalDebit += Number(c.balance);
-    });
-  } else {
-    rows += `<tr><td class="mono">1200</td><td>Trade Debtors (control account)</td><td class="amt">${fmt(t.totalDebtors)}</td><td class="amt">—</td></tr>`;
-    totalDebit += t.totalDebtors;
+  // Every section below is emitted through this helper so each group gets
+  // its own "Total" row under it — matching the xlsm Trial Balance, which
+  // subtotals CASH & BANK / TRADE DEBTORS / ADVANCES & DEPOSITS / etc.
+  // individually rather than only tallying the whole sheet at the bottom.
+  function group(label, build){
+    rows += `<tr class="grp"><td colspan="4">${label}</td></tr>`;
+    let gDebit = 0, gCredit = 0;
+    const line = (code, name, debit, credit) => {
+      rows += `<tr><td class="mono">${code}</td><td>${name}</td><td class="amt">${debit?fmt(debit):'—'}</td><td class="amt">${credit?fmt(credit):'—'}</td></tr>`;
+      gDebit += debit || 0; gCredit += credit || 0;
+    };
+    build(line);
+    rows += `<tr class="subtotal"><td colspan="2">Total</td><td class="amt">${fmt(gDebit)}</td><td class="amt">${fmt(gCredit)}</td></tr>`;
+    totalDebit += gDebit; totalCredit += gCredit;
   }
 
-  rows += `<tr class="grp"><td colspan="4">Fixed Assets</td></tr>`;
-  if(assets.length){
-    assets.forEach(a=>{
-      rows += `<tr><td class="mono">1100</td><td>${a.name} (NBV)</td><td class="amt">${fmt(a.cost-a.dep)}</td><td class="amt">—</td></tr>`;
-    });
-  } else {
-    rows += `<tr><td class="mono">1100</td><td>Fixed Assets (control account)</td><td class="amt">${fmt(t.totalNBV)}</td><td class="amt">—</td></tr>`;
-  }
-  totalDebit += t.totalNBV;
-
-  rows += `<tr class="grp"><td colspan="4">Trade Creditors</td></tr>`;
-  const creditorContacts = contacts.filter(c=>c.type==='creditor');
-  if(creditorContacts.length){
-    creditorContacts.forEach(c=>{
-      rows += `<tr><td class="mono">${provisionContactCode(c)}</td><td>${c.name}</td><td class="amt">—</td><td class="amt">${fmt(c.balance)}</td></tr>`;
-      totalCredit += Number(c.balance);
-    });
-  } else {
-    rows += `<tr><td class="mono">2100</td><td>Trade Creditors (control account)</td><td class="amt">—</td><td class="amt">${fmt(t.totalCreditors)}</td></tr>`;
-    totalCredit += t.totalCreditors;
-  }
-
-  rows += `<tr class="grp"><td colspan="4">Income</td></tr>`;
-  Object.entries(inCats).forEach(([cat,amt])=>{
-    rows += `<tr><td class="mono">${codeForCategory(cat,'in')}</td><td>${cat}</td><td class="amt">—</td><td class="amt">${fmt(amt)}</td></tr>`;
-    totalCredit += amt;
+  group('Cash &amp; Bank', line => {
+    line('1600', 'Cash in Hand &amp; at Bank', Math.max(0,t.cashBalance), Math.max(0,-t.cashBalance));
   });
 
-  rows += `<tr class="grp"><td colspan="4">Expenses</td></tr>`;
-  Object.entries(outCats).forEach(([cat,amt])=>{
-    rows += `<tr><td class="mono">${codeForCategory(cat,'out')}</td><td>${cat}</td><td class="amt">${fmt(amt)}</td><td class="amt">—</td></tr>`;
-    totalDebit += amt;
+  group('Trade Debtors', line => {
+    const debtorContacts = contacts.filter(c=>c.type==='debtor');
+    if(debtorContacts.length){
+      debtorContacts.forEach(c=> line(provisionContactCode(c), c.name, Number(c.balance), 0));
+    } else {
+      line('1200', 'Trade Debtors (control account)', t.totalDebtors, 0);
+    }
+  });
+
+  group('Fixed Assets', line => {
+    if(assets.length){
+      assets.forEach(a=> line('1100', `${a.name} (NBV)`, a.cost-a.dep, 0));
+    } else {
+      line('1100', 'Fixed Assets (control account)', t.totalNBV, 0);
+    }
+  });
+
+  group('Trade Creditors', line => {
+    const creditorContacts = contacts.filter(c=>c.type==='creditor');
+    if(creditorContacts.length){
+      creditorContacts.forEach(c=> line(provisionContactCode(c), c.name, 0, Number(c.balance)));
+    } else {
+      line('2100', 'Trade Creditors (control account)', 0, t.totalCreditors);
+    }
+  });
+
+  group('Income', line => {
+    Object.entries(inCats).forEach(([cat,amt])=> line(codeForCategory(cat,'in'), cat, 0, amt));
+  });
+
+  group('Expenses', line => {
+    Object.entries(outCats).forEach(([cat,amt])=> line(codeForCategory(cat,'out'), cat, amt, 0));
   });
 
   // Owner's Equity plug — guarantees the trial balance tallies, same role

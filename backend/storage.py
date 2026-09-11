@@ -131,6 +131,16 @@ def init_db():
             ("remarks", "ALTER TABLE invoices ADD COLUMN remarks TEXT NOT NULL DEFAULT ''"),
             ("lms_synced_at", "ALTER TABLE invoices ADD COLUMN lms_synced_at TEXT"),
             ("lms_sync_note", "ALTER TABLE invoices ADD COLUMN lms_sync_note TEXT"),
+            # Matches the xlsm's Invoice template fields (Attention/Company/
+            # Address block, Reference No, Sales Type, Sales Person, Tax) —
+            # all optional so existing invoices keep working unchanged.
+            ("attention", "ALTER TABLE invoices ADD COLUMN attention TEXT NOT NULL DEFAULT ''"),
+            ("company", "ALTER TABLE invoices ADD COLUMN company TEXT NOT NULL DEFAULT ''"),
+            ("address", "ALTER TABLE invoices ADD COLUMN address TEXT NOT NULL DEFAULT ''"),
+            ("reference_no", "ALTER TABLE invoices ADD COLUMN reference_no TEXT NOT NULL DEFAULT ''"),
+            ("sales_type", "ALTER TABLE invoices ADD COLUMN sales_type TEXT NOT NULL DEFAULT ''"),
+            ("sales_person", "ALTER TABLE invoices ADD COLUMN sales_person TEXT NOT NULL DEFAULT ''"),
+            ("tax_pct", "ALTER TABLE invoices ADD COLUMN tax_pct REAL NOT NULL DEFAULT 0"),
         ):
             if col not in inv_cols:
                 conn.execute(ddl)
@@ -506,17 +516,25 @@ def find_or_create_contact(name: str, contact_type: str, email: str = "", phone:
 
 
 def insert_invoice(number, contact, date, due, amount, status="Pending", description="",
-                   discount_pct=0.0, remarks="", items=None) -> int:
+                   discount_pct=0.0, remarks="", items=None, attention="", company="",
+                   address="", reference_no="", sales_type="", sales_person="",
+                   tax_pct=0.0) -> int:
     """If `items` (list of {description, qty, unit_price}) is given, `amount`
     is recomputed as their sum and ignored; pass items=None for the legacy
-    single-line-item behaviour (amount + description used as-is)."""
+    single-line-item behaviour (amount + description used as-is).
+
+    attention/company/address/reference_no/sales_type/sales_person/tax_pct
+    mirror the xlsm Invoice template's fields — all optional."""
     if items:
         amount = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO invoices(number, contact, date, due, amount, status, description, discount_pct, remarks) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (number, contact, date, due, amount, status, description or "", discount_pct or 0, remarks or "")
+            "INSERT INTO invoices(number, contact, date, due, amount, status, description, "
+            "discount_pct, remarks, attention, company, address, reference_no, sales_type, "
+            "sales_person, tax_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (number, contact, date, due, amount, status, description or "", discount_pct or 0,
+             remarks or "", attention or "", company or "", address or "", reference_no or "",
+             sales_type or "", sales_person or "", tax_pct or 0)
         )
         iid = cur.lastrowid
     if items:

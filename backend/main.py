@@ -10,6 +10,7 @@ step described in README.md once after deploying.
 """
 import os
 import io
+import re
 from datetime import date as _date
 
 import pathlib
@@ -25,6 +26,7 @@ import migrations
 import auth
 import gemini_parser
 import pdf_generator
+import lms_sync
 from api import router as api_router
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
@@ -67,6 +69,11 @@ async def security_headers(request: Request, call_next):
 # Fine for a single-instance deploy; move to Redis/DB if you scale to
 # multiple workers or want pending items to survive a restart.
 PENDING = {}
+
+# Same idea, separate store, for /student registrations pending confirmation
+# before they're pushed to the LMS (kept apart from PENDING/transactions so
+# the confirm/cancel callback_data prefixes can never collide).
+PENDING_STUDENTS = {}
 
 
 @app.on_event("startup")
@@ -215,6 +222,68 @@ def _parse_doc_fields(body: str) -> dict:
     return fields
 
 
+# Bilingual (Chinese/English) label -> field aliases for /student. Matches
+# registration slips like:
+#   姓名：许玟涵 Koh Wen Han          Name: Celeste Lee
+#   电话号码：0108212528              Phone: +65 91174188
+#   邮件：whkoh12@gmail.com          Email: celesteleeling@gmail.com
+#   course : AI for workplace        workshop/course: AI for workplace
+#   Date : 12/9/2026                 Date : 12/9/2026
+#   Time : 2PM-6PM                   Time: 2PM-6 PM
+_STUDENT_LABEL_ALIASES = {
+    "name": ("姓名", "名字", "name"),
+    "phone": ("电话号码", "电话", "手机号码", "手机", "phone", "tel"),
+    "email": ("邮件", "邮箱", "email", "e-mail"),
+    "course": ("课程", "workshop/course", "workshop", "course"),
+    "date": ("日期", "date"),
+    "time": ("时间", "time"),
+}
+
+
+def _parse_student_fields(body: str) -> dict:
+    """Parses a free-form 'label: value' registration slip (Chinese and/or
+    English labels, half- or full-width colon) into
+    {name, phone, email, course, date, time} — whichever fields are present.
+    Unrecognised lines (e.g. "我需要一些资料") are ignored."""
+    fields = {}
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = re.split(r"[:：]", line, maxsplit=1)
+        if len(parts) != 2:
+            continue
+        label, value = parts[0].strip().lower(), parts[1].strip()
+        if not value:
+            continue
+        for key, aliases in _STUDENT_LABEL_ALIASES.items():
+            if label in aliases:
+                fields[key] = value
+                break
+    return fields
+
+
+def format_student_pending(f: dict) -> str:
+    return (
+        f"<b>New student registration</b>\n"
+        f"👤 {f.get('name') or '—'}\n"
+        f"✉️ {f.get('email') or '—'}\n"
+        f"📱 {f.get('phone') or '—'}\n"
+        f"📚 {f.get('course') or '—'}\n"
+        f"📅 {f.get('date') or '—'}  ⏰ {f.get('time') or '—'}\n\n"
+        f"Create this student in the LMS?"
+    )
+
+
+def student_confirm_keyboard(pending_key):
+    return {
+        "inline_keyboard": [[
+            {"text": "✅ Confirm", "callback_data": f"sconfirm:{pending_key}"},
+            {"text": "❌ Cancel", "callback_data": f"scancel:{pending_key}"},
+        ]]
+    }
+
+
 # --- Webhook -----------------------------------------------------------------
 
 @app.post("/telegram/webhook")
@@ -261,8 +330,71 @@ async def telegram_webhook(request: Request):
             "Discount: 10\nRemarks: Weekly Saturday sessions</code>\n\n"
             "<b>Quotation</b> (same multi-line format, never logged to the ledger):\n"
             "<code>/quote\nContact: Sinar Retail\nValid: 2026-09-24\n"
-            "Item: AI for Automation, 3, 288</code>"
+            "Item: AI for Automation, 3, 288</code>\n\n"
+            "<b>New student</b> (creates/enrolls in the LMS — Chinese or English labels, any order):\n"
+            "<code>/student\n姓名：许玟涵 Koh Wen Han\n电话号码：0108212528\n"
+            "邮件：whkoh12@gmail.com\ncourse : AI for workplace\n"
+            "Date : 12/9/2026\nTime : 2PM-6PM</code>\n\n"
+            "<b>Certificate</b> (looks up completion on the LMS, generates the PDF here):\n"
+            "<code>/cert Celeste Lee</code> or <code>/cert celesteleeling@gmail.com | AI for Workplace</code>"
         )
+        return {"ok": True}
+
+    if "text" in msg and msg["text"].startswith("/student"):
+        body = msg["text"][len("/student"):].strip()
+        fields = _parse_student_fields(body)
+        missing = [k for k in ("name", "email", "course") if not fields.get(k)]
+        if missing:
+            await tg_send_message(
+                chat_id,
+                f"Missing {', '.join(missing)}. Send /student with no arguments to see the format."
+            )
+            return {"ok": True}
+        key = f"{chat_id}:{msg['message_id']}"
+        PENDING_STUDENTS[key] = fields
+        await tg_send_message(chat_id, format_student_pending(fields), reply_markup=student_confirm_keyboard(key))
+        return {"ok": True}
+
+    if "text" in msg and msg["text"].startswith("/cert"):
+        body = msg["text"][len("/cert"):].strip()
+        if not body:
+            await tg_send_message(
+                chat_id,
+                "Usage: <code>/cert Name or email</code>\n"
+                "or <code>/cert Name or email | Course title</code> to pick a specific "
+                "course when the student completed more than one."
+            )
+            return {"ok": True}
+        identifier, _, course_filter = body.partition("|")
+        identifier, course_filter = identifier.strip(), course_filter.strip()
+
+        data, err = lms_sync.lookup_student_completion(identifier)
+        if not data or not data.get("courses"):
+            await tg_send_message(chat_id, f"⚠️ {err or 'Student not found in the LMS.'}")
+            return {"ok": True}
+
+        courses = data["courses"]
+        if course_filter:
+            courses = [c for c in courses if course_filter.lower() in c.get("title", "").lower()]
+            if not courses:
+                titles = ", ".join(c.get("title", "") for c in data["courses"])
+                await tg_send_message(chat_id, f"No completed course matching \"{course_filter}\". "
+                                                 f"Completed courses on file: {titles}")
+                return {"ok": True}
+
+        course = sorted(courses, key=lambda c: c.get("completed_at") or "", reverse=True)[0]
+        extra_note = ""
+        if len(courses) > 1 and not course_filter:
+            others = ", ".join(c.get("title", "") for c in courses if c is not course)
+            extra_note = f" (most recent completion; also completed: {others} — add \"| course title\" to pick one)"
+
+        no = storage.next_document_number("CERT")
+        pdf = pdf_generator.render_certificate_pdf(
+            data.get("name") or identifier, course.get("title", ""),
+            course.get("completed_at") or today, no,
+        )
+        await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                caption=f"{no} — {data.get('name')} — {course.get('title')}{extra_note}")
         return {"ok": True}
 
     if "text" in msg and (msg["text"].startswith("/invoice") or msg["text"].startswith("/quote")):
@@ -394,6 +526,27 @@ async def handle_callback(cb):
         PENDING.pop(key, None)
         await tg_answer_callback(callback_id, "Cancelled")
         await tg_send_message(chat_id, "Discarded — nothing was logged.")
+        return
+
+    if data.startswith("sconfirm:"):
+        key = data.split(":", 1)[1]
+        f = PENDING_STUDENTS.pop(key, None)
+        if not f:
+            await tg_answer_callback(callback_id, "This entry already expired.")
+            return
+        await tg_answer_callback(callback_id, "Creating…")
+        note = lms_sync.create_student(
+            name=f.get("name", ""), email=f.get("email", ""), phone=f.get("phone", ""),
+            course=f.get("course", ""), session_date=f.get("date", ""), session_time=f.get("time", ""),
+        )
+        await tg_send_message(chat_id, f"👤 <b>{f.get('name')}</b>\n{note}")
+        return
+
+    if data.startswith("scancel:"):
+        key = data.split(":", 1)[1]
+        PENDING_STUDENTS.pop(key, None)
+        await tg_answer_callback(callback_id, "Cancelled")
+        await tg_send_message(chat_id, "Discarded — no student created.")
         return
 
     if data.startswith("doc:"):
