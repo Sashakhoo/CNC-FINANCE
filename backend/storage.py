@@ -129,6 +129,8 @@ def init_db():
             ("description", "ALTER TABLE invoices ADD COLUMN description TEXT NOT NULL DEFAULT ''"),
             ("discount_pct", "ALTER TABLE invoices ADD COLUMN discount_pct REAL NOT NULL DEFAULT 0"),
             ("remarks", "ALTER TABLE invoices ADD COLUMN remarks TEXT NOT NULL DEFAULT ''"),
+            ("lms_synced_at", "ALTER TABLE invoices ADD COLUMN lms_synced_at TEXT"),
+            ("lms_sync_note", "ALTER TABLE invoices ADD COLUMN lms_sync_note TEXT"),
         ):
             if col not in inv_cols:
                 conn.execute(ddl)
@@ -268,6 +270,32 @@ def mark_invoice_paid(iid: int):
         payer_payee=inv["contact"],
     )
     return get_invoice(iid)
+
+
+def set_invoice_status(iid: int, status: str):
+    """Generic status setter for the invoice status dropdown. 'Paid' goes
+    through mark_invoice_paid (posts the ledger transaction + clears the
+    debtor balance); 'Deposit' just records the status — a deposit is a
+    partial payment, so it doesn't post the full invoice amount as revenue.
+    Any other status (Pending/Overdue) is a plain column update."""
+    if status == "Paid":
+        return mark_invoice_paid(iid)
+    with get_conn() as conn:
+        inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (iid,)).fetchone()
+        if not inv:
+            return None
+        conn.execute("UPDATE invoices SET status = ? WHERE id = ?", (status, iid))
+    return get_invoice(iid)
+
+
+def set_invoice_lms_sync(iid: int, note: str):
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE invoices SET lms_synced_at = ?, lms_sync_note = ? WHERE id = ?",
+            (stamp, note, iid),
+        )
 
 
 def get_or_create_document_number(kind: str, ref_id: int, prefix: str) -> str:

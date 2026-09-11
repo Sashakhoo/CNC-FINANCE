@@ -16,6 +16,7 @@ from pydantic import BaseModel
 import storage
 import pdf_generator
 import auth
+import lms_sync
 
 router = APIRouter(prefix="/api")
 
@@ -363,12 +364,43 @@ def generate_quotation(body: QuotationIn):
     return _pdf_response(pdf, f"{number}.pdf")
 
 
+def _sync_invoice_to_lms_if_relevant(inv: dict, status: str):
+    """After an invoice moves to Paid or Deposit, push it to the LMS so the
+    student profile + enrollment get created automatically. Never lets a
+    sync failure affect the invoice update itself."""
+    if status not in ("Paid", "Deposit"):
+        return
+    contact = storage.get_contact_by_name(inv["contact"], "debtor")
+    note = lms_sync.sync_invoice_to_lms(
+        inv, status,
+        email=(contact or {}).get("email", ""),
+        phone=(contact or {}).get("phone", ""),
+    )
+    storage.set_invoice_lms_sync(inv["id"], note)
+
+
+class InvoiceStatusIn(BaseModel):
+    status: str
+
+
+@router.patch("/invoices/{iid}/status", dependencies=[Depends(auth.require_cap("invoices"))])
+def update_invoice_status(iid: int, body: InvoiceStatusIn):
+    if body.status not in ("Pending", "Deposit", "Paid", "Overdue"):
+        raise HTTPException(422, "status must be one of Pending, Deposit, Paid, Overdue")
+    inv = storage.set_invoice_status(iid, body.status)
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    _sync_invoice_to_lms_if_relevant(inv, body.status)
+    return storage.get_invoice(iid)
+
+
 @router.post("/invoices/{iid}/pay", dependencies=[Depends(auth.require_cap("invoices"))])
 def pay_invoice(iid: int):
     inv = storage.mark_invoice_paid(iid)
     if not inv:
         raise HTTPException(404, "Invoice not found")
-    return inv
+    _sync_invoice_to_lms_if_relevant(inv, "Paid")
+    return storage.get_invoice(iid)
 
 
 @router.delete("/invoices/{iid}", dependencies=[Depends(auth.require_cap("invoices"))])
