@@ -410,17 +410,28 @@
     <!-- INVOICE & RECEIPT -->
     <div class="view" id="view-invoice">
       <div class="card">
-        <form class="inline" data-cap="invoices" onsubmit="return addInvoice(event)">
-          <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
-          <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
-          <div class="field"><label>Phone (if new)</label><input type="text" id="inv-phone" placeholder="optional"></div>
-          <div class="field"><label>What's it for</label><input type="text" id="inv-desc" placeholder="e.g. Vibe Coding - 4 Sessions" style="min-width:200px;"></div>
-          <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
-          <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
-          <div class="field"><label>Amount (RM)</label><input type="number" id="inv-amount" step="0.01" min="0" required></div>
-          <div class="field"><label>Discount %</label><input type="number" id="inv-discount" step="0.1" min="0" max="100" value="0" style="min-width:80px;"></div>
-          <div class="field"><label>Remarks</label><input type="text" id="inv-remarks" placeholder="optional — schedule, notes…" style="min-width:180px;"></div>
-          <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
+        <form data-cap="invoices" onsubmit="return addInvoice(event)">
+          <div class="inline" style="margin-bottom:0;">
+            <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
+            <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
+            <div class="field"><label>Phone (if new)</label><input type="text" id="inv-phone" placeholder="optional"></div>
+            <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
+            <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
+            <div class="field"><label>Discount %</label><input type="number" id="inv-discount" step="0.1" min="0" max="100" value="0" style="min-width:80px;" oninput="recalcInvSubtotal()"></div>
+          </div>
+
+          <div style="margin-top:16px;">
+            <label style="font-size:10.5px; color:var(--dim); font-weight:700; text-transform:uppercase; letter-spacing:0.2px;">Line Items</label>
+            <div id="inv-items" style="margin-top:8px; display:flex; flex-direction:column; gap:8px;"></div>
+            <button type="button" class="pill-btn small" onclick="addInvItemRow()" style="margin-top:8px;">+ Add Line</button>
+          </div>
+
+          <div class="field" style="margin-top:16px; max-width:400px;"><label>Remarks</label><input type="text" id="inv-remarks" placeholder="optional — schedule, notes…" style="width:100%;"></div>
+
+          <div style="display:flex; justify-content:flex-end; align-items:center; gap:18px; margin-top:16px;">
+            <div style="font-size:13px;">Subtotal <span id="inv-discount-preview" class="empty-note"></span>: <b id="inv-subtotal-preview" class="mono">RM 0</b></div>
+            <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
+          </div>
         </form>
         <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
         <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
@@ -1157,23 +1168,74 @@ async function deleteContact(id){
   await loadState();
 }
 
+// --- Invoice line items (multi-row editor) -----------------------------
+function invItemRows(){ return [...document.querySelectorAll('#inv-items .inv-item-row')]; }
+function addInvItemRow(desc, qty, price){
+  const row = document.createElement('div');
+  row.className = 'inv-item-row';
+  row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+  row.innerHTML = `
+    <input type="text" class="ii-desc" placeholder="Description" value="${desc?String(desc).replace(/"/g,'&quot;'):''}" style="flex:2; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:12.5px;">
+    <input type="number" class="ii-qty" placeholder="Qty" value="${qty||1}" min="0" step="1" style="width:64px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:12.5px;">
+    <input type="number" class="ii-price" placeholder="Unit Price" value="${price||''}" min="0" step="0.01" style="width:110px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:12.5px;">
+    <span class="ii-amount mono" style="width:90px; text-align:right; font-size:12.5px;">RM 0</span>
+    <button type="button" class="pill-btn danger small" onclick="removeInvItemRow(this)">✕</button>`;
+  document.getElementById('inv-items').appendChild(row);
+  row.querySelectorAll('.ii-qty,.ii-price').forEach(inp => inp.addEventListener('input', recalcInvSubtotal));
+  recalcInvSubtotal();
+}
+function removeInvItemRow(btn){
+  const rows = invItemRows();
+  if(rows.length <= 1) return; // always keep at least one row
+  btn.closest('.inv-item-row').remove();
+  recalcInvSubtotal();
+}
+function resetInvItemRows(){
+  document.getElementById('inv-items').innerHTML = '';
+  addInvItemRow();
+}
+function recalcInvSubtotal(){
+  let subtotal = 0;
+  invItemRows().forEach(row=>{
+    const qty = parseFloat(row.querySelector('.ii-qty').value) || 0;
+    const price = parseFloat(row.querySelector('.ii-price').value) || 0;
+    const amt = qty * price;
+    row.querySelector('.ii-amount').textContent = fmt(amt);
+    subtotal += amt;
+  });
+  const discount = parseFloat(document.getElementById('inv-discount').value) || 0;
+  const total = subtotal * (1 - discount / 100);
+  document.getElementById('inv-subtotal-preview').textContent = fmt(total);
+  document.getElementById('inv-discount-preview').textContent = discount ? `(after ${discount}% off)` : '';
+}
+
 async function addInvoice(e){
   e.preventDefault();
+  const items = invItemRows().map(row => ({
+    description: row.querySelector('.ii-desc').value.trim(),
+    qty: parseFloat(row.querySelector('.ii-qty').value) || 1,
+    unit_price: parseFloat(row.querySelector('.ii-price').value) || 0,
+  })).filter(i => i.description);
+  if(!items.length){ alert('Add at least one line item.'); return false; }
   const body = {
     contact: document.getElementById('inv-contact').value.trim(),
     email: document.getElementById('inv-email').value.trim(),
     phone: document.getElementById('inv-phone').value.trim(),
-    description: document.getElementById('inv-desc').value.trim(),
     date: document.getElementById('inv-date').value,
     due: document.getElementById('inv-due').value,
-    amount: parseFloat(document.getElementById('inv-amount').value),
     discount_pct: parseFloat(document.getElementById('inv-discount').value) || 0,
     remarks: document.getElementById('inv-remarks').value.trim(),
+    items,
   };
   await api('/invoices', { method:'POST', body: JSON.stringify(body) });
-  e.target.reset();
+  document.getElementById('inv-contact').value = '';
+  document.getElementById('inv-email').value = '';
+  document.getElementById('inv-phone').value = '';
+  document.getElementById('inv-discount').value = 0;
+  document.getElementById('inv-remarks').value = '';
   document.getElementById('inv-date').value = _today;
   document.getElementById('inv-due').value = _in30;
+  resetInvItemRows();
   await loadState();
   return false;
 }
@@ -1258,7 +1320,11 @@ function render(){
 
   document.getElementById('inv-body').innerHTML = invoices.map(i=>{
     const statusClass = i.status.toLowerCase();
-    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td>${i.description || '<span class="empty-note">—</span>'}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
+    const items = i.items || [];
+    const forText = items.length > 1
+      ? `${items[0].description} <span class="empty-note">+${items.length-1} more</span>`
+      : (items[0] ? items[0].description : (i.description || '<span class="empty-note">—</span>'));
+    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span></td>
     <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
@@ -1440,6 +1506,7 @@ const _in30 = new Date(Date.now() + 30*864e5).toISOString().slice(0,10);
 document.getElementById('tx-date').value = _today;
 document.getElementById('inv-date').value = _today;
 document.getElementById('inv-due').value = _in30;
+resetInvItemRows();
 
 // Wrap every table so wide ones scroll horizontally on small screens
 // instead of blowing out the page width.

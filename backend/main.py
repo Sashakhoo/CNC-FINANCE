@@ -171,6 +171,50 @@ def is_allowed(user_id):
     return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
 
 
+def _parse_doc_fields(body: str) -> dict:
+    """Parses the multi-line /invoice and /quote field format:
+        Contact: Name
+        Email: optional
+        Phone: optional
+        Due: YYYY-MM-DD      (or "Valid:" for /quote)
+        Discount: 10
+        Remarks: free text
+        Item: description, qty, unit price   (repeatable)
+    """
+    fields = {"items": []}
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "item":
+            # Split from the right so a description containing its own
+            # commas (e.g. "Claude - Chat, Code & Cowork") isn't broken up —
+            # only the trailing qty and unit price are peeled off.
+            parts = [p.strip() for p in value.rsplit(",", 2)]
+            try:
+                price = float(parts[-1]) if len(parts) >= 3 else 0.0
+            except ValueError:
+                price = 0.0
+            try:
+                qty = float(parts[-2]) if len(parts) >= 2 else 1.0
+            except ValueError:
+                qty = 1.0
+            desc = parts[0] if len(parts) >= 3 else value
+            if not desc:
+                continue
+            fields["items"].append({"description": desc, "qty": qty, "unit_price": price})
+        elif key == "discount":
+            try:
+                fields["discount"] = float(value.replace("%", "").strip())
+            except ValueError:
+                pass
+        elif key in ("contact", "email", "phone", "due", "valid", "remarks"):
+            fields[key] = value
+    return fields
+
+
 # --- Webhook -----------------------------------------------------------------
 
 @app.post("/telegram/webhook")
@@ -204,27 +248,76 @@ async def telegram_webhook(request: Request):
     if "text" in msg and msg["text"].startswith("/start"):
         await tg_send_message(
             chat_id,
-            "👋 Send me a transaction as text (e.g. \"received RM800 from Zaid for vibe coding class\") "
+            "👋 Send me a transaction as text (e.g. \"received RM800 from Ali for vibe coding class\") "
             "or forward/upload a photo of a receipt, and I'll parse it, log it, and generate the "
             "matching PDF (Receipt / Cash Voucher / Payment Voucher).\n\n"
-            "To create an invoice directly: <code>/invoice ContactName Amount YYYY-MM-DD</code>\n"
-            "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>\n\n"
-            "To include what it's for, separate fields with | instead:\n"
-            "<code>/invoice Contact | Amount | YYYY-MM-DD | Description</code>\n"
-            "e.g. <code>/invoice Sinar Retail | 4200 | 2026-09-24 | Vibe Coding - 4 Sessions</code>"
+            "<b>Quick invoice</b> (one line item):\n"
+            "<code>/invoice ContactName Amount YYYY-MM-DD</code>\n"
+            "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>\n"
+            "or with a description: <code>/invoice Contact | Amount | YYYY-MM-DD | Description</code>\n\n"
+            "<b>Multi-line invoice</b> (several line items, like a quotation):\n"
+            "<code>/invoice\nContact: Sinar Retail\nDue: 2026-09-24\n"
+            "Item: AI for Automation, 3, 288\nItem: Vibe Coding, 3, 800\n"
+            "Discount: 10\nRemarks: Weekly Saturday sessions</code>\n\n"
+            "<b>Quotation</b> (same multi-line format, never logged to the ledger):\n"
+            "<code>/quote\nContact: Sinar Retail\nValid: 2026-09-24\n"
+            "Item: AI for Automation, 3, 288</code>"
         )
         return {"ok": True}
 
-    if "text" in msg and msg["text"].startswith("/invoice"):
-        body = msg["text"][len("/invoice"):].strip()
+    if "text" in msg and (msg["text"].startswith("/invoice") or msg["text"].startswith("/quote")):
+        is_quote = msg["text"].startswith("/quote")
+        cmd = "/quote" if is_quote else "/invoice"
+        body = msg["text"][len(cmd):].strip()
+
+        if "\n" in body or "item:" in body.lower():
+            fields = _parse_doc_fields(body)
+            contact_name = fields.get("contact", "")
+            items = fields.get("items", [])
+            when = fields.get("valid" if is_quote else "due", "")
+            if not contact_name or not items or not when:
+                await tg_send_message(chat_id, f"Need at least Contact:, {'Valid:' if is_quote else 'Due:'}, "
+                                                 "and one Item: line (description, qty, unit price).")
+                return {"ok": True}
+            discount = fields.get("discount", 0.0)
+            remarks = fields.get("remarks")
+            email = fields.get("email")
+            phone = fields.get("phone")
+
+            if is_quote:
+                no = storage.next_document_number("QUO")
+                pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
+                                                          discount_pct=discount, remarks=remarks,
+                                                          email=email, phone=phone)
+            else:
+                storage.find_or_create_contact(contact_name, "debtor", email=email or "", phone=phone or "")
+                no = storage.next_document_number("INV")
+                iid = storage.insert_invoice(no, contact_name, today, when, 0, status="Pending",
+                                              remarks=remarks or "", discount_pct=discount, items=items)
+                inv = storage.get_invoice(iid)
+                pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, when, inv["amount"],
+                                                        status="Pending", email=email, phone=phone,
+                                                        discount_pct=discount, remarks=remarks, items=items)
+            total = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
+            total *= (1 - (discount or 0) / 100)
+            await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                    caption=f"{no} — {contact_name} — RM {total:,.2f}")
+            return {"ok": True}
+
+        if is_quote:
+            await tg_send_message(chat_id, "Quotations need the multi-line format — send /quote with no "
+                                             "arguments to see it.")
+            return {"ok": True}
+
+        # Legacy single-line-item /invoice — unchanged.
         description = ""
         if "|" in body:
-            fields = [f.strip() for f in body.split("|")]
-            if len(fields) < 3:
+            parts_pipe = [f.strip() for f in body.split("|")]
+            if len(parts_pipe) < 3:
                 await tg_send_message(chat_id, "Format: /invoice Contact | Amount | YYYY-MM-DD | Description")
                 return {"ok": True}
-            contact_name, amount_str, due = fields[0], fields[1], fields[2]
-            description = fields[3] if len(fields) > 3 else ""
+            contact_name, amount_str, due = parts_pipe[0], parts_pipe[1], parts_pipe[2]
+            description = parts_pipe[3] if len(parts_pipe) > 3 else ""
         else:
             parts = body.split()
             if len(parts) < 3:

@@ -194,13 +194,16 @@ def _payment_block(reference: str) -> str:
     return f'<h2 class="sec">PAYMENT</h2><div class="pay-grid">{cells}</div>'
 
 
-def _footer(doc_no: str, extra_terms: str = "") -> str:
+def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True) -> str:
     today = _date.today().strftime("%d %B %Y")
+    standard_terms = (
+        '<div><b>Payment Terms:</b> Payment is due within 14 days from the issue date.</div>'
+        '<div><b>Proof of Payment:</b> Kindly send your payment receipt via WhatsApp or email after payment.</div>'
+    ) if payment_terms else ""
     return f"""
     <div class="terms">
       {extra_terms}
-      <div><b>Payment Terms:</b> Payment is due within 14 days from the issue date.</div>
-      <div><b>Proof of Payment:</b> Kindly send your payment receipt via WhatsApp or email after payment.</div>
+      {standard_terms}
     </div>
     <div class="foot">
       <div><span class="strong">{_esc(BUSINESS_NAME)}</span> • SSM No.: 202603072017 (AS0511861-M)</div>
@@ -237,19 +240,54 @@ def render_receipt_pdf(receipt_no: str, date: str, payer: str, description: str,
 def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amount: float,
                        description: str = None, status: str = "Pending",
                        email: str = None, phone: str = None,
-                       discount_pct: float = 0.0, remarks: str = None) -> bytes:
+                       discount_pct: float = 0.0, remarks: str = None,
+                       items: list = None) -> bytes:
+    """`items`, if given, is a list of {description, qty, unit_price} dicts
+    rendered as separate rows (matching a multi-service quotation/invoice).
+    Falls back to a single row built from description/amount otherwise."""
     paid = (status or "").lower() == "paid"
     status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
-    total = amount * (1 - (discount_pct or 0) / 100)
+    if items:
+        rows = [(it["description"], it.get("qty", 1) or 1, it.get("unit_price", 0) or 0,
+                 (it.get("qty", 1) or 1) * (it.get("unit_price", 0) or 0)) for it in items]
+        subtotal = sum(r[3] for r in rows)
+    else:
+        rows = [(description or "Course / consulting services", 1, amount, amount)]
+        subtotal = amount
+    total = subtotal * (1 - (discount_pct or 0) / 100)
     return _page(
         _header("INVOICE", invoice_no,
                 [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))], status_pill),
         _party_block("BILL TO", contact or "—", [email, phone]),
-        _items_table([(description or "Course / consulting services", 1, amount, amount)], []),
-        _totals(amount, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total, discount_pct),
+        _items_table(rows, []),
+        _totals(subtotal, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total, discount_pct),
         _remarks_block(remarks),
         _payment_block(invoice_no),
         _footer(invoice_no),
+    )
+
+
+def render_quotation_pdf(quote_no: str, contact: str, date: str, valid_until: str,
+                         items: list, discount_pct: float = 0.0, remarks: str = None,
+                         email: str = None, phone: str = None) -> bytes:
+    """A quotation is not billed and never touches the ledger — it's a sales
+    document only. `items`: list of {description, qty, unit_price}."""
+    rows = [(it["description"], it.get("qty", 1) or 1, it.get("unit_price", 0) or 0,
+             (it.get("qty", 1) or 1) * (it.get("unit_price", 0) or 0)) for it in items]
+    subtotal = sum(r[3] for r in rows)
+    total = subtotal * (1 - (discount_pct or 0) / 100)
+    return _page(
+        _header("QUOTATION", quote_no,
+                [("Issued", _fmt_date(date)), ("Valid Until", _fmt_date(valid_until))], ("PENDING", "pending")),
+        _party_block("BILL TO", contact or "—", [email, phone]),
+        _items_table(rows, []),
+        _totals(subtotal, total, None, "Quotation Total:", total, discount_pct),
+        _remarks_block(remarks),
+        _payment_block(quote_no),
+        _footer(quote_no, payment_terms=False, extra_terms=(
+            '<div><b>Quotation Validity:</b> This quotation is valid for 14 days from the issue date.</div>'
+            '<div><b>Confirmation:</b> Kindly confirm acceptance via WhatsApp or email to proceed with scheduling.</div>'
+        )),
     )
 
 

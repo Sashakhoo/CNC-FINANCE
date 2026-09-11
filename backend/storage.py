@@ -76,6 +76,14 @@ def init_db():
             discount_pct REAL NOT NULL DEFAULT 0,
             remarks TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS invoice_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            qty REAL NOT NULL DEFAULT 1,
+            unit_price REAL NOT NULL DEFAULT 0,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        );
         CREATE TABLE IF NOT EXISTS counters (
             name TEXT PRIMARY KEY,
             value INTEGER NOT NULL DEFAULT 0
@@ -148,8 +156,40 @@ def list_contacts():
     return _rows("SELECT * FROM contacts ORDER BY name")
 
 
+def get_invoice_items(invoice_id: int) -> list:
+    return _rows(
+        "SELECT description, qty, unit_price FROM invoice_items "
+        "WHERE invoice_id = ? ORDER BY sort_order, id", (invoice_id,)
+    )
+
+
+def set_invoice_items(invoice_id: int, items: list):
+    """Replaces all line items for an invoice. Each item: {description, qty, unit_price}."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (invoice_id,))
+        for i, item in enumerate(items):
+            conn.execute(
+                "INSERT INTO invoice_items(invoice_id, description, qty, unit_price, sort_order) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (invoice_id, item["description"], item.get("qty", 1) or 1,
+                 item.get("unit_price", 0) or 0, i)
+            )
+
+
+def _attach_items(inv: dict) -> dict:
+    items = get_invoice_items(inv["id"])
+    if not items:
+        # Legacy single-line invoice (created before line items existed) —
+        # synthesize one row from description/amount so callers can always
+        # rely on `items` being present and non-empty.
+        items = [{"description": inv.get("description") or "Services rendered",
+                  "qty": 1, "unit_price": inv["amount"]}]
+    inv["items"] = items
+    return inv
+
+
 def list_invoices():
-    return _rows("SELECT * FROM invoices ORDER BY date DESC, id DESC")
+    return [_attach_items(inv) for inv in _rows("SELECT * FROM invoices ORDER BY date DESC, id DESC")]
 
 
 def list_assets():
@@ -193,7 +233,7 @@ def get_contact(cid: int):
 def get_invoice(iid: int):
     with get_conn() as conn:
         r = conn.execute("SELECT * FROM invoices WHERE id = ?", (iid,)).fetchone()
-        return dict(r) if r else None
+        return _attach_items(dict(r)) if r else None
 
 
 def insert_asset(name, category, cost, dep=0.0) -> int:
@@ -438,11 +478,19 @@ def find_or_create_contact(name: str, contact_type: str, email: str = "", phone:
 
 
 def insert_invoice(number, contact, date, due, amount, status="Pending", description="",
-                   discount_pct=0.0, remarks="") -> int:
+                   discount_pct=0.0, remarks="", items=None) -> int:
+    """If `items` (list of {description, qty, unit_price}) is given, `amount`
+    is recomputed as their sum and ignored; pass items=None for the legacy
+    single-line-item behaviour (amount + description used as-is)."""
+    if items:
+        amount = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO invoices(number, contact, date, due, amount, status, description, discount_pct, remarks) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (number, contact, date, due, amount, status, description or "", discount_pct or 0, remarks or "")
         )
-        return cur.lastrowid
+        iid = cur.lastrowid
+    if items:
+        set_invoice_items(iid, items)
+    return iid

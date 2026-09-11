@@ -297,16 +297,23 @@ def remove_contact(cid: int):
 
 # --- invoices -------------------------------------------------------
 
+class InvoiceItemIn(BaseModel):
+    description: str
+    qty: float = 1
+    unit_price: float = 0
+
+
 class InvoiceIn(BaseModel):
     contact: str
     date: str
     due: str
-    amount: float
+    amount: float = 0
     description: str | None = None
     email: str | None = None
     phone: str | None = None
     discount_pct: float = 0.0
     remarks: str | None = None
+    items: list[InvoiceItemIn] | None = None
 
 
 @router.get("/invoices", dependencies=[Depends(auth.require_auth)])
@@ -318,10 +325,42 @@ def get_invoices():
 def create_invoice(body: InvoiceIn):
     storage.find_or_create_contact(body.contact, "debtor", email=body.email or "", phone=body.phone or "")
     number = storage.next_document_number("INV")
+    items = [i.model_dump() for i in body.items] if body.items else None
+    if not items and not body.amount:
+        raise HTTPException(422, "Provide either an amount or at least one line item")
     iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount,
                                   status="Pending", description=body.description or "",
-                                  discount_pct=body.discount_pct or 0, remarks=body.remarks or "")
+                                  discount_pct=body.discount_pct or 0, remarks=body.remarks or "",
+                                  items=items)
     return storage.get_invoice(iid)
+
+
+class QuotationIn(BaseModel):
+    contact: str
+    date: str
+    valid_until: str
+    items: list[InvoiceItemIn]
+    email: str | None = None
+    phone: str | None = None
+    discount_pct: float = 0.0
+    remarks: str | None = None
+
+
+@router.post("/quotations/pdf", dependencies=[Depends(auth.require_cap("invoices"))])
+def generate_quotation(body: QuotationIn):
+    """A quotation is a sales document only — never written to the ledger
+    or any table. It shares the INV/PV/CV numbering pool's sibling QUO
+    sequence so numbers never collide across document types."""
+    if not body.items:
+        raise HTTPException(422, "At least one line item is required")
+    number = storage.next_document_number("QUO")
+    pdf = pdf_generator.render_quotation_pdf(
+        number, body.contact, body.date, body.valid_until,
+        [i.model_dump() for i in body.items],
+        discount_pct=body.discount_pct or 0, remarks=body.remarks,
+        email=body.email, phone=body.phone,
+    )
+    return _pdf_response(pdf, f"{number}.pdf")
 
 
 @router.post("/invoices/{iid}/pay", dependencies=[Depends(auth.require_cap("invoices"))])
@@ -422,6 +461,7 @@ def _generate_document(kind: str, ref_id: int):
             description=inv.get("description"), status=inv.get("status"),
             email=contact.get("email"), phone=contact.get("phone"),
             discount_pct=inv.get("discount_pct") or 0, remarks=inv.get("remarks"),
+            items=inv.get("items"),
         )
         return _pdf_response(pdf, f"{inv['number']}.pdf")
 
