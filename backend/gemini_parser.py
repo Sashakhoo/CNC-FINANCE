@@ -37,12 +37,26 @@ exactly this shape:
 }}
 
 Rules:
-- "in" = money received (course fees, consulting invoices, refunds received).
-- "out" = money paid (rental, payroll, supplies, refunds given).
+- "in" = money received; "out" = money paid.
 - If no date is stated, use today's date: {{today}}.
 - Pick the single closest category from the allowed list — never invent a new one.
 - If you cannot confidently find an amount, set "amount" to null and explain
   nothing else — the amount field alone signals a failed extraction.
+
+Revenue classification (this business's income streams):
+- "Course Revenue"     = fees for a structured multi-session course/class:
+  "Vibe Coding" (4-7 sessions), "Python Fundamentals", "Python + ML",
+  enrolment fees, per-class fees, evening-school teaching fees.
+- "Workshop Revenue"   = shorter one-off or few-session workshops, usually
+  titled "AI for Automation", "AI for Work", "AI for Workplace", "AI
+  Automation project", corporate/on-site AI sessions.
+- "Consulting Revenue" = advisory / build / implementation work that is NOT
+  teaching a class (custom software, automation delivery, retainers).
+- "Referral Income"    = a referral fee received from a partner.
+- "Refund"             = money coming back to us (bank / FPX / gateway refund).
+- "Other Income"       = income that fits none of the above.
+When the memo names a course ("Vibe Coding", "Python") choose Course Revenue;
+when it says "AI for ..." or "workshop" choose Workshop Revenue.
 """
 
 

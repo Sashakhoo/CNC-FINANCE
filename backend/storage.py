@@ -24,7 +24,7 @@ KNOWN_EXPENSE_CODES = {
 }
 KNOWN_INCOME_CODES = {
     "Course Revenue": "4001", "Consulting Revenue": "4002", "Referral Income": "4003",
-    "Other Income": "4004", "Refund": "4005",
+    "Other Income": "4004", "Refund": "4005", "Workshop Revenue": "4006",
 }
 
 CATEGORY_CHOICES = list(KNOWN_INCOME_CODES) + list(KNOWN_EXPENSE_CODES)
@@ -356,7 +356,24 @@ def insert_transaction(date, description, tx_type, category, amount, payer_payee
 
 def get_transaction(tx_id: int):
     with get_conn() as conn:
-        return conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        r = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def update_transaction(tx_id: int, fields: dict):
+    allowed = {"date", "description", "type", "category", "amount", "payer_payee"}
+    sets, params = [], []
+    for k, v in fields.items():
+        if k in allowed and v is not None:
+            sets.append(f"{k} = ?")
+            params.append(v)
+    if not sets:
+        return
+    if "category" in fields and "type" in fields:
+        category_code(fields["category"], fields["type"])
+    params.append(tx_id)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE transactions SET {', '.join(sets)} WHERE id = ?", params)
 
 
 def find_or_create_contact(name: str, contact_type: str):

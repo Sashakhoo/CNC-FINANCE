@@ -235,6 +235,31 @@ def create_transaction(body: TxIn):
     return storage.get_transaction(tx_id)
 
 
+class TxPatch(BaseModel):
+    date: str | None = None
+    description: str | None = None
+    type: str | None = None
+    category: str | None = None
+    amount: float | None = None
+    payer_payee: str | None = None
+
+
+@router.patch("/transactions/{tx_id}", dependencies=[Depends(auth.require_cap("transactions"))])
+def edit_transaction(tx_id: int, body: TxPatch):
+    if not storage.get_transaction(tx_id):
+        raise HTTPException(404, "Transaction not found")
+    fields = body.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(422, "Nothing to update")
+    if "type" in fields and fields["type"] not in ("in", "out"):
+        raise HTTPException(422, "type must be 'in' or 'out'")
+    # category_code() needs a type; fall back to the row's current type
+    if "category" in fields and "type" not in fields:
+        fields["type"] = storage.get_transaction(tx_id)["type"]
+    storage.update_transaction(tx_id, fields)
+    return storage.get_transaction(tx_id)
+
+
 @router.delete("/transactions/{tx_id}", dependencies=[Depends(auth.require_cap("transactions"))])
 def remove_transaction(tx_id: int):
     storage.delete_row("transactions", tx_id)

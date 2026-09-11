@@ -824,7 +824,7 @@ const knownExpenseCodes = {
 };
 const knownIncomeCodes = {
   'Course Revenue':'4001','Consulting Revenue':'4002','Referral Income':'4003',
-  'Other Income':'4004','Refund':'4005'
+  'Other Income':'4004','Refund':'4005','Workshop Revenue':'4006'
 };
 let nextExpenseCode = 6100, nextIncomeCode = 4100;
 let categoryCodeMap = {};
@@ -1112,6 +1112,24 @@ async function deleteTransaction(id){
   await loadState();
 }
 
+// Inline category editing in the ledger.
+function categoryOptions(type){
+  const base = Object.keys(type === 'in' ? knownIncomeCodes : knownExpenseCodes);
+  const seen = new Set(transactions.filter(t=>t.type===type).map(t=>t.category));
+  return [...new Set([...base, ...seen])].sort();
+}
+function categorySelect(tx){
+  const opts = categoryOptions(tx.type);
+  if(!opts.includes(tx.category)) opts.push(tx.category);
+  const inner = opts.map(c=>`<option ${c===tx.category?'selected':''}>${c}</option>`).join('');
+  return `<select data-cap="transactions" onchange="changeTxCategory(${tx.id}, this.value)"
+    style="font-size:12px; padding:4px 6px; border-radius:8px; border:1px solid var(--line); background:var(--bg); max-width:150px;">${inner}</select>`;
+}
+async function changeTxCategory(id, category){
+  await api('/transactions/' + id, { method:'PATCH', body: JSON.stringify({category}) });
+  await loadState();
+}
+
 async function addContact(e){
   e.preventDefault();
   const body = {
@@ -1202,7 +1220,8 @@ function render(){
 
   document.getElementById('tx-count').textContent = transactions.length + ' entries';
   document.getElementById('tx-body').innerHTML = transactions.map(tx=>`
-    <tr><td class="mono" style="color:var(--dim);">${tx.date}</td><td>${tx.desc}</td><td>${tx.category}</td>
+    <tr><td class="mono" style="color:var(--dim);">${tx.date}</td><td>${tx.desc}</td>
+    <td>${categorySelect(tx)}</td>
     <td><span class="tag ${tx.type}">${tx.type==='in'?'CASH IN':'CASH OUT'}</span></td>
     <td style="text-align:right;" class="amt-${tx.type}">${tx.type==='in'?'+':'−'} ${fmt(tx.amount)}</td>
     <td style="white-space:nowrap;">

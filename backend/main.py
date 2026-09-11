@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 import storage
 import seed
+import migrations
 import auth
 import gemini_parser
 import pdf_generator
@@ -74,6 +75,7 @@ def on_startup():
     auth.seed_users()
     if seed.seed_if_empty():
         print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
+    migrations.run_migrations()
 
 
 app.include_router(api_router)
