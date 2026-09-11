@@ -111,7 +111,14 @@ def create_student(name: str, email: str, phone: str, course: str,
 
 def lookup_student_completion(identifier: str) -> tuple[dict | None, str]:
     """Looks up a student's completed courses on learn.codencode.my, for the
-    Telegram bot's /cert command to generate a certificate from.
+    Telegram bot's /cert command.
+
+    Certificates (e.g. "CC-160") are issued and numbered by the LMS itself —
+    each has a real learn.codencode.my/verify/<no> page, so the bot must
+    never mint its own certificate number or fake a verify link. This lookup
+    exists only to find which already-issued certificate_no (if any) matches
+    the student + course /cert was asked about; the actual PDF is then
+    fetched as-is via fetch_certificate_pdf() below.
 
     ASSUMED CONTRACT (this endpoint does not exist yet as far as this repo
     can tell — it needs to be added on the learn.codencode.my side, mirroring
@@ -119,7 +126,8 @@ def lookup_student_completion(identifier: str) -> tuple[dict | None, str]:
         GET {LMS_SYNC_URL}/api/integrations/finance/student-lookup?query=<identifier>
         Header: X-Finance-Secret: <LMS_SYNC_SECRET>
         200 -> {"name": str, "email": str,
-                "courses": [{"title": str, "completed_at": "YYYY-MM-DD"}, ...]}
+                "courses": [{"title": str, "completed_at": "YYYY-MM-DD",
+                              "certificate_no": "CC-160" | null}, ...]}
         404 -> student not found / no completed courses
 
     Returns (data, error_note): data is the parsed JSON on success or None on
@@ -149,3 +157,39 @@ def lookup_student_completion(identifier: str) -> tuple[dict | None, str]:
     if not data.get("courses"):
         return data, f"{data.get('name', identifier)} has no completed courses on file"
     return data, ""
+
+
+def fetch_certificate_pdf(certificate_no: str) -> tuple[bytes | None, str]:
+    """Downloads the exact, already-issued certificate PDF for a real
+    certificate_no (e.g. "CC-160") from learn.codencode.my — the bot relays
+    this byte-for-byte rather than regenerating a lookalike, so the number
+    and the QR verify link the recipient sees are always genuine.
+
+    ASSUMED CONTRACT (needs to exist on the learn.codencode.my side):
+        GET {LMS_SYNC_URL}/api/integrations/finance/certificate/<certificate_no>.pdf
+        Header: X-Finance-Secret: <LMS_SYNC_SECRET>
+        200 -> raw PDF bytes (Content-Type: application/pdf)
+        404 -> no such certificate
+
+    Returns (pdf_bytes, error_note): pdf_bytes is None on any failure, with
+    error_note explaining why (never raises)."""
+    if not LMS_SYNC_URL or not LMS_SYNC_SECRET:
+        return None, "LMS sync not configured"
+    certificate_no = (certificate_no or "").strip()
+    if not certificate_no:
+        return None, "No certificate number to fetch"
+
+    try:
+        resp = httpx.get(
+            f"{LMS_SYNC_URL}/api/integrations/finance/certificate/{certificate_no}.pdf",
+            headers={"X-Finance-Secret": LMS_SYNC_SECRET},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        return None, f"Fetching certificate failed: {exc}"
+
+    if resp.status_code == 404:
+        return None, f"Certificate {certificate_no} not found on the LMS"
+    if resp.status_code != 200:
+        return None, f"Fetching certificate failed ({resp.status_code}): {resp.text[:200]}"
+    return resp.content, ""

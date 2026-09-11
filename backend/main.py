@@ -388,13 +388,24 @@ async def telegram_webhook(request: Request):
             others = ", ".join(c.get("title", "") for c in courses if c is not course)
             extra_note = f" (most recent completion; also completed: {others} — add \"| course title\" to pick one)"
 
-        no = storage.next_document_number("CERT")
-        pdf = pdf_generator.render_certificate_pdf(
-            data.get("name") or identifier, course.get("title", ""),
-            course.get("completed_at") or today, no,
-        )
-        await tg_send_document(chat_id, f"{no}.pdf", pdf,
-                                caption=f"{no} — {data.get('name')} — {course.get('title')}{extra_note}")
+        cert_no = course.get("certificate_no")
+        if not cert_no:
+            await tg_send_message(
+                chat_id,
+                f"{data.get('name') or identifier} completed <b>{course.get('title')}</b> but no "
+                f"certificate has been issued for it in the LMS yet — issue it there first, "
+                f"then /cert will be able to fetch it."
+            )
+            return {"ok": True}
+
+        # Relayed byte-for-byte — the number and QR verify link are the LMS's
+        # own, never regenerated locally (see lms_sync.fetch_certificate_pdf).
+        pdf, err = lms_sync.fetch_certificate_pdf(cert_no)
+        if not pdf:
+            await tg_send_message(chat_id, f"⚠️ {err or 'Could not fetch that certificate.'}")
+            return {"ok": True}
+        await tg_send_document(chat_id, f"{cert_no}.pdf", pdf,
+                                caption=f"{cert_no} — {data.get('name')} — {course.get('title')}{extra_note}")
         return {"ok": True}
 
     if "text" in msg and (msg["text"].startswith("/invoice") or msg["text"].startswith("/quote")):
