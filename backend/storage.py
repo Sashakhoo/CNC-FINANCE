@@ -69,7 +69,8 @@ def init_db():
             date TEXT NOT NULL,
             due TEXT,
             amount REAL NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Unpaid'
+            status TEXT NOT NULL DEFAULT 'Unpaid',
+            description TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS counters (
             name TEXT PRIMARY KEY,
@@ -109,6 +110,11 @@ def init_db():
         );
         """)
         conn.execute("INSERT OR IGNORE INTO notes(id, text, updated_at) VALUES (1, '', NULL)")
+        # Additive column for databases created before `description` existed
+        # on invoices — CREATE TABLE IF NOT EXISTS above won't alter them.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(invoices)")}
+        if "description" not in cols:
+            conn.execute("ALTER TABLE invoices ADD COLUMN description TEXT NOT NULL DEFAULT ''")
 
 
 # --- Generic list / delete helpers ---------------------------------------
@@ -187,10 +193,14 @@ def mark_invoice_paid(iid: int):
             "UPDATE contacts SET balance = MAX(0, balance - ?) WHERE name = ? AND type = 'debtor'",
             (inv["amount"], inv["contact"]),
         )
-    category_code("Consulting Revenue", "in")
+    memo = inv["description"] if "description" in inv.keys() and inv["description"] else None
+    desc = f"Invoice {inv['number']} — {inv['contact']}" + (f" ({memo})" if memo else "")
+    # Best-guess category — the dashboard's inline category dropdown lets you
+    # correct this per-transaction (e.g. to Workshop Revenue) in one click.
+    category_code("Course Revenue", "in")
     insert_transaction(
-        date=inv["date"], description=f"Invoice {inv['number']} — {inv['contact']}",
-        tx_type="in", category="Consulting Revenue", amount=inv["amount"],
+        date=inv["date"], description=desc,
+        tx_type="in", category="Course Revenue", amount=inv["amount"],
         payer_payee=inv["contact"],
     )
     return get_invoice(iid)
@@ -395,10 +405,10 @@ def find_or_create_contact(name: str, contact_type: str):
         return conn.execute("SELECT * FROM contacts WHERE id = ?", (cur.lastrowid,)).fetchone()
 
 
-def insert_invoice(number, contact, date, due, amount, status="Unpaid") -> int:
+def insert_invoice(number, contact, date, due, amount, status="Unpaid", description="") -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO invoices(number, contact, date, due, amount, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (number, contact, date, due, amount, status)
+            "INSERT INTO invoices(number, contact, date, due, amount, status, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (number, contact, date, due, amount, status, description or "")
         )
         return cur.lastrowid

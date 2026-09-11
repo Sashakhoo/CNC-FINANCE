@@ -208,28 +208,45 @@ async def telegram_webhook(request: Request):
             "or forward/upload a photo of a receipt, and I'll parse it, log it, and generate the "
             "matching PDF (Receipt / Cash Voucher / Payment Voucher).\n\n"
             "To create an invoice directly: <code>/invoice ContactName Amount YYYY-MM-DD</code>\n"
-            "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>"
+            "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>\n\n"
+            "To include what it's for, separate fields with | instead:\n"
+            "<code>/invoice Contact | Amount | YYYY-MM-DD | Description</code>\n"
+            "e.g. <code>/invoice Sinar Retail | 4200 | 2026-09-24 | Vibe Coding - 4 Sessions</code>"
         )
         return {"ok": True}
 
     if "text" in msg and msg["text"].startswith("/invoice"):
-        parts = msg["text"].split()
-        if len(parts) < 4:
-            await tg_send_message(chat_id, "Format: /invoice ContactName Amount YYYY-MM-DD\ne.g. /invoice Sinar Retail 4200 2026-09-24")
-            return {"ok": True}
-        due = parts[-1]
-        amount_str = parts[-2]
-        contact_name = " ".join(parts[1:-2])
+        body = msg["text"][len("/invoice"):].strip()
+        description = ""
+        if "|" in body:
+            fields = [f.strip() for f in body.split("|")]
+            if len(fields) < 3:
+                await tg_send_message(chat_id, "Format: /invoice Contact | Amount | YYYY-MM-DD | Description")
+                return {"ok": True}
+            contact_name, amount_str, due = fields[0], fields[1], fields[2]
+            description = fields[3] if len(fields) > 3 else ""
+        else:
+            parts = body.split()
+            if len(parts) < 3:
+                await tg_send_message(chat_id, "Format: /invoice ContactName Amount YYYY-MM-DD\ne.g. /invoice Sinar Retail 4200 2026-09-24")
+                return {"ok": True}
+            due = parts[-1]
+            amount_str = parts[-2]
+            contact_name = " ".join(parts[:-2])
         try:
             amount = float(amount_str)
         except ValueError:
             await tg_send_message(chat_id, "Couldn't read the amount — make sure it's a plain number, e.g. 4200")
             return {"ok": True}
+        if not contact_name:
+            await tg_send_message(chat_id, "Missing contact name.")
+            return {"ok": True}
         storage.find_or_create_contact(contact_name, "debtor")
         no = storage.next_document_number("INV")
-        storage.insert_invoice(no, contact_name, today, due, amount, status="Unpaid")
-        pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount)
-        await tg_send_document(chat_id, f"{no}.pdf", pdf, caption=f"{no} — {contact_name} — RM {amount:,.2f}, due {due}")
+        storage.insert_invoice(no, contact_name, today, due, amount, status="Unpaid", description=description)
+        pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
+        caption = f"{no} — {contact_name} — RM {amount:,.2f}, due {due}"
+        await tg_send_document(chat_id, f"{no}.pdf", pdf, caption=caption)
         return {"ok": True}
 
     try:

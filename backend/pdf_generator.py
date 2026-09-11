@@ -224,13 +224,16 @@ def render_receipt_pdf(receipt_no: str, date: str, payer: str, description: str,
     )
 
 
-def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amount: float) -> bytes:
+def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amount: float,
+                       description: str = None, status: str = "Unpaid") -> bytes:
+    paid = (status or "").lower() == "paid"
+    status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
     return _page(
         _header("INVOICE", invoice_no,
-                [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))], ("PENDING", "pending")),
+                [("Issued", _fmt_date(date)), ("Due", _fmt_date(due))], status_pill),
         _party_block("BILL TO", contact or "—", []),
-        _items_table([("Course / consulting services", 1, amount, amount)], []),
-        _totals(amount, amount, 0.0, "Balance Due:", amount),
+        _items_table([(description or "Course / consulting services", 1, amount, amount)], []),
+        _totals(amount, amount, amount if paid else 0.0, "Balance Due:", 0.0 if paid else amount),
         _payment_block(invoice_no),
         _footer(invoice_no),
     )

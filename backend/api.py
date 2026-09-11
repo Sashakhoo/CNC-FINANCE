@@ -299,6 +299,7 @@ class InvoiceIn(BaseModel):
     date: str
     due: str
     amount: float
+    description: str | None = None
 
 
 @router.get("/invoices", dependencies=[Depends(auth.require_auth)])
@@ -310,7 +311,8 @@ def get_invoices():
 def create_invoice(body: InvoiceIn):
     storage.find_or_create_contact(body.contact, "debtor")
     number = storage.next_document_number("INV")
-    iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount, status="Unpaid")
+    iid = storage.insert_invoice(number, body.contact, body.date, body.due, body.amount,
+                                  status="Unpaid", description=body.description or "")
     return storage.get_invoice(iid)
 
 
@@ -407,7 +409,8 @@ def _generate_document(kind: str, ref_id: int):
         if not inv:
             raise HTTPException(404, "Invoice not found")
         pdf = pdf_generator.render_invoice_pdf(
-            inv["number"], inv["contact"], inv["date"], inv["due"], inv["amount"]
+            inv["number"], inv["contact"], inv["date"], inv["due"], inv["amount"],
+            description=inv.get("description"), status=inv.get("status"),
         )
         return _pdf_response(pdf, f"{inv['number']}.pdf")
 

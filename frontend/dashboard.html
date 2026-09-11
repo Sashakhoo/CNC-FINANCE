@@ -411,14 +411,15 @@
     <div class="view" id="view-invoice">
       <div class="card">
         <form class="inline" data-cap="invoices" onsubmit="return addInvoice(event)">
-          <div class="field"><label>Contact</label><select id="inv-contact"></select></div>
+          <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:190px;"><datalist id="inv-contact-list"></datalist></div>
+          <div class="field"><label>What's it for</label><input type="text" id="inv-desc" placeholder="e.g. Vibe Coding - 4 Sessions" style="min-width:200px;"></div>
           <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
           <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
           <div class="field"><label>Amount (RM)</label><input type="number" id="inv-amount" step="0.01" min="0" required></div>
           <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
         </form>
-        <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Recovered from invoice-tagged bank transfers</span></div>
-        <table><thead><tr><th>No.</th><th>Contact</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
+        <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
+        <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
       </div>
     </div>
 
@@ -1150,16 +1151,17 @@ async function deleteContact(id){
 
 async function addInvoice(e){
   e.preventDefault();
-  const sel = document.getElementById('inv-contact');
-  const contactName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
   const body = {
-    contact: contactName,
+    contact: document.getElementById('inv-contact').value.trim(),
+    description: document.getElementById('inv-desc').value.trim(),
     date: document.getElementById('inv-date').value,
     due: document.getElementById('inv-due').value,
     amount: parseFloat(document.getElementById('inv-amount').value),
   };
   await api('/invoices', { method:'POST', body: JSON.stringify(body) });
   e.target.reset();
+  document.getElementById('inv-date').value = _today;
+  document.getElementById('inv-due').value = _in30;
   await loadState();
   return false;
 }
@@ -1237,12 +1239,12 @@ function render(){
     <td><button class="pill-btn danger small" data-cap="contacts" onclick="deleteContact(${c.id})">Delete</button></td></tr>`).join('')
     : `<tr><td colspan="5" class="empty-note">No contacts yet — add an outstanding debtor or creditor above.</td></tr>`;
 
-  const debtorOptions = contacts.filter(c=>c.type==='debtor').map(c=>`<option>${c.name}</option>`).join('');
-  document.getElementById('inv-contact').innerHTML = debtorOptions || '<option>No debtors yet</option>';
+  document.getElementById('inv-contact-list').innerHTML =
+    contacts.map(c=>`<option value="${c.name}">`).join('');
 
   document.getElementById('inv-body').innerHTML = invoices.map(i=>{
     const statusClass = i.status.toLowerCase();
-    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
+    return `<tr><td class="mono">${i.number}</td><td>${i.contact}</td><td>${i.description || '<span class="empty-note">—</span>'}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span></td>
     <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
