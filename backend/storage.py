@@ -453,7 +453,14 @@ def insert_transaction(date, description, tx_type, category, amount, payer_payee
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (date, description, tx_type, category, amount, payer_payee, chat_id)
         )
-        return cur.lastrowid
+        tx_id = cur.lastrowid
+    if tx_type == "in":
+        # Assign the RCP number the moment the cash-in transaction is
+        # logged, not only when someone later clicks to generate the PDF —
+        # so the RCP sequence tallies 1:1 with actual cash-in transactions
+        # instead of only counting documents someone happened to print.
+        get_or_create_document_number("receipt", tx_id, "RCP")
+    return tx_id
 
 
 def get_transaction(tx_id: int):

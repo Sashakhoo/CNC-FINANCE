@@ -72,6 +72,28 @@ def _rename_unpaid_to_pending():
     print(f"Migration {mid}: updated {n} invoice(s)")
 
 
+def _backfill_receipt_numbers():
+    """RCP numbers used to be minted only when someone clicked to generate
+    the receipt PDF, so the sequence undercounted actual cash-in
+    transactions. Assigns an RCP- number to every historical cash-in
+    transaction that doesn't have one yet, in date/id order, so the
+    sequence tallies with the real transaction count going forward."""
+    mid = "2026-09-backfill-receipt-numbers"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id FROM transactions WHERE type = 'in' "
+            "AND id NOT IN (SELECT ref_id FROM documents WHERE kind = 'receipt') "
+            "ORDER BY date, id"
+        ).fetchall()
+    for row in rows:
+        storage.get_or_create_document_number("receipt", row["id"], "RCP")
+    _finish(mid)
+    print(f"Migration {mid}: backfilled {len(rows)} receipt number(s)")
+
+
 def run_migrations() -> None:
     _recategorise_consulting_revenue()
     _rename_unpaid_to_pending()
+    _backfill_receipt_numbers()
