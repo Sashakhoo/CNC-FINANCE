@@ -421,9 +421,11 @@ def next_counter(name: str) -> int:
 
 
 def next_document_number(prefix: str) -> str:
-    """e.g. next_document_number('RCP') -> 'RCP-0007'"""
+    """e.g. next_document_number('RCP') -> 'RCP-111' — 3-digit minimum,
+    matching the business's real historical numbering (INV-159, RCP-156,
+    QUO-111, ...), not artificially padded to 4 digits."""
     n = next_counter(prefix)
-    return f"{prefix}-{n:04d}"
+    return f"{prefix}-{n:03d}"
 
 
 def category_code(category: str, tx_type: str) -> str:
