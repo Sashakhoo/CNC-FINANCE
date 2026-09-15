@@ -173,13 +173,13 @@ def is_allowed(user_id):
 
 def _parse_doc_fields(body: str) -> dict:
     """Parses the multi-line /invoice and /quote field format:
-        Contact: Name
+        Contact: Name        (or "Name:")
         Email: optional
         Phone: optional
-        Due: YYYY-MM-DD      (or "Valid:" for /quote)
+        Due: YYYY-MM-DD      (or "Valid:" for /quote) — optional
         Discount: 10
         Remarks: free text
-        Item: description, qty, unit price   (repeatable)
+        Item: description, qty, unit price   (repeatable — or "Course:")
     """
     fields = {"items": []}
     for line in body.splitlines():
@@ -188,7 +188,7 @@ def _parse_doc_fields(body: str) -> dict:
             continue
         key, _, value = line.partition(":")
         key, value = key.strip().lower(), value.strip()
-        if key == "item":
+        if key in ("item", "course"):
             # Split from the right so a description containing its own
             # commas (e.g. "Claude - Chat, Code & Cowork") isn't broken up —
             # only the trailing qty and unit price are peeled off.
@@ -210,7 +210,9 @@ def _parse_doc_fields(body: str) -> dict:
                 fields["discount"] = float(value.replace("%", "").strip())
             except ValueError:
                 pass
-        elif key in ("contact", "email", "phone", "due", "valid", "remarks"):
+        elif key in ("contact", "name"):
+            fields["contact"] = value
+        elif key in ("email", "phone", "due", "valid", "remarks"):
             fields[key] = value
     return fields
 
@@ -255,9 +257,10 @@ async def telegram_webhook(request: Request):
             "<code>/invoice ContactName Amount YYYY-MM-DD</code>\n"
             "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>\n"
             "or with a description: <code>/invoice Contact | Amount | YYYY-MM-DD | Description</code>\n\n"
-            "<b>Multi-line invoice</b> (several line items, like a quotation):\n"
-            "<code>/invoice\nContact: Sinar Retail\nDue: 2026-09-24\n"
-            "Item: AI for Automation, 3, 288\nItem: Vibe Coding, 3, 800\n"
+            "<b>Multi-line invoice</b> (several line items, like a quotation — "
+            "Name:/Course: also work instead of Contact:/Item:, and Due: is optional):\n"
+            "<code>/invoice\nName: Sinar Retail\n"
+            "Course: AI for Automation, 3, 288\nCourse: Vibe Coding, 3, 800\n"
             "Discount: 10\nRemarks: Weekly Saturday sessions</code>\n\n"
             "<b>Quotation</b> (same multi-line format, never logged to the ledger):\n"
             "<code>/quote\nContact: Sinar Retail\nValid: 2026-09-24\n"
@@ -275,9 +278,9 @@ async def telegram_webhook(request: Request):
             contact_name = fields.get("contact", "")
             items = fields.get("items", [])
             when = fields.get("valid" if is_quote else "due", "")
-            if not contact_name or not items or not when:
-                await tg_send_message(chat_id, f"Need at least Contact:, {'Valid:' if is_quote else 'Due:'}, "
-                                                 "and one Item: line (description, qty, unit price).")
+            if not contact_name or not items:
+                await tg_send_message(chat_id, "Need at least Contact: (or Name:) and one Item: "
+                                                 "(or Course:) line — description, qty, unit price.")
                 return {"ok": True}
             discount = fields.get("discount", 0.0)
             remarks = fields.get("remarks")
