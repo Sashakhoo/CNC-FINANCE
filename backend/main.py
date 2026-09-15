@@ -171,6 +171,13 @@ def is_allowed(user_id):
     return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
 
 
+def _safe_float(v) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_doc_fields(body: str) -> dict:
     """Parses the multi-line /invoice and /quote field format:
         Contact: Name        (or "Name:")
@@ -264,7 +271,10 @@ async def telegram_webhook(request: Request):
             "Discount: 10\nRemarks: Weekly Saturday sessions</code>\n\n"
             "<b>Quotation</b> (same multi-line format, never logged to the ledger):\n"
             "<code>/quote\nContact: Sinar Retail\nValid: 2026-09-24\n"
-            "Item: AI for Automation, 3, 288</code>"
+            "Item: AI for Automation, 3, 288</code>\n\n"
+            "Don't want to match any of these exactly? Just write it naturally, "
+            "e.g. <code>/invoice Samuel Kam, Python Fundamentals RM1500, "
+            "loadinginterestexe@gmail.com</code> — I'll read it either way."
         )
         return {"ok": True}
 
@@ -273,76 +283,95 @@ async def telegram_webhook(request: Request):
         cmd = "/quote" if is_quote else "/invoice"
         body = msg["text"][len(cmd):].strip()
 
-        if "\n" in body or "item:" in body.lower():
-            fields = _parse_doc_fields(body)
-            contact_name = fields.get("contact", "")
-            items = fields.get("items", [])
-            when = fields.get("valid" if is_quote else "due", "")
-            if not contact_name or not items:
-                await tg_send_message(chat_id, "Need at least Contact: (or Name:) and one Item: "
-                                                 "(or Course:) line — description, qty, unit price.")
-                return {"ok": True}
-            discount = fields.get("discount", 0.0)
-            remarks = fields.get("remarks")
-            email = fields.get("email")
-            phone = fields.get("phone")
-
-            if is_quote:
-                no = storage.next_document_number("QUO")
-                pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
-                                                          discount_pct=discount, remarks=remarks,
-                                                          email=email, phone=phone)
+        # 1) Cheap legacy positional parse for /invoice — unchanged, no AI
+        #    involved, only when the message is plainly in that exact shape
+        #    (no "Key:" labels at all — those go through the parsers below).
+        if not is_quote and body and ":" not in body:
+            description = ""
+            if "|" in body:
+                parts_pipe = [f.strip() for f in body.split("|")]
+                if len(parts_pipe) >= 3:
+                    contact_name, amount_str, due = parts_pipe[0], parts_pipe[1], parts_pipe[2]
+                    description = parts_pipe[3] if len(parts_pipe) > 3 else ""
+                    amount = _safe_float(amount_str)
+                else:
+                    contact_name = amount = due = None
             else:
-                storage.find_or_create_contact(contact_name, "debtor", email=email or "", phone=phone or "")
+                parts = body.split()
+                if len(parts) >= 3:
+                    due, amount_str = parts[-1], parts[-2]
+                    contact_name = " ".join(parts[:-2])
+                    amount = _safe_float(amount_str)
+                else:
+                    contact_name = amount = due = None
+            if contact_name and amount is not None:
+                storage.find_or_create_contact(contact_name, "debtor")
                 no = storage.next_document_number("INV")
-                iid = storage.insert_invoice(no, contact_name, today, when, 0, status="Pending",
-                                              remarks=remarks or "", discount_pct=discount, items=items)
-                inv = storage.get_invoice(iid)
-                pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, when, inv["amount"],
-                                                        status="Pending", email=email, phone=phone,
-                                                        discount_pct=discount, remarks=remarks, items=items)
-            total = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
-            total *= (1 - (discount or 0) / 100)
-            await tg_send_document(chat_id, f"{no}.pdf", pdf,
-                                    caption=f"{no} — {contact_name} — RM {total:,.2f}")
+                storage.insert_invoice(no, contact_name, today, due, amount, status="Pending", description=description)
+                pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
+                await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                        caption=f"{no} — {contact_name} — RM {amount:,.2f}, due {due}")
+                return {"ok": True}
+            # Didn't cleanly fit the legacy shape — fall through to the
+            # structured/AI parse below instead of erroring immediately.
+
+        # 2) Structured "Key: value" parse (free, no AI) — Contact:/Name:,
+        #    Item:/Course:, Email:, Phone:, Due:/Valid:, Discount:, Remarks:.
+        fields = _parse_doc_fields(body) if body else {"items": []}
+
+        # 3) If that didn't find both a contact and at least one item, let
+        #    Gemini read the free-form text instead of rejecting it — the
+        #    message doesn't have to follow any particular line format.
+        if body and (not fields.get("contact") or not fields.get("items")):
+            try:
+                ai_fields = await gemini_parser.parse_invoice_fields(body, today)
+            except Exception as exc:
+                ai_fields = {}
+                await tg_send_message(chat_id, f"⚠️ Couldn't reach Gemini to read that: {exc}")
+                return {"ok": True}
+            fields = {
+                "contact": fields.get("contact") or ai_fields.get("contact") or "",
+                "email": fields.get("email") or ai_fields.get("email"),
+                "phone": fields.get("phone") or ai_fields.get("phone"),
+                "due": fields.get("due") or ai_fields.get("due") or "",
+                "valid": fields.get("valid") or ai_fields.get("due") or "",
+                "discount": fields.get("discount") or ai_fields.get("discount") or 0.0,
+                "remarks": fields.get("remarks") or ai_fields.get("remarks"),
+                "items": fields.get("items") or ai_fields.get("items") or [],
+            }
+
+        contact_name = fields.get("contact", "")
+        items = fields.get("items", [])
+        when = fields.get("valid" if is_quote else "due", "")
+        if not contact_name or not items:
+            await tg_send_message(chat_id, "Couldn't find enough info for an invoice — I need at least "
+                                             "a customer name and one course/item (with a price if you "
+                                             "have it). Send it however reads naturally, e.g. \"Invoice "
+                                             "Samuel Kam, Python Fundamentals RM1500\".")
             return {"ok": True}
+        discount = fields.get("discount", 0.0)
+        remarks = fields.get("remarks")
+        email = fields.get("email")
+        phone = fields.get("phone")
 
         if is_quote:
-            await tg_send_message(chat_id, "Quotations need the multi-line format — send /quote with no "
-                                             "arguments to see it.")
-            return {"ok": True}
-
-        # Legacy single-line-item /invoice — unchanged.
-        description = ""
-        if "|" in body:
-            parts_pipe = [f.strip() for f in body.split("|")]
-            if len(parts_pipe) < 3:
-                await tg_send_message(chat_id, "Format: /invoice Contact | Amount | YYYY-MM-DD | Description")
-                return {"ok": True}
-            contact_name, amount_str, due = parts_pipe[0], parts_pipe[1], parts_pipe[2]
-            description = parts_pipe[3] if len(parts_pipe) > 3 else ""
+            no = storage.next_document_number("QUO")
+            pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
+                                                      discount_pct=discount, remarks=remarks,
+                                                      email=email, phone=phone)
         else:
-            parts = body.split()
-            if len(parts) < 3:
-                await tg_send_message(chat_id, "Format: /invoice ContactName Amount YYYY-MM-DD\ne.g. /invoice Sinar Retail 4200 2026-09-24")
-                return {"ok": True}
-            due = parts[-1]
-            amount_str = parts[-2]
-            contact_name = " ".join(parts[:-2])
-        try:
-            amount = float(amount_str)
-        except ValueError:
-            await tg_send_message(chat_id, "Couldn't read the amount — make sure it's a plain number, e.g. 4200")
-            return {"ok": True}
-        if not contact_name:
-            await tg_send_message(chat_id, "Missing contact name.")
-            return {"ok": True}
-        storage.find_or_create_contact(contact_name, "debtor")
-        no = storage.next_document_number("INV")
-        storage.insert_invoice(no, contact_name, today, due, amount, status="Pending", description=description)
-        pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
-        caption = f"{no} — {contact_name} — RM {amount:,.2f}, due {due}"
-        await tg_send_document(chat_id, f"{no}.pdf", pdf, caption=caption)
+            storage.find_or_create_contact(contact_name, "debtor", email=email or "", phone=phone or "")
+            no = storage.next_document_number("INV")
+            iid = storage.insert_invoice(no, contact_name, today, when, 0, status="Pending",
+                                          remarks=remarks or "", discount_pct=discount, items=items)
+            inv = storage.get_invoice(iid)
+            pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, when, inv["amount"],
+                                                    status="Pending", email=email, phone=phone,
+                                                    discount_pct=discount, remarks=remarks, items=items)
+        total = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
+        total *= (1 - (discount or 0) / 100)
+        await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                caption=f"{no} — {contact_name} — RM {total:,.2f}")
         return {"ok": True}
 
     try:

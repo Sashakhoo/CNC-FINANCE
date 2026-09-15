@@ -80,6 +80,69 @@ async def parse_text(message: str, today: str) -> dict:
     return await _call_gemini([{"text": f"Message from user: {message}"}], today)
 
 
+INVOICE_EXTRACTION_PROMPT = """You are a bookkeeping assistant for a Malaysian
+sole proprietorship that runs coding/AI education courses and consulting
+projects (business name: Code N Code Solution). The user sent a message
+meant to generate an invoice or quotation, but did NOT follow any fixed
+line-by-line format — the information may be labelled loosely (e.g. "Full
+Name :", "Course :", "Fee :"), in a different order, in prose, or missing
+some fields entirely. Extract whatever invoice information IS present.
+
+Respond with ONLY valid JSON (no markdown fences, no commentary), matching
+exactly this shape:
+{
+  "contact": "the customer/student's name, or null if not found",
+  "email": "email address, or null",
+  "phone": "phone number, or null",
+  "due": "YYYY-MM-DD, or null if no date/deadline is mentioned",
+  "discount": number (percent) or null,
+  "remarks": "any free-text notes, or null",
+  "items": [
+    {"description": "course/service name", "qty": number, "unit_price": number}
+  ]
+}
+
+Rules:
+- items is a list — usually one entry, but include every distinct course/
+  service/fee mentioned as its own item.
+- If a quantity isn't stated, use 1. If a price/amount isn't stated for an
+  item you can still name (e.g. just "Python Fundamentals" with no RM
+  figure), set unit_price to 0 rather than guessing.
+- If you cannot find a customer name AND cannot find at least one
+  identifiable item/course, return {"contact": null, "email": null,
+  "phone": null, "due": null, "discount": null, "remarks": null, "items": []}
+  — do not fabricate any field.
+- Today's date is {today}, only relevant if the user references a relative
+  date like "next Friday" for the due date.
+"""
+
+
+async def parse_invoice_fields(message: str, today: str) -> dict:
+    """Lenient extraction for /invoice and /quote: pulls contact/items/email/
+    phone/due/discount/remarks out of free-form text that doesn't follow the
+    strict 'Key: value' line format. Returns the same shape _parse_doc_fields
+    in main.py produces, so callers can merge/use it as a drop-in fallback."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+    prompt = INVOICE_EXTRACTION_PROMPT.replace("{today}", today)
+    payload = {
+        "contents": [{"parts": [{"text": prompt}, {"text": f"User's message: {message}"}]}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(GEMINI_URL, params={"key": GEMINI_API_KEY}, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    result = json.loads(text)
+    # Normalise so downstream code can rely on these keys always existing.
+    result.setdefault("items", [])
+    for it in result["items"]:
+        it["qty"] = it.get("qty") or 1
+        it["unit_price"] = it.get("unit_price") or 0
+    return result
+
+
 async def parse_image(image_bytes: bytes, mime_type: str, caption: str, today: str) -> dict:
     parts = [{
         "inline_data": {
