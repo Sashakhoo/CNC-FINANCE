@@ -531,3 +531,24 @@ def insert_invoice(number, contact, date, due, amount, status="Pending", descrip
     if items:
         set_invoice_items(iid, items)
     return iid
+
+
+def update_invoice(iid: int, contact, date, due, amount, description="",
+                    discount_pct=0.0, remarks="", items=None):
+    """Amends an existing invoice in place — same field shape as
+    insert_invoice. Status is left untouched (use set_invoice_status for
+    that); the invoice's document number never changes."""
+    if items:
+        amount = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM invoices WHERE id = ?", (iid,)).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE invoices SET contact = ?, date = ?, due = ?, amount = ?, "
+            "description = ?, discount_pct = ?, remarks = ? WHERE id = ?",
+            (contact, date, due, amount, description or "", discount_pct or 0, remarks or "", iid)
+        )
+    if items is not None:
+        set_invoice_items(iid, items)
+    return get_invoice(iid)

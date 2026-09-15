@@ -412,6 +412,7 @@
     <div class="view" id="view-invoice">
       <div class="card">
         <form data-cap="invoices" onsubmit="return addInvoice(event)">
+          <input type="hidden" id="inv-edit-id" value="">
           <div class="inline" style="margin-bottom:0;">
             <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
             <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
@@ -431,7 +432,8 @@
 
           <div style="display:flex; justify-content:flex-end; align-items:center; gap:18px; margin-top:16px;">
             <div style="font-size:13px;">Subtotal <span id="inv-discount-preview" class="empty-note"></span>: <b id="inv-subtotal-preview" class="mono">RM 0</b></div>
-            <button class="pill-btn dark" type="submit">＋ Create Invoice</button>
+            <button type="button" class="pill-btn small" id="inv-cancel-edit-btn" onclick="cancelEditInvoice()" style="display:none;">Cancel</button>
+            <button class="pill-btn dark" type="submit" id="inv-submit-btn">＋ Create Invoice</button>
           </div>
         </form>
         <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
@@ -1228,7 +1230,37 @@ async function addInvoice(e){
     remarks: document.getElementById('inv-remarks').value.trim(),
     items,
   };
-  await api('/invoices', { method:'POST', body: JSON.stringify(body) });
+  const editId = document.getElementById('inv-edit-id').value;
+  if(editId){
+    await api('/invoices/' + editId, { method:'PUT', body: JSON.stringify(body) });
+  } else {
+    await api('/invoices', { method:'POST', body: JSON.stringify(body) });
+  }
+  cancelEditInvoice();
+  await loadState();
+  return false;
+}
+function editInvoice(id){
+  const inv = invoices.find(i => i.id === id);
+  if(!inv) return;
+  const contact = contacts.find(c => c.name === inv.contact) || {};
+  document.getElementById('inv-edit-id').value = inv.id;
+  document.getElementById('inv-contact').value = inv.contact;
+  document.getElementById('inv-email').value = contact.email || '';
+  document.getElementById('inv-phone').value = contact.phone || '';
+  document.getElementById('inv-date').value = inv.date;
+  document.getElementById('inv-due').value = inv.due;
+  document.getElementById('inv-discount').value = inv.discount_pct || 0;
+  document.getElementById('inv-remarks').value = inv.remarks || '';
+  document.getElementById('inv-items').innerHTML = '';
+  (inv.items && inv.items.length ? inv.items : [{description:'', qty:1, unit_price:0}])
+    .forEach(it => addInvItemRow(it.description, it.qty, it.unit_price));
+  document.getElementById('inv-submit-btn').textContent = '✓ Save Changes';
+  document.getElementById('inv-cancel-edit-btn').style.display = '';
+  document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function cancelEditInvoice(){
+  document.getElementById('inv-edit-id').value = '';
   document.getElementById('inv-contact').value = '';
   document.getElementById('inv-email').value = '';
   document.getElementById('inv-phone').value = '';
@@ -1237,8 +1269,8 @@ async function addInvoice(e){
   document.getElementById('inv-date').value = _today;
   document.getElementById('inv-due').value = _in30;
   resetInvItemRows();
-  await loadState();
-  return false;
+  document.getElementById('inv-submit-btn').textContent = '＋ Create Invoice';
+  document.getElementById('inv-cancel-edit-btn').style.display = 'none';
 }
 async function markPaid(id){
   await api('/invoices/' + id + '/pay', { method:'POST' });
@@ -1336,6 +1368,7 @@ function render(){
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span>${syncBadge}</td>
     <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
+    ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="editInvoice(${i.id})" style="margin-left:6px;">✎ Edit</button>` : ''}
     ${i.status!=='Paid' && i.status!=='Deposit' ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;">Deposit</button>` : ''}
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;

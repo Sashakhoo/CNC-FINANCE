@@ -336,6 +336,24 @@ def create_invoice(body: InvoiceIn):
     return storage.get_invoice(iid)
 
 
+@router.put("/invoices/{iid}", dependencies=[Depends(auth.require_cap("invoices"))])
+def amend_invoice(iid: int, body: InvoiceIn):
+    existing = storage.get_invoice(iid)
+    if not existing:
+        raise HTTPException(404, "Invoice not found")
+    if existing["status"] == "Paid":
+        raise HTTPException(409, "Can't amend a Paid invoice — its ledger transaction has already "
+                                   "been posted. Delete and recreate it if it's genuinely wrong.")
+    storage.find_or_create_contact(body.contact, "debtor", email=body.email or "", phone=body.phone or "")
+    items = [i.model_dump() for i in body.items] if body.items else None
+    if not items and not body.amount:
+        raise HTTPException(422, "Provide either an amount or at least one line item")
+    return storage.update_invoice(iid, body.contact, body.date, body.due, body.amount,
+                                   description=body.description or "",
+                                   discount_pct=body.discount_pct or 0, remarks=body.remarks or "",
+                                   items=items)
+
+
 class QuotationIn(BaseModel):
     contact: str
     date: str
