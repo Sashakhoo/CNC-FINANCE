@@ -25,6 +25,7 @@ import migrations
 import auth
 import gemini_parser
 import pdf_generator
+import lms_sync
 from api import router as api_router
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
@@ -274,7 +275,9 @@ async def telegram_webhook(request: Request):
             "Item: AI for Automation, 3, 288</code>\n\n"
             "Don't want to match any of these exactly? Just write it naturally, "
             "e.g. <code>/invoice Samuel Kam, Python Fundamentals RM1500, "
-            "loadinginterestexe@gmail.com</code> — I'll read it either way."
+            "loadinginterestexe@gmail.com</code> — I'll read it either way.\n\n"
+            "<b>Mark an invoice paid</b> (posts the income transaction + clears their balance):\n"
+            "<code>/paid INV-164</code> (or just <code>/paid 164</code>)"
         )
         return {"ok": True}
 
@@ -372,6 +375,45 @@ async def telegram_webhook(request: Request):
         total *= (1 - (discount or 0) / 100)
         await tg_send_document(chat_id, f"{no}.pdf", pdf,
                                 caption=f"{no} — {contact_name} — RM {total:,.2f}")
+        return {"ok": True}
+
+    if "text" in msg and msg["text"].startswith("/paid"):
+        number = msg["text"][len("/paid"):].strip()
+        if not number:
+            await tg_send_message(chat_id, "Usage: <code>/paid INV-164</code> (or just <code>/paid 164</code>)")
+            return {"ok": True}
+        inv = storage.get_invoice_by_number(number)
+        if not inv:
+            await tg_send_message(chat_id, f"Couldn't find an invoice matching \"{number}\" — check the number and try again.")
+            return {"ok": True}
+        if inv["status"] == "Paid":
+            await tg_send_message(chat_id, f"{inv['number']} ({inv['contact']}) is already marked Paid — nothing to do.")
+            return {"ok": True}
+        updated = storage.mark_invoice_paid(inv["id"])
+        tx_id = updated.pop("_transaction_id", None)
+        await tg_send_message(
+            chat_id,
+            f"✅ {updated['number']} marked <b>Paid</b>\n"
+            f"👤 {updated['contact']}\n"
+            f"💰 RM {updated['amount']:,.2f}\n"
+            f"Logged to the ledger and their balance is cleared."
+        )
+        if tx_id:
+            tx = storage.get_transaction(tx_id)
+            rcp_no = storage.get_or_create_document_number("receipt", tx_id, "RCP")
+            pdf = pdf_generator.render_receipt_pdf(rcp_no, tx["date"], tx["payer_payee"], tx["description"], tx["amount"])
+            await tg_send_document(chat_id, f"{rcp_no}.pdf", pdf, caption=f"{rcp_no} — RM {tx['amount']:,.2f}")
+
+        # Same LMS auto-enroll sync the dashboard's "mark paid" button
+        # triggers — fire-and-log, never blocks the invoice update itself.
+        contact = storage.get_contact_by_name(updated["contact"], "debtor")
+        note = lms_sync.sync_invoice_to_lms(
+            updated, "Paid",
+            email=(contact or {}).get("email", ""),
+            phone=(contact or {}).get("phone", ""),
+        )
+        storage.set_invoice_lms_sync(updated["id"], note)
+        await tg_send_message(chat_id, f"🔗 LMS: {note}")
         return {"ok": True}
 
     try:

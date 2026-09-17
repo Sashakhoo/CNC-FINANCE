@@ -238,6 +238,19 @@ def get_invoice(iid: int):
         return _attach_items(dict(r)) if r else None
 
 
+def get_invoice_by_number(number: str):
+    """Look up an invoice by its document number (e.g. 'INV-164') — case-
+    insensitive and tolerant of a bare number ('164') or missing dash."""
+    number = (number or "").strip().upper()
+    if number and not number.startswith("INV") and number.isdigit():
+        number = f"INV-{number}"
+    elif number and "INV" in number and "-" not in number:
+        number = number.replace("INV", "INV-", 1)
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM invoices WHERE UPPER(number) = ?", (number,)).fetchone()
+        return _attach_items(dict(r)) if r else None
+
+
 def insert_asset(name, category, cost, dep=0.0) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -264,12 +277,14 @@ def mark_invoice_paid(iid: int):
     # Best-guess category — the dashboard's inline category dropdown lets you
     # correct this per-transaction (e.g. to Workshop Revenue) in one click.
     category_code("Course Revenue", "in")
-    insert_transaction(
+    tx_id = insert_transaction(
         date=inv["date"], description=desc,
         tx_type="in", category="Course Revenue", amount=inv["amount"],
         payer_payee=inv["contact"],
     )
-    return get_invoice(iid)
+    result = get_invoice(iid)
+    result["_transaction_id"] = tx_id
+    return result
 
 
 def set_invoice_status(iid: int, status: str):
