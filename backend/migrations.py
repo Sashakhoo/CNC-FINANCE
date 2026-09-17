@@ -139,9 +139,34 @@ def _restart_receipt_numbers_at_1111():
     print(f"Migration {mid}: restarted RCP numbering at 1111 for {len(rows)} transaction(s)")
 
 
+def _restart_invoice_numbers_at_1111():
+    """Same correction as _restart_receipt_numbers_at_1111, but for invoices:
+    the owner wants INV to start at 1111 (4 digits) instead of 111. Renumbers
+    every existing invoice in date/id order starting from 1111 - e.g. the
+    54th invoice, previously INV-164, becomes INV-1164 - and resets the INV
+    counter so new invoices continue on from there."""
+    mid = "2026-09-restart-invoice-numbers-at-1111"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO counters(name, value) VALUES ('INV', 1110) "
+            "ON CONFLICT(name) DO UPDATE SET value = 1110"
+        )
+        rows = conn.execute("SELECT id FROM invoices ORDER BY date, id").fetchall()
+        ids = [row["id"] for row in rows]
+    for iid in ids:
+        new_number = storage.next_document_number("INV")
+        with storage.get_conn() as conn:
+            conn.execute("UPDATE invoices SET number = ? WHERE id = ?", (new_number, iid))
+    _finish(mid)
+    print(f"Migration {mid}: restarted INV numbering at 1111 for {len(ids)} invoice(s)")
+
+
 def run_migrations() -> None:
     _recategorise_consulting_revenue()
     _rename_unpaid_to_pending()
     _backfill_receipt_numbers()
     _restart_receipt_numbers_at_111()
     _restart_receipt_numbers_at_1111()
+    _restart_invoice_numbers_at_1111()
