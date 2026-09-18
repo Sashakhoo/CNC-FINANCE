@@ -349,9 +349,10 @@
     <!-- DASHBOARD -->
     <div class="view active" id="view-dashboard">
       <div class="bento">
-        <div class="card dark kpi c-4"><div class="k-label">Cash Balance</div><div class="num" id="kpi-cash"><span class="cur">RM</span>0</div><div class="pill-status">As of 31 Aug</div></div>
-        <div class="card lavender kpi c-4"><div class="k-label">Total Debtors</div><div class="num" id="kpi-debtors"><span class="cur">RM</span>0</div><div class="pill-status">No open AR on bank feed</div></div>
-        <div class="card coral kpi c-4"><div class="k-label">Total Creditors</div><div class="num" id="kpi-creditors"><span class="cur">RM</span>0</div><div class="pill-status">No open AP on bank feed</div></div>
+        <div class="card dark kpi c-3"><div class="k-label">Cash Balance</div><div class="num" id="kpi-cash"><span class="cur">RM</span>0</div><div class="pill-status">As of 31 Aug</div></div>
+        <div class="card cyan kpi c-3"><div class="k-label">Total Revenue</div><div class="num" id="kpi-revenue"><span class="cur">RM</span>0</div><div class="pill-status">All cash in, to date</div></div>
+        <div class="card lavender kpi c-3"><div class="k-label">Total Debtors</div><div class="num" id="kpi-debtors"><span class="cur">RM</span>0</div><div class="pill-status">No open AR on bank feed</div></div>
+        <div class="card coral kpi c-3"><div class="k-label">Total Creditors</div><div class="num" id="kpi-creditors"><span class="cur">RM</span>0</div><div class="pill-status">No open AP on bank feed</div></div>
 
         <div class="card lime c-5"><div class="panel-head"><span class="panel-title">Net P&amp;L (Apr–Aug)</span></div>
           <div class="num" style="font-size:26px;" id="kpi-netpl"><span class="cur">RM</span>0</div>
@@ -1309,6 +1310,7 @@ function render(){
   const t = totals();
 
   document.getElementById('kpi-cash').innerHTML = '<span class="cur">RM</span>' + t.cashBalance.toLocaleString('en-MY');
+  document.getElementById('kpi-revenue').innerHTML = '<span class="cur">RM</span>' + t.totalIn.toLocaleString('en-MY');
   document.getElementById('kpi-debtors').innerHTML = '<span class="cur">RM</span>' + t.totalDebtors.toLocaleString('en-MY');
   document.getElementById('kpi-creditors').innerHTML = '<span class="cur">RM</span>' + t.totalCreditors.toLocaleString('en-MY');
   document.getElementById('kpi-netpl').innerHTML = '<span class="cur">RM</span>' + t.netPL.toLocaleString('en-MY');
