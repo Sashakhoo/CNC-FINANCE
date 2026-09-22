@@ -338,3 +338,75 @@ def render_voucher_pdf(voucher_no: str, voucher_type: str, date: str, party: str
 # mismatched number/QR link on a document meant to prove something. The
 # Telegram bot's /cert command instead fetches the exact already-issued PDF
 # via lms_sync.fetch_certificate_pdf() and relays it byte-for-byte.
+
+
+# --- payslip --------------------------------------------------------------
+# Unlike certificates, payslips are entirely this system's own record (no
+# external system already issues them), so generating them here is correct.
+
+def _payslip_row(label: str, value, bold: bool = False) -> str:
+    cls = ' style="font-weight:bold;"' if bold else ""
+    return f'<div class="row"{cls}><span>{_esc(label)}:</span><span>{_rm(value)}</span></div>'
+
+
+def render_payslip_pdf(payslip_no: str, period_label: str, teacher: dict, item: dict) -> bytes:
+    """teacher: a storage.get_teacher()-shaped dict (name/employment_type/
+    epf_no/socso_no). item: a storage.get_payroll_items()-shaped row (gross/
+    epf_employee/epf_employer/socso_employee/socso_employer/eis_employee/
+    eis_employer/pcb/net/description/qty/rate).
+
+    For a freelance teacher, deductions are all zero (see payroll.py) so the
+    slip just shows gross = net with no statutory section — it's really a
+    payment advice rather than a payslip, but uses the same layout."""
+    is_employee = teacher.get("employment_type") == "employee"
+    meta_rows = [("Period", period_label), ("Date", _fmt_date(_date.today().isoformat()))]
+    id_lines = [f"Employment: {'Employee' if is_employee else 'Freelance / Contract'}"]
+    if is_employee and teacher.get("epf_no"):
+        id_lines.append(f"EPF No.: {teacher['epf_no']}")
+    if is_employee and teacher.get("socso_no"):
+        id_lines.append(f"SOCSO No.: {teacher['socso_no']}")
+
+    earnings_rows = f'<tr><td>{_esc(item.get("description") or "Wages")}</td>' \
+                    f'<td class="r">{_esc(item.get("qty", 1))}</td>' \
+                    f'<td class="r">{_rm(item.get("rate", 0))}</td>' \
+                    f'<td class="r">{_rm(item["gross"])}</td></tr>'
+    earnings_table = f"""
+    <h2 class="sec">EARNINGS</h2>
+    <table class="items">
+      <tr><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr>
+      {earnings_rows}
+    </table>
+    """
+
+    deductions_html = ""
+    if is_employee:
+        deductions_html = f"""
+        <h2 class="sec">STATUTORY DEDUCTIONS (EMPLOYEE SHARE)</h2>
+        <div class="totals">
+          {_payslip_row("EPF", item["epf_employee"])}
+          {_payslip_row("SOCSO", item["socso_employee"])}
+          {_payslip_row("EIS", item["eis_employee"])}
+          {_payslip_row("PCB (income tax)", item["pcb"])}
+        </div>
+        <h2 class="sec">EMPLOYER CONTRIBUTIONS (not deducted from pay)</h2>
+        <div class="totals">
+          {_payslip_row("EPF", item["epf_employer"])}
+          {_payslip_row("SOCSO", item["socso_employer"])}
+          {_payslip_row("EIS", item["eis_employer"])}
+        </div>
+        """
+
+    net_html = f"""
+    <div class="totals" style="margin-top:10px;">
+      <div class="row due"><span>Net Pay:</span><span>{_rm(item["net"])}</span></div>
+    </div>
+    """
+
+    return _page(
+        _header("PAYSLIP", payslip_no, meta_rows, None),
+        _party_block("PAID TO", teacher.get("name") or "—", id_lines),
+        earnings_table,
+        deductions_html,
+        net_html,
+        _footer(payslip_no, payment_terms=False),
+    )

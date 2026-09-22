@@ -40,7 +40,7 @@ ROLE_CAPS = {
     "director": {"*"},
     "admin": {"invoices", "documents"},
 }
-ALL_CAPS = ["transactions", "contacts", "invoices", "assets", "notes", "documents", "users"]
+ALL_CAPS = ["transactions", "contacts", "invoices", "assets", "notes", "documents", "users", "payroll"]
 ASSIGNABLE_ROLES = ["admin", "director"]
 
 _SCRYPT = dict(n=2 ** 14, r=8, p=1, dklen=32)

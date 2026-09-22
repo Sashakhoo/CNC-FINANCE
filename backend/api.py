@@ -204,6 +204,7 @@ def state():
         "contacts": storage.list_contacts(),
         "invoices": storage.list_invoices(),
         "assets": storage.list_assets(),
+        "teachers": storage.list_teachers(),
         "category_codes": storage.list_category_codes(),
         "notes": storage.get_notes(),
     }
@@ -444,6 +445,129 @@ def create_asset(body: AssetIn):
 def remove_asset(aid: int):
     storage.delete_row("assets", aid)
     return {"ok": True}
+
+
+# --- payroll --------------------------------------------------------
+# Salary data is sensitive, so every route here requires the "payroll" cap
+# (director-only by default — see auth.ROLE_CAPS), unlike e.g. /assets.
+
+class TeacherIn(BaseModel):
+    name: str
+    phone: str = ""
+    email: str = ""
+    employment_type: str = "freelance"  # 'freelance' | 'employee'
+    rate_type: str = "per_session"      # 'per_session' | 'hourly' | 'fixed_monthly'
+    rate: float = 0.0
+    epf_no: str = ""
+    socso_no: str = ""
+
+
+@router.get("/teachers", dependencies=[Depends(auth.require_cap("payroll"))])
+def get_teachers():
+    return storage.list_teachers()
+
+
+@router.post("/teachers", dependencies=[Depends(auth.require_cap("payroll"))])
+def create_teacher(body: TeacherIn):
+    if body.employment_type not in ("freelance", "employee"):
+        raise HTTPException(422, "employment_type must be 'freelance' or 'employee'")
+    tid = storage.insert_teacher(body.name, body.phone, body.email, body.employment_type,
+                                  body.rate_type, body.rate, body.epf_no, body.socso_no)
+    return storage.get_teacher(tid)
+
+
+@router.patch("/teachers/{tid}", dependencies=[Depends(auth.require_cap("payroll"))])
+def edit_teacher(tid: int, body: TeacherIn):
+    storage.update_teacher(tid, body.model_dump())
+    t = storage.get_teacher(tid)
+    if not t:
+        raise HTTPException(404, "Teacher not found")
+    return t
+
+
+@router.delete("/teachers/{tid}", dependencies=[Depends(auth.require_cap("payroll"))])
+def remove_teacher(tid: int):
+    storage.delete_row("teachers", tid)
+    return {"ok": True}
+
+
+@router.get("/payroll/runs", dependencies=[Depends(auth.require_cap("payroll"))])
+def get_payroll_runs():
+    return storage.list_payroll_runs()
+
+
+@router.get("/payroll/runs/{rid}", dependencies=[Depends(auth.require_cap("payroll"))])
+def get_payroll_run(rid: int):
+    run = storage.get_payroll_run(rid)
+    if not run:
+        raise HTTPException(404, "Payroll run not found")
+    return run
+
+
+class PayrollRunIn(BaseModel):
+    period_label: str
+
+
+@router.post("/payroll/runs", dependencies=[Depends(auth.require_cap("payroll"))])
+def create_payroll_run(body: PayrollRunIn):
+    rid = storage.insert_payroll_run(body.period_label)
+    return storage.get_payroll_run(rid)
+
+
+class PayrollItemIn(BaseModel):
+    teacher_id: int
+    description: str = ""
+    qty: float = 1
+    rate: float = 0.0
+    pcb: float = 0.0
+
+
+@router.post("/payroll/runs/{rid}/items", dependencies=[Depends(auth.require_cap("payroll"))])
+def add_payroll_item(rid: int, body: PayrollItemIn):
+    if not storage.get_payroll_run(rid):
+        raise HTTPException(404, "Payroll run not found")
+    try:
+        storage.add_payroll_item(rid, body.teacher_id, body.description, body.qty, body.rate, body.pcb)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return storage.get_payroll_run(rid)
+
+
+@router.delete("/payroll/items/{iid}", dependencies=[Depends(auth.require_cap("payroll"))])
+def remove_payroll_item(iid: int):
+    storage.delete_payroll_item(iid)
+    return {"ok": True}
+
+
+class PayrollPostIn(BaseModel):
+    date: str
+
+
+@router.post("/payroll/runs/{rid}/post", dependencies=[Depends(auth.require_cap("payroll"))])
+def post_payroll_run(rid: int, body: PayrollPostIn):
+    try:
+        return storage.post_payroll_run(rid, body.date)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.get("/payroll/items/{iid}/payslip", dependencies=[Depends(auth.require_cap("payroll"))])
+def get_payslip(iid: int):
+    with storage.get_conn() as conn:
+        row = conn.execute("SELECT * FROM payroll_items WHERE id = ?", (iid,)).fetchone()
+        item = dict(row) if row else None
+        run = None
+        if item:
+            run_row = conn.execute("SELECT * FROM payroll_runs WHERE id = ?", (item["run_id"],)).fetchone()
+            run = dict(run_row) if run_row else None
+    if not item or not run:
+        raise HTTPException(404, "Payslip not found")
+    teacher = storage.get_teacher(item["teacher_id"])
+    if not teacher:
+        raise HTTPException(404, "Teacher not found")
+    no = storage.get_or_create_document_number("payslip", iid, "PS")
+    pdf = pdf_generator.render_payslip_pdf(no, run["period_label"], teacher, item)
+    return _pdf_response(pdf, f"{no}.pdf")
 
 
 # --- notes --------------------------------------------------------

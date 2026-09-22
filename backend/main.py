@@ -284,6 +284,45 @@ def student_confirm_keyboard(pending_key):
     }
 
 
+def _parse_payroll_fields(body: str) -> dict:
+    """Parses the /payroll multi-line format:
+        Period: September 2026
+        Teacher: Tan Rou Ka
+        Item: description, qty, rate[, pcb]   (repeatable; pcb optional,
+                                                only meaningful for an
+                                                employee — ignored for a
+                                                freelance teacher, whose
+                                                deductions are always 0)
+    """
+    fields = {"items": []}
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "item":
+            parts = [p.strip() for p in value.split(",")]
+            desc = parts[0] if parts else value
+            try:
+                qty = float(parts[1]) if len(parts) >= 2 else 1.0
+            except ValueError:
+                qty = 1.0
+            try:
+                rate = float(parts[2]) if len(parts) >= 3 else 0.0
+            except ValueError:
+                rate = 0.0
+            try:
+                pcb = float(parts[3]) if len(parts) >= 4 else 0.0
+            except ValueError:
+                pcb = 0.0
+            if desc:
+                fields["items"].append({"description": desc, "qty": qty, "rate": rate, "pcb": pcb})
+        elif key in ("period", "teacher"):
+            fields[key] = value
+    return fields
+
+
 # --- Webhook -----------------------------------------------------------------
 
 @app.post("/telegram/webhook")
@@ -336,7 +375,10 @@ async def telegram_webhook(request: Request):
             "邮件：whkoh12@gmail.com\ncourse : AI for workplace\n"
             "Date : 12/9/2026\nTime : 2PM-6PM</code>\n\n"
             "<b>Certificate</b> (looks up completion on the LMS, generates the PDF here):\n"
-            "<code>/cert Celeste Lee</code> or <code>/cert celesteleeling@gmail.com | AI for Workplace</code>"
+            "<code>/cert Celeste Lee</code> or <code>/cert celesteleeling@gmail.com | AI for Workplace</code>\n\n"
+            "<b>Payroll</b> (drafts a line for an existing teacher — review/post in the dashboard):\n"
+            "<code>/payroll\nPeriod: September 2026\nTeacher: Tan Rou Ka\n"
+            "Item: Vibe Coding session, 1, 240</code>"
         )
         return {"ok": True}
 
@@ -406,6 +448,49 @@ async def telegram_webhook(request: Request):
             return {"ok": True}
         await tg_send_document(chat_id, f"{cert_no}.pdf", pdf,
                                 caption=f"{cert_no} — {data.get('name')} — {course.get('title')}{extra_note}")
+        return {"ok": True}
+
+    if "text" in msg and msg["text"].startswith("/payroll"):
+        body = msg["text"][len("/payroll"):].strip()
+        if not body:
+            await tg_send_message(
+                chat_id,
+                "Usage:\n<code>/payroll\nPeriod: September 2026\nTeacher: Tan Rou Ka\n"
+                "Item: Vibe Coding session, 1, 240</code>\n\n"
+                "Item format: <code>description, qty, rate[, pcb]</code> — pcb only matters for "
+                "an Employee teacher (a Freelance teacher's deductions are always 0). "
+                "The teacher must already exist — add them in the dashboard's Payroll tab first. "
+                "This only adds a draft line — nothing hits the ledger until someone posts the "
+                "run from the dashboard."
+            )
+            return {"ok": True}
+        fields = _parse_payroll_fields(body)
+        period, teacher_name, items = fields.get("period"), fields.get("teacher"), fields.get("items", [])
+        if not period or not teacher_name or not items:
+            await tg_send_message(chat_id, "Need Period:, Teacher:, and at least one Item: line. "
+                                             "Send /payroll with no arguments to see the format.")
+            return {"ok": True}
+        teacher = storage.find_teacher_by_name(teacher_name)
+        if not teacher:
+            names = ", ".join(t["name"] for t in storage.list_teachers()) or "(none yet)"
+            await tg_send_message(chat_id, f"No teacher named \"{teacher_name}\" found. "
+                                             f"Known teachers: {names}")
+            return {"ok": True}
+        run_id = storage.find_or_create_payroll_run(period)
+        added = []
+        for it in items:
+            storage.add_payroll_item(run_id, teacher["id"], it["description"], it["qty"], it["rate"], it["pcb"])
+            added.append(it)
+        run = storage.get_payroll_run(run_id)
+        new_items = [i for i in run["items"] if i["teacher_id"] == teacher["id"]][-len(added):]
+        lines_txt = "\n".join(
+            f"  {i['description']}: gross RM {i['gross']:,.2f} → net RM {i['net']:,.2f}" for i in new_items
+        )
+        await tg_send_message(
+            chat_id,
+            f"Added to <b>{period}</b> payroll run for <b>{teacher['name']}</b>:\n{lines_txt}\n\n"
+            f"Open the dashboard's Payroll tab to review and Post to Ledger."
+        )
         return {"ok": True}
 
     if "text" in msg and (msg["text"].startswith("/invoice") or msg["text"].startswith("/quote")):

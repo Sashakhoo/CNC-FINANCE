@@ -320,6 +320,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8M12 8v8"/></svg>
     <span>Assets</span>
   </div>
+  <div class="nav-pill" data-view="payroll" data-cap="payroll">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="3"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 4h6v6M16 10 22 4"/></svg>
+    <span>Payroll</span>
+  </div>
   <div class="nav-pill" data-view="tax">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4Z"/></svg>
     <span>Tax</span>
@@ -601,6 +605,64 @@
       </div>
     </div>
 
+    <!-- PAYROLL -->
+    <div class="view" id="view-payroll">
+      <div class="bento">
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Teachers</span><span class="top-note">Freelance/contract teachers have no statutory deductions; Employees get EPF/SOCSO/EIS computed automatically (approximated — verify against the official KWSP/PERKESO tables before relying on exact ringgit amounts)</span></div>
+          <form class="inline" data-cap="payroll" onsubmit="return addTeacher(event)">
+            <div class="field"><label>Name</label><input type="text" id="pr-t-name" required style="min-width:160px;"></div>
+            <div class="field"><label>Phone</label><input type="text" id="pr-t-phone" placeholder="optional"></div>
+            <div class="field"><label>Email</label><input type="email" id="pr-t-email" placeholder="optional"></div>
+            <div class="field"><label>Type</label>
+              <select id="pr-t-type" onchange="toggleTeacherStatutoryFields()">
+                <option value="freelance">Freelance / Contract</option>
+                <option value="employee">Employee</option>
+              </select>
+            </div>
+            <div class="field"><label>Rate Type</label>
+              <select id="pr-t-rate-type">
+                <option value="per_session">Per Session</option>
+                <option value="hourly">Hourly</option>
+                <option value="fixed_monthly">Fixed Monthly</option>
+              </select>
+            </div>
+            <div class="field"><label>Rate (RM)</label><input type="number" id="pr-t-rate" step="0.01" min="0" required style="min-width:100px;"></div>
+            <div class="field" id="pr-t-epf-field" style="display:none;"><label>EPF No.</label><input type="text" id="pr-t-epf" placeholder="optional"></div>
+            <div class="field" id="pr-t-socso-field" style="display:none;"><label>SOCSO No.</label><input type="text" id="pr-t-socso" placeholder="optional"></div>
+            <button class="pill-btn dark" type="submit">＋ Add Teacher</button>
+          </form>
+          <table><thead><tr><th>Name</th><th>Type</th><th style="text-align:right;">Rate</th><th>Contact</th><th></th></tr></thead><tbody id="pr-teachers-body"></tbody></table>
+        </div>
+
+        <div class="card c-12">
+          <div class="panel-head"><span class="panel-title">Payroll Runs</span></div>
+          <form class="inline" data-cap="payroll" onsubmit="return addPayrollRun(event)">
+            <div class="field"><label>Period</label><input type="text" id="pr-run-label" placeholder="e.g. September 2026" required style="min-width:200px;"></div>
+            <button class="pill-btn dark" type="submit">＋ New Run</button>
+          </form>
+          <table><thead><tr><th>Period</th><th>Status</th><th style="text-align:right;">Lines</th><th style="text-align:right;">Total Net</th><th></th></tr></thead><tbody id="pr-runs-body"></tbody></table>
+        </div>
+
+        <div class="card c-12" id="pr-run-detail" style="display:none;">
+          <div class="panel-head"><span class="panel-title" id="pr-run-detail-title">Run</span><button class="pill-btn small" onclick="closePayrollRunDetail()">Close</button></div>
+          <form class="inline" data-cap="payroll" onsubmit="return addPayrollItem(event)">
+            <div class="field"><label>Teacher</label><select id="pr-item-teacher" required></select></div>
+            <div class="field"><label>Description</label><input type="text" id="pr-item-desc" placeholder="e.g. Vibe Coding session" style="min-width:160px;"></div>
+            <div class="field"><label>Qty</label><input type="number" id="pr-item-qty" value="1" min="0" step="0.5" style="width:70px;"></div>
+            <div class="field"><label>Rate (RM)</label><input type="number" id="pr-item-rate" step="0.01" min="0" required style="width:100px;"></div>
+            <div class="field"><label>PCB (RM)</label><input type="number" id="pr-item-pcb" step="0.01" min="0" value="0" style="width:90px;" title="Manual — this system does not calculate income tax withholding"></div>
+            <button class="pill-btn dark" type="submit">＋ Add Line</button>
+          </form>
+          <div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Description</th><th style="text-align:right;">Gross</th><th style="text-align:right;">EPF</th><th style="text-align:right;">SOCSO</th><th style="text-align:right;">EIS</th><th style="text-align:right;">PCB</th><th style="text-align:right;">Net</th><th></th></tr></thead><tbody id="pr-items-body"></tbody></table></div>
+          <div style="display:flex; justify-content:flex-end; gap:16px; margin-top:16px; align-items:center;">
+            <div style="font-size:13px;">Total Net Pay: <b id="pr-run-total" class="mono">RM 0</b></div>
+            <button class="pill-btn dark" data-cap="payroll" onclick="postPayrollRun()" id="pr-post-btn">✅ Post to Ledger</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- TAX & ZAKAT -->
     <div class="view" id="view-tax">
       <div class="card yellow">
@@ -778,7 +840,13 @@ let transactions = [];
 let contacts = [];
 let invoices = [];
 let assets = [];
+let teachers = [];
 let notesText = '';
+// Payroll runs are loaded on demand (when the Payroll nav is opened), not
+// as part of loadState(), same pattern as loadUsers() for Team — see
+// loadPayrollRuns() below.
+let payrollRuns = [];
+let currentPayrollRun = null;
 
 async function loadState(){
   const s = await api('/state');
@@ -787,6 +855,7 @@ async function loadState(){
   contacts = s.contacts;
   invoices = s.invoices;
   assets = s.assets;
+  teachers = s.teachers || [];
   notesText = (s.notes && s.notes.text) || '';
   Object.assign(categoryCodeMap, s.category_codes || {});
   const ta = document.getElementById('notes-textarea');
@@ -931,8 +1000,9 @@ function switchView(name){
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.nav-pill').forEach(n=>n.classList.remove('active'));
   document.querySelector('.nav-pill[data-view="'+name+'"]').classList.add('active');
-  const titles = {dashboard:'Good morning, Natasya', cico:'Cash In & Out', invoice:'Invoice & Receipt', contacts:'Debtor & Creditor', financials:'Financial Statements', performance:'Performance & Trends', assets:'Assets', tax:'Tax & Zakat', notes:'Notes', company:'Company Profile', team:'Team & Access'};
+  const titles = {dashboard:'Good morning, Natasya', cico:'Cash In & Out', invoice:'Invoice & Receipt', contacts:'Debtor & Creditor', financials:'Financial Statements', performance:'Performance & Trends', assets:'Assets', payroll:'Payroll', tax:'Tax & Zakat', notes:'Notes', company:'Company Profile', team:'Team & Access'};
   if(name === 'team') loadUsers();
+  if(name === 'payroll') loadPayrollRuns();
   document.getElementById('page-title').textContent = titles[name];
 }
 document.querySelectorAll('.nav-pill').forEach(item=>{
@@ -1324,8 +1394,160 @@ async function deleteAsset(id){
   await loadState();
 }
 
+// ── Payroll ──────────────────────────────────────────────────────────
+// Statutory EPF/SOCSO/EIS deductions are computed server-side (see
+// backend/payroll.py) from each teacher's employment_type — this file only
+// renders what the API returns. PCB (income tax) is never auto-calculated;
+// it's whatever figure was typed into the "PCB" field per line.
+
+function toggleTeacherStatutoryFields(){
+  const isEmployee = document.getElementById('pr-t-type').value === 'employee';
+  document.getElementById('pr-t-epf-field').style.display = isEmployee ? '' : 'none';
+  document.getElementById('pr-t-socso-field').style.display = isEmployee ? '' : 'none';
+}
+
+function renderTeachers(){
+  document.getElementById('pr-teachers-body').innerHTML = teachers.length ? teachers.map(t=>`
+    <tr><td>${t.name}</td>
+    <td><span class="tag">${t.employment_type === 'employee' ? 'Employee' : 'Freelance'}</span></td>
+    <td style="text-align:right;" class="amt">${fmt(t.rate)} / ${t.rate_type.replace('_',' ')}</td>
+    <td class="empty-note">${[t.email, t.phone].filter(Boolean).join(' · ') || '—'}</td>
+    <td><button class="pill-btn danger small" data-cap="payroll" onclick="deleteTeacher(${t.id})">Delete</button></td></tr>`).join('')
+    : `<tr><td colspan="5" class="empty-note">No teachers yet — add one above.</td></tr>`;
+  gate();
+}
+
+async function addTeacher(e){
+  e.preventDefault();
+  const body = {
+    name: document.getElementById('pr-t-name').value.trim(),
+    phone: document.getElementById('pr-t-phone').value.trim(),
+    email: document.getElementById('pr-t-email').value.trim(),
+    employment_type: document.getElementById('pr-t-type').value,
+    rate_type: document.getElementById('pr-t-rate-type').value,
+    rate: parseFloat(document.getElementById('pr-t-rate').value) || 0,
+    epf_no: document.getElementById('pr-t-epf').value.trim(),
+    socso_no: document.getElementById('pr-t-socso').value.trim(),
+  };
+  await api('/teachers', { method:'POST', body: JSON.stringify(body) });
+  e.target.reset();
+  toggleTeacherStatutoryFields();
+  await loadState();
+  renderTeachers();
+  return false;
+}
+
+async function deleteTeacher(id){
+  if(!confirm('Delete this teacher? Past payroll history referencing them is kept.')) return;
+  await api('/teachers/' + id, { method:'DELETE' });
+  await loadState();
+  renderTeachers();
+}
+
+function renderPayrollRuns(){
+  document.getElementById('pr-runs-body').innerHTML = payrollRuns.length ? payrollRuns.map(r=>`
+    <tr><td>${r.period_label}</td>
+    <td><span class="tag ${r.status === 'paid' ? 'in' : ''}">${r.status.toUpperCase()}</span></td>
+    <td style="text-align:right;">${r.item_count ?? ''}</td>
+    <td style="text-align:right;" class="amt">${r.total_net != null ? fmt(r.total_net) : ''}</td>
+    <td><button class="pill-btn small" onclick="openPayrollRunDetail(${r.id})">Open</button></td></tr>`).join('')
+    : `<tr><td colspan="5" class="empty-note">No payroll runs yet — create one above.</td></tr>`;
+}
+
+async function loadPayrollRuns(){
+  payrollRuns = await api('/payroll/runs');
+  renderPayrollRuns();
+}
+
+async function addPayrollRun(e){
+  e.preventDefault();
+  const period_label = document.getElementById('pr-run-label').value.trim();
+  const run = await api('/payroll/runs', { method:'POST', body: JSON.stringify({period_label}) });
+  e.target.reset();
+  await loadPayrollRuns();
+  openPayrollRunDetail(run.id);
+  return false;
+}
+
+function renderPayrollItems(){
+  const run = currentPayrollRun;
+  const items = run ? run.items : [];
+  const totalNet = items.reduce((s,i)=>s+Number(i.net), 0);
+  document.getElementById('pr-items-body').innerHTML = items.length ? items.map(i=>`
+    <tr><td>${i.teacher_name}</td><td>${i.description || '<span class="empty-note">—</span>'}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.gross)}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.epf_employee)}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.socso_employee)}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.eis_employee)}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.pcb)}</td>
+    <td style="text-align:right;" class="amt">${fmt(i.net)}</td>
+    <td style="white-space:nowrap;">
+      ${i.transaction_id ? `<button class="pill-btn small" onclick="window.open('/api/payroll/items/${i.id}/payslip','_blank')">📄 Payslip</button>` : ''}
+      ${!i.transaction_id ? `<button class="pill-btn danger small" data-cap="payroll" onclick="deletePayrollItem(${i.id})">Delete</button>` : ''}
+    </td></tr>`).join('')
+    : `<tr><td colspan="9" class="empty-note">No lines yet — add one above.</td></tr>`;
+  document.getElementById('pr-run-total').textContent = fmt(totalNet);
+  const posted = run && run.status === 'paid';
+  const btn = document.getElementById('pr-post-btn');
+  btn.disabled = posted || !items.length;
+  btn.textContent = posted ? '✅ Posted' : '✅ Post to Ledger';
+  gate();
+}
+
+async function openPayrollRunDetail(id){
+  currentPayrollRun = await api('/payroll/runs/' + id);
+  document.getElementById('pr-run-detail').style.display = '';
+  document.getElementById('pr-run-detail-title').textContent = 'Run — ' + currentPayrollRun.period_label;
+  const sel = document.getElementById('pr-item-teacher');
+  sel.innerHTML = teachers.map(t=>`<option value="${t.id}">${t.name} (${t.employment_type === 'employee' ? 'Employee' : 'Freelance'})</option>`).join('')
+    || '<option value="">Add a teacher first</option>';
+  renderPayrollItems();
+}
+
+function closePayrollRunDetail(){
+  currentPayrollRun = null;
+  document.getElementById('pr-run-detail').style.display = 'none';
+}
+
+async function addPayrollItem(e){
+  e.preventDefault();
+  const body = {
+    teacher_id: parseInt(document.getElementById('pr-item-teacher').value, 10),
+    description: document.getElementById('pr-item-desc').value.trim(),
+    qty: parseFloat(document.getElementById('pr-item-qty').value) || 1,
+    rate: parseFloat(document.getElementById('pr-item-rate').value) || 0,
+    pcb: parseFloat(document.getElementById('pr-item-pcb').value) || 0,
+  };
+  if(!body.teacher_id){ alert('Add a teacher first.'); return false; }
+  currentPayrollRun = await api(`/payroll/runs/${currentPayrollRun.id}/items`, { method:'POST', body: JSON.stringify(body) });
+  document.getElementById('pr-item-desc').value = '';
+  document.getElementById('pr-item-rate').value = '';
+  document.getElementById('pr-item-pcb').value = 0;
+  renderPayrollItems();
+  await loadPayrollRuns();
+  return false;
+}
+
+async function deletePayrollItem(id){
+  if(!confirm('Remove this line?')) return;
+  await api('/payroll/items/' + id, { method:'DELETE' });
+  currentPayrollRun = await api('/payroll/runs/' + currentPayrollRun.id);
+  renderPayrollItems();
+  await loadPayrollRuns();
+}
+
+async function postPayrollRun(){
+  if(!currentPayrollRun || !currentPayrollRun.items.length) return;
+  if(!confirm(`Post ${currentPayrollRun.items.length} line(s) totalling ${fmt(currentPayrollRun.items.reduce((s,i)=>s+Number(i.net),0))} net pay to the ledger? This also posts employer EPF/SOCSO/EIS contributions as a separate expense for any employees on this run.`)) return;
+  currentPayrollRun = await api(`/payroll/runs/${currentPayrollRun.id}/post`, { method:'POST', body: JSON.stringify({date: _today}) });
+  renderPayrollItems();
+  await loadPayrollRuns();
+  await loadState();
+}
+
 function render(){
   const t = totals();
+  renderTeachers();
 
   document.getElementById('kpi-cash').innerHTML = '<span class="cur">RM</span>' + t.cashBalance.toLocaleString('en-MY');
   document.getElementById('kpi-debtors').innerHTML = '<span class="cur">RM</span>' + t.totalDebtors.toLocaleString('en-MY');

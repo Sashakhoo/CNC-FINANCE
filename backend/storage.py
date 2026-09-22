@@ -20,7 +20,8 @@ KNOWN_EXPENSE_CODES = {
     "Payroll": "6001", "Rental": "6002", "Bank Charges": "6003", "Supplies": "6004",
     "Referral Expense": "6005", "Marketing": "6006", "Merchandise": "6007",
     "Courier/Postage": "6008", "Owner Withdrawal": "6009", "Refund Given": "6010",
-    "Payment Gateway": "6011", "Printing": "6012", "Other Expense": "6099",
+    "Payment Gateway": "6011", "Printing": "6012", "Statutory Contributions": "6013",
+    "Other Expense": "6099",
 }
 KNOWN_INCOME_CODES = {
     "Course Revenue": "4001", "Consulting Revenue": "4002", "Referral Income": "4003",
@@ -120,6 +121,43 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (kind, ref_id)
         );
+        CREATE TABLE IF NOT EXISTS teachers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            employment_type TEXT NOT NULL DEFAULT 'freelance' CHECK(employment_type IN ('freelance','employee')),
+            rate_type TEXT NOT NULL DEFAULT 'per_session' CHECK(rate_type IN ('per_session','hourly','fixed_monthly')),
+            rate REAL NOT NULL DEFAULT 0,
+            epf_no TEXT DEFAULT '',
+            socso_no TEXT DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS payroll_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            period_label TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','paid'))
+        );
+        CREATE TABLE IF NOT EXISTS payroll_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            teacher_id INTEGER NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            qty REAL NOT NULL DEFAULT 1,
+            rate REAL NOT NULL DEFAULT 0,
+            gross REAL NOT NULL DEFAULT 0,
+            epf_employee REAL NOT NULL DEFAULT 0,
+            epf_employer REAL NOT NULL DEFAULT 0,
+            socso_employee REAL NOT NULL DEFAULT 0,
+            socso_employer REAL NOT NULL DEFAULT 0,
+            eis_employee REAL NOT NULL DEFAULT 0,
+            eis_employer REAL NOT NULL DEFAULT 0,
+            pcb REAL NOT NULL DEFAULT 0,
+            net REAL NOT NULL DEFAULT 0,
+            transaction_id INTEGER,
+            employer_cost_transaction_id INTEGER
+        );
         """)
         conn.execute("INSERT OR IGNORE INTO notes(id, text, updated_at) VALUES (1, '', NULL)")
         # Additive columns for databases created before these existed —
@@ -214,7 +252,7 @@ def list_category_codes():
 
 
 def delete_row(table: str, row_id: int):
-    if table not in {"transactions", "contacts", "invoices", "assets"}:
+    if table not in {"transactions", "contacts", "invoices", "assets", "teachers"}:
         raise ValueError("bad table")
     with get_conn() as conn:
         conn.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))
@@ -540,3 +578,175 @@ def insert_invoice(number, contact, date, due, amount, status="Pending", descrip
     if items:
         set_invoice_items(iid, items)
     return iid
+
+
+# --- payroll -------------------------------------------------------------
+# See payroll.py for the EPF/SOCSO/EIS calculation itself (and its accuracy
+# caveats) — this section is just the CRUD + ledger-posting around it.
+
+def list_teachers(active_only: bool = False) -> list:
+    q = "SELECT * FROM teachers"
+    if active_only:
+        q += " WHERE active = 1"
+    q += " ORDER BY name COLLATE NOCASE"
+    return _rows(q)
+
+
+def get_teacher(tid: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM teachers WHERE id = ?", (tid,)).fetchone()
+        return dict(r) if r else None
+
+
+def find_teacher_by_name(name: str):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM teachers WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+        return dict(r) if r else None
+
+
+def insert_teacher(name, phone="", email="", employment_type="freelance",
+                   rate_type="per_session", rate=0.0, epf_no="", socso_no="") -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO teachers(name, phone, email, employment_type, rate_type, rate, epf_no, socso_no) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, phone or "", email or "", employment_type, rate_type, float(rate or 0),
+             epf_no or "", socso_no or "")
+        )
+        return cur.lastrowid
+
+
+def update_teacher(tid: int, fields: dict):
+    allowed = {"name", "phone", "email", "employment_type", "rate_type", "rate",
+               "epf_no", "socso_no", "active"}
+    sets, params = [], []
+    for k, v in fields.items():
+        if k in allowed and v is not None:
+            sets.append(f"{k} = ?")
+            params.append(v)
+    if not sets:
+        return
+    params.append(tid)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE teachers SET {', '.join(sets)} WHERE id = ?", params)
+
+
+def list_payroll_runs() -> list:
+    """Includes item_count/total_net per run (aggregated) so the dashboard's
+    runs list can show a summary without fetching every run's items."""
+    return _rows("""
+        SELECT payroll_runs.*,
+               COUNT(payroll_items.id) AS item_count,
+               COALESCE(SUM(payroll_items.net), 0) AS total_net
+        FROM payroll_runs
+        LEFT JOIN payroll_items ON payroll_items.run_id = payroll_runs.id
+        GROUP BY payroll_runs.id
+        ORDER BY payroll_runs.id DESC
+    """)
+
+
+def get_payroll_items(run_id: int) -> list:
+    return _rows(
+        "SELECT payroll_items.*, teachers.name AS teacher_name, "
+        "teachers.employment_type AS teacher_employment_type "
+        "FROM payroll_items JOIN teachers ON teachers.id = payroll_items.teacher_id "
+        "WHERE run_id = ? ORDER BY payroll_items.id", (run_id,)
+    )
+
+
+def get_payroll_run(run_id: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM payroll_runs WHERE id = ?", (run_id,)).fetchone()
+        if not r:
+            return None
+        run = dict(r)
+    run["items"] = get_payroll_items(run_id)
+    return run
+
+
+def insert_payroll_run(period_label: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO payroll_runs(period_label, status) VALUES (?, 'draft')", (period_label,)
+        )
+        return cur.lastrowid
+
+
+def find_or_create_payroll_run(period_label: str) -> int:
+    """Used by the Telegram bot's /payroll command so multiple messages for
+    the same period accumulate into one draft run instead of each minting a
+    new one."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM payroll_runs WHERE period_label = ? COLLATE NOCASE AND status = 'draft'",
+            (period_label,)
+        ).fetchone()
+        if row:
+            return row["id"]
+    return insert_payroll_run(period_label)
+
+
+def add_payroll_item(run_id: int, teacher_id: int, description: str, qty: float,
+                     rate: float, pcb: float = 0.0) -> int:
+    """Computes gross/deductions via payroll.compute_payroll_item() from the
+    teacher's employment_type and inserts the resulting payroll_items row."""
+    import payroll
+    teacher = get_teacher(teacher_id)
+    if not teacher:
+        raise ValueError("Teacher not found")
+    gross = float(qty or 1) * float(rate or 0)
+    calc = payroll.compute_payroll_item(gross, teacher["employment_type"], pcb=pcb)
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO payroll_items(run_id, teacher_id, description, qty, rate, gross, "
+            "epf_employee, epf_employer, socso_employee, socso_employer, eis_employee, "
+            "eis_employer, pcb, net) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (run_id, teacher_id, description or "", float(qty or 1), float(rate or 0),
+             calc["gross"], calc["epf_employee"], calc["epf_employer"],
+             calc["socso_employee"], calc["socso_employer"], calc["eis_employee"],
+             calc["eis_employer"], calc["pcb"], calc["net"])
+        )
+        return cur.lastrowid
+
+
+def delete_payroll_item(item_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM payroll_items WHERE id = ?", (item_id,))
+
+
+def post_payroll_run(run_id: int, date: str):
+    """Posts every not-yet-posted item in a run to the ledger: one 'Payroll'
+    transaction for the teacher's net pay, plus — for employees only, where
+    there's a statutory employer cost beyond the net pay — a second
+    'Statutory Contributions' transaction for the employer's EPF+SOCSO+EIS
+    share. Marks the run 'paid'. Idempotent per item (skips ones that
+    already have a transaction_id) so re-posting a partially-posted run
+    only posts what's new."""
+    run = get_payroll_run(run_id)
+    if not run:
+        raise ValueError("Payroll run not found")
+    for item in run["items"]:
+        if item["transaction_id"]:
+            continue
+        teacher_name = item["teacher_name"]
+        desc = f"Payroll — {teacher_name}" + (f" ({item['description']})" if item["description"] else "")
+        tx_id = insert_transaction(
+            date=date, description=desc, tx_type="out", category="Payroll",
+            amount=item["net"], payer_payee=teacher_name,
+        )
+        employer_statutory = (item["epf_employer"] + item["socso_employer"] + item["eis_employer"])
+        cost_tx_id = None
+        if employer_statutory:
+            cost_tx_id = insert_transaction(
+                date=date, description=f"Employer EPF/SOCSO/EIS — {teacher_name}",
+                tx_type="out", category="Statutory Contributions",
+                amount=employer_statutory, payer_payee=teacher_name,
+            )
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE payroll_items SET transaction_id = ?, employer_cost_transaction_id = ? WHERE id = ?",
+                (tx_id, cost_tx_id, item["id"])
+            )
+    with get_conn() as conn:
+        conn.execute("UPDATE payroll_runs SET status = 'paid' WHERE id = ?", (run_id,))
+    return get_payroll_run(run_id)
