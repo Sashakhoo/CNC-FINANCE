@@ -22,6 +22,16 @@ employee under 60. Before relying on this for real payroll, verify against:
   - SOCSO/EIS: https://www.perkeso.gov.my  (contribution table, wage ceiling)
 Rates and the wage ceiling change from time to time — re-check before use
 if this module hasn't been touched in a while.
+
+VERIFIED 2026-09-22 against current published rates (EPF 11%/13%-or-12% at
+the RM5,000 band; SOCSO 0.5%/1.75%; EIS 0.2%/0.2%; wage ceiling RM6,000,
+raised from RM5,000 on 1 Oct 2024) — all match what's hardcoded below. One
+gap this check surfaced and this module does NOT handle: employees aged
+60+ are on different rates entirely (EPF: employee 0%, employer 4%; SOCSO
+Category 2: employer-only ~1.25%, no EIS) — there's no age field on
+`teachers` to branch on, so every employee is currently computed as
+under-60. Add an age/DOB field and an age check before running payroll for
+anyone 60 or older.
 """
 
 # EPF (KWSP) — employee always 11% of wages (citizen/PR, under 60).
