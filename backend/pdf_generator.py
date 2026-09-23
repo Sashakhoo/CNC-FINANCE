@@ -194,7 +194,8 @@ def _payment_block(reference: str) -> str:
     return f'<h2 class="sec">PAYMENT</h2><div class="pay-grid">{cells}</div>'
 
 
-def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True) -> str:
+def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True,
+            thanks: str = "Thank you for learning with us!") -> str:
     today = _date.today().strftime("%d %B %Y")
     standard_terms = (
         '<div><b>Payment Terms:</b> Payment is due within 14 days from the issue date.</div>'
@@ -208,7 +209,7 @@ def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True) -> s
     <div class="foot">
       <div><span class="strong">{_esc(BUSINESS_NAME)}</span> • SSM No.: 202603072017 (AS0511861-M)</div>
       <div>{_esc(BUSINESS_SITE)} • codencodemy@gmail.com • 0196811628</div>
-      <div>Thank you for learning with us!</div>
+      {f"<div>{_esc(thanks)}</div>" if thanks else ""}
       <div><i>This is a computer-generated document. No signature is required.</i></div>
       <div>{_esc(doc_no)} • Generated {today}</div>
     </div>
@@ -421,6 +422,52 @@ def render_form_b_worksheet_pdf(ws: dict) -> bytes:
         + '<div class="ws-note">Cash is the ledger balance at year end. Debtors, creditors and fixed assets are the '
           'values currently recorded in the system. Keep receipts for every expense and relief claimed for 7 years. '
           f'Form B for YA {ya} is due 30 June {int(ya) + 1}. Estimate only — confirm on MyTax before submitting.</div>'
-        + _footer(doc_no, payment_terms=False)
+        + _footer(doc_no, payment_terms=False, thanks="")
     )
     return _page(body)
+
+
+def render_tutor_statement_pdf(doc_no: str, year: int, tutor: dict, payments: list) -> bytes:
+    """Yearly statement of fees paid to a freelance tutor (not employment,
+    so no EA form). `payments`: ledger transactions; an "in" row is money
+    the tutor returned and is shown negative."""
+    lines = []
+    if tutor.get("ic"):
+        lines.append(f"IC No.: {tutor['ic']}")
+    if tutor.get("tax_no"):
+        lines.append(f"Income Tax No.: {tutor['tax_no']}")
+    lines += (tutor.get("address") or "").splitlines()
+    contact = " • ".join(v for v in (tutor.get("phone"), tutor.get("email")) if v)
+    if contact:
+        lines.append(contact)
+
+    body, total = "", 0.0
+    for t in payments:
+        amt = float(t["amount"]) * (1 if t["type"] == "out" else -1)
+        total += amt
+        shown = _rm(amt) if amt >= 0 else f"({_rm(-amt)})"
+        body += (f'<tr><td>{_fmt_date(t["date"])}</td><td>{_esc(t["description"])}</td>'
+                 f'<td class="r">{shown}</td></tr>')
+    table = f"""
+    <h2 class="sec">FEES PAID IN {year}</h2>
+    <table class="items">
+      <tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>
+      {body}
+    </table>
+    """
+    totals = (f'<div class="totals"><div class="row due"><span>Total fees paid in {year}:</span>'
+              f'<span>{_rm(total)}</span></div></div>')
+    terms = (
+        f'<div><b>Nature of payment:</b> Fees for teaching services provided as an independent '
+        f'(freelance) tutor, paid per class. This is not employment income; no EPF, SOCSO or PCB was deducted.</div>'
+        f'<div><b>For your tax return:</b> Declare this amount as your own business / other income for '
+        f'YA {year}.</div>'
+    )
+    return _page(
+        _header("PAYMENT STATEMENT", doc_no,
+                [("Period", f"1 Jan – 31 Dec {year}"), ("Issued", _date.today().strftime("%d %B %Y"))], None),
+        _party_block("PAID TO", tutor["name"], lines),
+        table,
+        totals,
+        _footer(doc_no, extra_terms=terms, payment_terms=False, thanks="Thank you for teaching with us!"),
+    )

@@ -113,6 +113,15 @@ def init_db():
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS tutors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            ic TEXT NOT NULL DEFAULT '',
+            tax_no TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS documents (
             kind TEXT NOT NULL,
             ref_id INTEGER NOT NULL,
@@ -567,3 +576,35 @@ def update_invoice(iid: int, contact, date, due, amount, description="",
     if items is not None:
         set_invoice_items(iid, items)
     return get_invoice(iid)
+
+
+# --- Tutors (freelance, paid per class) -----------------------------------
+# Personal details kept for yearly payment statements. Deliberately not
+# part of /api/state, so IC numbers only leave the DB via the tutor
+# endpoints (director-only).
+
+TUTOR_FIELDS = ("ic", "tax_no", "address", "phone", "email")
+
+
+def list_tutors() -> list:
+    return _rows("SELECT * FROM tutors ORDER BY name COLLATE NOCASE")
+
+
+def get_tutor(tid: int):
+    rows = _rows("SELECT * FROM tutors WHERE id = ?", (tid,))
+    return rows[0] if rows else None
+
+
+def ensure_tutor(name: str) -> dict:
+    with get_conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO tutors(name) VALUES (?)", (name,))
+    return _rows("SELECT * FROM tutors WHERE name = ? COLLATE NOCASE", (name,))[0]
+
+
+def update_tutor(tid: int, fields: dict):
+    fields = {k: (v or "").strip() for k, v in fields.items() if k in TUTOR_FIELDS}
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE tutors SET {sets} WHERE id = ?", (*fields.values(), tid))

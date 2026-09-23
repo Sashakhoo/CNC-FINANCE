@@ -605,6 +605,24 @@
           <div class="empty-note" style="margin-top:10px;">Owner Withdrawal is added back because drawings aren't a business expense. RM400 rebate applies when chargeable income ≤ RM35,000. Zakat paid comes off the tax itself. Estimate only; confirm on MyTax before filing Form B (due 30 June of the following year).</div>
         </div>
       </div>
+      <div class="card" style="margin-top:14px;" data-cap="transactions">
+        <div class="panel-head"><span class="panel-title">Tutor Payment Statements</span><span class="top-note" id="tutor-year-note"></span></div>
+        <div class="empty-note" style="margin-bottom:8px;">Freelance tutors paid per class get a yearly statement of fees (not an EA form). Totals come from Payroll entries; add each tutor's IC and address once and every statement picks them up.</div>
+        <form class="inline" id="tutor-form" onsubmit="saveTutor(); return false;" style="display:none;">
+          <div class="field"><label>Tutor</label><input id="tutor-f-name" disabled></div>
+          <div class="field"><label>IC No.</label><input id="tutor-f-ic" autocomplete="off"></div>
+          <div class="field"><label>Income Tax No.</label><input id="tutor-f-tax_no" autocomplete="off"></div>
+          <div class="field"><label>Phone</label><input id="tutor-f-phone" autocomplete="off"></div>
+          <div class="field"><label>Email</label><input id="tutor-f-email" type="email" autocomplete="off"></div>
+          <div class="field"><label>Address</label><input id="tutor-f-address" autocomplete="off"></div>
+          <button class="pill-btn dark" type="submit">💾 Save</button>
+          <button class="pill-btn" type="button" onclick="closeTutorForm()">Cancel</button>
+        </form>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Tutor</th><th>Payments</th><th style="text-align:right;">Total Paid</th><th>Details</th><th></th></tr></thead>
+          <tbody id="tutor-rows"><tr><td colspan="5" class="empty-note">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
     </div>
 
     <!-- NOTES -->
@@ -769,11 +787,13 @@ let contacts = [];
 let invoices = [];
 let assets = [];
 let notesText = '';
+let stateGen = 0;
 
 async function loadState(){
   const s = await api('/state');
   // dashboard uses `desc`; API uses `description`
   transactions = s.transactions.map(t=>({...t, desc: t.description}));
+  stateGen++;
   contacts = s.contacts;
   invoices = s.invoices;
   assets = s.assets;
@@ -960,6 +980,8 @@ function showLogin(){
   // the DOM behind the (blurred) login card, not just a visual cover.
   transactions = []; contacts = []; invoices = []; assets = []; notesText = '';
   currentUser = null;
+  tutors = []; tutorsKey = ''; closeTutorForm();
+  document.getElementById('tutor-rows').innerHTML = '';
   try { render(); } catch(_){}
   const ta = document.getElementById('notes-textarea'); if(ta) ta.value = '';
   document.body.classList.add('signed-out');
@@ -1444,6 +1466,80 @@ function renderTax(){
   }).join('');
 
   saveTaxInputs();
+  maybeLoadTutors(chosen);
+}
+
+// ── Freelance tutor payment statements ────────────────────────────────
+// Tutor details (IC etc.) are fetched only here, never in /api/state.
+let tutors = [], tutorsKey = '', editingTutorId = null;
+const TUTOR_FIELDS = ['ic','tax_no','phone','email','address'];
+
+function escHtml(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function maybeLoadTutors(year){
+  const caps = (currentUser && currentUser.caps) || [];
+  if(!caps.includes('transactions')) return;
+  const key = year + '|' + stateGen;
+  if(key === tutorsKey) return;
+  tutorsKey = key;
+  try { tutors = await api('/tutors?year=' + encodeURIComponent(year)); }
+  catch(e){ tutorsKey = ''; return; }
+  renderTutors(year);
+}
+
+function renderTutors(year){
+  document.getElementById('tutor-year-note').textContent = 'Year ' + year;
+  const rows = tutors.map(t => {
+    const missing = ['ic','address'].filter(f => !t[f]).map(f => f === 'ic' ? 'IC' : 'address');
+    const status = missing.length
+      ? `<span class="tag pending">Missing ${missing.join(' & ')}</span>`
+      : `<span class="tag paid">Complete</span>`;
+    return `<tr>
+      <td>${escHtml(t.name)}</td>
+      <td>${t.payments}</td>
+      <td class="amt" style="text-align:right;">${fmt(t.total)}</td>
+      <td>${status}</td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="pill-btn small" onclick="editTutor(${t.id})">✏️ Details</button>
+        <button class="pill-btn small dark" onclick="openTutorStatement(${t.id})">📄 Statement</button>
+      </td></tr>`;
+  }).join('');
+  document.getElementById('tutor-rows').innerHTML = rows ||
+    `<tr><td colspan="5" class="empty-note">No Payroll payments to tutors in ${escHtml(year)}.</td></tr>`;
+}
+
+function editTutor(id){
+  const t = tutors.find(x => x.id === id);
+  if(!t) return;
+  editingTutorId = id;
+  document.getElementById('tutor-f-name').value = t.name;
+  TUTOR_FIELDS.forEach(f => { document.getElementById('tutor-f-' + f).value = t[f] || ''; });
+  const form = document.getElementById('tutor-form');
+  form.style.display = '';
+  document.getElementById('tutor-f-ic').focus();
+}
+
+function closeTutorForm(){
+  editingTutorId = null;
+  document.getElementById('tutor-form').style.display = 'none';
+}
+
+async function saveTutor(){
+  if(editingTutorId == null) return;
+  const body = {};
+  TUTOR_FIELDS.forEach(f => { body[f] = document.getElementById('tutor-f-' + f).value.trim(); });
+  const saved = await api('/tutors/' + editingTutorId, { method:'PATCH', body: JSON.stringify(body) });
+  const t = tutors.find(x => x.id === saved.id);
+  if(t) Object.assign(t, saved);
+  closeTutorForm();
+  renderTutors(document.getElementById('tax-year').value);
+}
+
+function openTutorStatement(id){
+  const year = document.getElementById('tax-year').value;
+  window.open('/api/tutors/' + id + '/statement?year=' + encodeURIComponent(year), '_blank');
 }
 
 function render(){

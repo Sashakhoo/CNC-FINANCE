@@ -547,3 +547,47 @@ def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: flo
     ws = tax.form_b_worksheet(year, epf=epf, socso=socso, lifestyle=lifestyle,
                               other_reliefs=other, zakat_paid=zakat)
     return _pdf_response(pdf_generator.render_form_b_worksheet_pdf(ws), f"Form-B-Worksheet-YA{year}.pdf")
+
+
+# --- freelance tutors (payment statements) --------------------------------
+
+def _tutor_summary(year: int) -> list:
+    out = []
+    for name, txs in tax.tutor_payments(year).items():
+        tutor = storage.ensure_tutor(name)
+        out.append({**tutor, "payments": len(txs), "total": round(tax.tutor_total(txs), 2)})
+    return sorted(out, key=lambda t: t["name"].lower())
+
+
+@router.get("/tutors", dependencies=[Depends(auth.require_cap("transactions"))])
+def list_tutors(year: int):
+    return _tutor_summary(year)
+
+
+class TutorPatch(BaseModel):
+    ic: str | None = None
+    tax_no: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+@router.patch("/tutors/{tid}", dependencies=[Depends(auth.require_cap("transactions"))])
+def edit_tutor(tid: int, body: TutorPatch):
+    if not storage.get_tutor(tid):
+        raise HTTPException(404, "Tutor not found")
+    storage.update_tutor(tid, body.model_dump(exclude_none=True))
+    return storage.get_tutor(tid)
+
+
+@router.get("/tutors/{tid}/statement", dependencies=[Depends(auth.require_cap("transactions"))])
+def tutor_statement(tid: int, year: int):
+    tutor = storage.get_tutor(tid)
+    if not tutor:
+        raise HTTPException(404, "Tutor not found")
+    txs = next((v for k, v in tax.tutor_payments(year).items() if k.lower() == tutor["name"].lower()), None)
+    if not txs:
+        raise HTTPException(404, f"No payments to {tutor['name']} in {year}")
+    doc_no = f"PS-{year}-{tid:03d}"
+    pdf = pdf_generator.render_tutor_statement_pdf(doc_no, year, tutor, txs)
+    return _pdf_response(pdf, f"{doc_no}.pdf")

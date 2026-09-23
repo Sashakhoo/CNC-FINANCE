@@ -142,3 +142,38 @@ def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: flo
                           "capital_bf": capital_bf, "net_profit": net_profit,
                           "drawings": drawings, "capital_cf": capital_cf},
     }
+
+
+# --- Freelance tutor payments ---------------------------------------------
+
+TUTOR_CATEGORY = "Payroll"
+
+
+def _payee_name(tx: dict) -> str:
+    """payer_payee if set (Telegram), else the name in "Teacher payment —
+    Tan Rou Ka (Vibe Coding)" style descriptions (dashboard entries)."""
+    if tx.get("payer_payee"):
+        return tx["payer_payee"].strip()
+    desc = tx.get("description") or ""
+    name = desc.split("—", 1)[1] if "—" in desc else desc
+    return name.split("(", 1)[0].strip()
+
+
+def tutor_payments(year: int) -> dict:
+    """{name: [tx, ...]} of Payroll payments in `year`, per tutor. Names
+    whose entries net to zero (e.g. a payout reversed the same day) are
+    dropped; an "in" Payroll row counts as money returned."""
+    ya = str(year)
+    groups: dict = {}
+    for t in storage.list_transactions():
+        if t["category"] != TUTOR_CATEGORY or not str(t["date"]).startswith(ya):
+            continue
+        name = _payee_name(t)
+        if name:
+            groups.setdefault(name, []).append(t)
+    return {n: sorted(txs, key=lambda t: (t["date"], t["id"])) for n, txs in groups.items()
+            if round(tutor_total(txs), 2) > 0}
+
+
+def tutor_total(txs: list) -> float:
+    return sum(float(t["amount"]) * (1 if t["type"] == "out" else -1) for t in txs)
