@@ -574,15 +574,35 @@
     <!-- TAX & ZAKAT -->
     <div class="view" id="view-tax">
       <div class="card yellow">
-        <div class="panel-head"><span class="panel-title">Tax &amp; Zakat Calculator</span></div>
+        <div class="panel-head"><span class="panel-title">Income Tax (Form B) &amp; Zakat</span><span class="top-note">Sole proprietor · resident individual rates</span></div>
         <form class="inline" onsubmit="return false;">
-          <div class="field"><label>Tax Rate (%)</label><input type="number" id="tax-rate" value="24" step="0.1" oninput="render()" style="background:#fff;"></div>
-          <div class="field"><label>Zakat Rate (%)</label><input type="number" id="zakat-rate" value="2.5" step="0.1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Year of Assessment</label><select id="tax-year" onchange="render()" style="background:#fff;"></select></div>
+          <div class="field"><label>EPF + Life Ins. (max 7,000)</label><input type="number" id="tax-rel-epf" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>SOCSO / EIS (max 350)</label><input type="number" id="tax-rel-socso" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Lifestyle (max 2,500)</label><input type="number" id="tax-rel-life" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Other Reliefs</label><input type="number" id="tax-rel-other" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Zakat Paid (rebate)</label><input type="number" id="tax-zakat-paid" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
+          <div class="field"><label>Zakat Rate (%)</label><input type="number" id="zakat-rate" class="tax-in" value="2.5" step="0.1" oninput="render()" style="background:#fff;"></div>
         </form>
         <div class="stat-mini">
-          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Net Profit before Tax &amp; Zakat</div><div class="m-val" id="tax-base">RM 0</div></div>
+          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Chargeable Income</div><div class="m-val" id="tax-base">RM 0</div></div>
           <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Estimated Tax Payable</div><div class="m-val" id="tax-payable">RM 0</div></div>
+          <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Tax-free Headroom</div><div class="m-val" id="tax-headroom">RM 0</div></div>
           <div class="m-card" style="background:rgba(255,255,255,0.5);"><div class="m-label">Estimated Zakat Payable</div><div class="m-val" id="zakat-payable">RM 0</div></div>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card">
+          <div class="panel-head"><span class="panel-title">How it's worked out</span><span class="top-note" id="tax-year-note"></span></div>
+          <div id="tax-steps"></div>
+        </div>
+        <div class="card">
+          <div class="panel-head"><span class="panel-title">Tax bands</span></div>
+          <div class="table-wrap"><table style="min-width:0;">
+            <thead><tr><th>Chargeable income</th><th>Rate</th><th style="text-align:right;">Tax</th></tr></thead>
+            <tbody id="tax-bands"></tbody>
+          </table></div>
+          <div class="empty-note" style="margin-top:10px;">Owner Withdrawal is added back because drawings aren't a business expense. RM400 rebate applies when chargeable income ≤ RM35,000. Zakat paid comes off the tax itself. Estimate only; confirm on MyTax before filing Form B (due 30 June of the following year).</div>
         </div>
       </div>
     </div>
@@ -1306,6 +1326,117 @@ async function deleteAsset(id){
   await loadState();
 }
 
+// Resident individual rates (YA 2023 onwards). [upper limit, rate]
+const TAX_BANDS = [[5000,0],[20000,0.01],[35000,0.03],[50000,0.06],[70000,0.11],[100000,0.19],[400000,0.25],[600000,0.26],[2000000,0.28],[Infinity,0.30]];
+const PERSONAL_RELIEF = 9000, TAX_REBATE = 400, REBATE_LIMIT = 35000;
+const TAX_INPUTS_KEY = 'cnc-tax-inputs';
+
+function bandTax(ci){
+  let tax = 0, lower = 0;
+  for (const [upper, rate] of TAX_BANDS){
+    if (ci <= lower) break;
+    tax += (Math.min(ci, upper) - lower) * rate;
+    lower = upper;
+  }
+  return tax;
+}
+
+function taxPayable(adjusted, reliefs, zakatPaid){
+  const ci = Math.max(0, adjusted - reliefs);
+  const gross = bandTax(ci);
+  const rebate = ci <= REBATE_LIMIT ? Math.min(TAX_REBATE, gross) : 0;
+  const zakat = Math.min(zakatPaid, gross - rebate);
+  return {ci, gross, rebate, zakat, net: gross - rebate - zakat};
+}
+
+function taxNum(id, cap){
+  const v = Math.max(0, parseFloat(document.getElementById(id).value) || 0);
+  return cap ? Math.min(v, cap) : v;
+}
+
+function restoreTaxInputs(){
+  if (restoreTaxInputs.done) return;
+  restoreTaxInputs.done = true;
+  try {
+    const saved = JSON.parse(localStorage.getItem(TAX_INPUTS_KEY) || '{}');
+    Object.entries(saved).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+  } catch(e) {}
+}
+
+function saveTaxInputs(){
+  try {
+    const vals = {};
+    document.querySelectorAll('.tax-in').forEach(el => { vals[el.id] = el.value; });
+    localStorage.setItem(TAX_INPUTS_KEY, JSON.stringify(vals));
+  } catch(e) {}
+}
+
+function renderTax(){
+  restoreTaxInputs();
+  const sel = document.getElementById('tax-year');
+  const thisYear = String(new Date().getFullYear());
+  const years = [...new Set(transactions.map(x => String(x.date).slice(0,4)).concat(thisYear))].sort().reverse();
+  const chosen = years.includes(sel.value) ? sel.value : thisYear;
+  sel.innerHTML = years.map(y => `<option value="${y}">YA ${y}</option>`).join('');
+  sel.value = chosen;
+
+  const yearTx = transactions.filter(x => String(x.date).startsWith(chosen));
+  const revenue = yearTx.filter(x => x.type === 'in').reduce((s,x) => s + Number(x.amount), 0);
+  const expenses = yearTx.filter(x => x.type === 'out').reduce((s,x) => s + Number(x.amount), 0);
+  const drawings = yearTx.filter(x => x.type === 'out' && x.category === 'Owner Withdrawal').reduce((s,x) => s + Number(x.amount), 0);
+  const adjusted = Math.max(0, revenue - expenses + drawings);
+
+  const epf = taxNum('tax-rel-epf', 7000), socso = taxNum('tax-rel-socso', 350);
+  const life = taxNum('tax-rel-life', 2500), other = taxNum('tax-rel-other');
+  const reliefs = PERSONAL_RELIEF + epf + socso + life + other;
+  const zakatPaid = taxNum('tax-zakat-paid');
+  const r = taxPayable(adjusted, reliefs, zakatPaid);
+
+  // Largest adjusted income that still leaves RM0 tax (payable is non-decreasing in income).
+  let lo = 0, hi = 5000000;
+  for (let i = 0; i < 60; i++){ const mid = (lo + hi) / 2; if (taxPayable(mid, reliefs, zakatPaid).net <= 0.005) lo = mid; else hi = mid; }
+  const headroom = Math.max(0, lo - adjusted);
+
+  const zakatRate = parseFloat(document.getElementById('zakat-rate').value || 0);
+  document.getElementById('tax-base').textContent = fmt(r.ci);
+  document.getElementById('tax-payable').textContent = fmt(r.net);
+  document.getElementById('tax-headroom').textContent = r.net > 0 ? 'RM 0' : fmt(headroom);
+  document.getElementById('zakat-payable').textContent = fmt(adjusted * zakatRate / 100);
+  document.getElementById('tax-year-note').textContent = `1 Jan – 31 Dec ${chosen}`;
+
+  const money = n => 'RM ' + Number(n).toLocaleString('en-MY',{minimumFractionDigits:2, maximumFractionDigits:2});
+  const row = (label, val, cls='') => `<div class="line-row ${cls}"><span>${label}</span><span class="amt">${val}</span></div>`;
+  document.getElementById('tax-steps').innerHTML =
+    '<div class="group-label">Business income</div>' +
+    row('Revenue', money(revenue)) +
+    row('Less expenses', '−' + money(expenses)) +
+    row('Add back Owner Withdrawal', '+' + money(drawings)) +
+    row('Adjusted business income', money(adjusted), 'total') +
+    '<div class="group-label">Reliefs</div>' +
+    row('Individual (automatic)', '−' + money(PERSONAL_RELIEF)) +
+    (epf ? row('EPF + life insurance', '−' + money(epf)) : '') +
+    (socso ? row('SOCSO / EIS', '−' + money(socso)) : '') +
+    (life ? row('Lifestyle', '−' + money(life)) : '') +
+    (other ? row('Other reliefs', '−' + money(other)) : '') +
+    row('Chargeable income', money(r.ci), 'total') +
+    '<div class="group-label">Tax</div>' +
+    row('Tax on bands', money(r.gross)) +
+    row(r.ci <= REBATE_LIMIT ? 'Less rebate (≤ RM35,000)' : 'Rebate (not eligible)', '−' + money(r.rebate)) +
+    (zakatPaid ? row('Less zakat paid', '−' + money(r.zakat)) : '') +
+    row('Tax payable', money(r.net), 'total');
+
+  let lower = 0;
+  document.getElementById('tax-bands').innerHTML = TAX_BANDS.map(([upper, rate]) => {
+    const inBand = Math.max(0, Math.min(r.ci, upper) - lower);
+    const label = upper === Infinity ? `Above ${lower.toLocaleString('en-MY')}` : `${lower ? (lower+1).toLocaleString('en-MY') : '0'} – ${upper.toLocaleString('en-MY')}`;
+    const html = `<tr style="${inBand ? 'font-weight:700;' : 'color:var(--dim);'}"><td>${label}</td><td>${Math.round(rate*100)}%</td><td class="amt" style="text-align:right;">${money(inBand * rate)}</td></tr>`;
+    lower = upper;
+    return html;
+  }).join('');
+
+  saveTaxInputs();
+}
+
 function render(){
   const t = totals();
 
@@ -1403,13 +1534,7 @@ function render(){
   document.getElementById('cf-change').textContent = fmt(t.totalIn - t.totalOut);
   document.getElementById('cf-close').textContent = fmt(t.cashBalance);
 
-  const taxRate = parseFloat(document.getElementById('tax-rate').value || 0);
-  const zakatRate = parseFloat(document.getElementById('zakat-rate').value || 0);
-  const base = Math.max(0, t.netPL);
-  document.getElementById('tax-base').textContent = fmt(base);
-  document.getElementById('tax-payable').textContent = fmt(base * taxRate / 100);
-  document.getElementById('zakat-payable').textContent = fmt(base * zakatRate / 100);
-
+  renderTax();
   renderMonthlyViews(t, cats);
   renderTrialBalance(t);
   gate();
