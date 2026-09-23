@@ -17,6 +17,7 @@ import storage
 import pdf_generator
 import auth
 import lms_sync
+import tax
 
 router = APIRouter(prefix="/api")
 
@@ -536,3 +537,13 @@ def _generate_document(kind: str, ref_id: int):
         raise HTTPException(404, "Unknown document kind")
 
     return _pdf_response(pdf, f"{no}.pdf")
+
+
+# --- tax (Form B worksheet) ----------------------------------------------
+
+@router.get("/tax/form-b-worksheet", dependencies=[Depends(auth.require_cap("transactions"))])
+def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: float = 0,
+                     other: float = 0, zakat: float = 0):
+    ws = tax.form_b_worksheet(year, epf=epf, socso=socso, lifestyle=lifestyle,
+                              other_reliefs=other, zakat_paid=zakat)
+    return _pdf_response(pdf_generator.render_form_b_worksheet_pdf(ws), f"Form-B-Worksheet-YA{year}.pdf")

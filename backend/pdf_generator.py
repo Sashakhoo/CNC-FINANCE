@@ -310,3 +310,117 @@ def render_voucher_pdf(voucher_no: str, voucher_type: str, date: str, party: str
         sig,
         _footer(voucher_no),
     )
+
+
+def _ws_table(rows: list, head: tuple = ("Form B field", "Amount")) -> str:
+    """rows: (label, amount_or_None, css_class) — class '' / 'sub' / 'total'."""
+    body = ""
+    for label, amt, cls in rows:
+        if amt is None:
+            val = ""
+        elif round(amt, 2) < 0:
+            val = f"({_rm(-amt)})"
+        else:
+            val = _rm(abs(amt))
+        body += f'<tr class="{cls}"><td>{_esc(label)}</td><td class="r">{val}</td></tr>'
+    return (f'<table class="items ws"><tr><th>{_esc(head[0])}</th><th class="r">{_esc(head[1])}</th></tr>'
+            f'{body}</table>')
+
+
+WS_CSS = """
+<style>
+table.ws td { padding: 5px 10px; }
+table.ws td.r { white-space: nowrap; }
+table.ws tr.sub td { color: #555; font-size: 8pt; padding: 2px 10px 2px 26px; border-bottom: none; }
+table.ws tr.total td { font-weight: bold; border-top: 1px solid #cfcabb; }
+table.ws tr.key td { font-weight: bold; background: #e7f9f2; }
+.ws-note { font-size: 7.5pt; color: #555; margin-top: 6px; }
+</style>
+"""
+
+
+def render_form_b_worksheet_pdf(ws: dict) -> bytes:
+    """Figures for the MyTax e-Filing Form B, laid out in the order the
+    form asks for them. `ws` comes from tax.form_b_worksheet()."""
+    ya = ws["year"]
+    doc_no = f"FORM-B-YA{ya}"
+    pl, adj, rel, tax, bs = ws["pl"], ws["adjustment"], ws["reliefs"], ws["tax"], ws["balance_sheet"]
+    today = _date.today().strftime("%d %B %Y")
+
+    pl_rows = [("Gross sales / course fees", pl["gross_sales"], "")]
+    if pl["returns"]:
+        pl_rows.append(("Less refunds to customers", -pl["returns"], ""))
+    pl_rows.append(("Sales / turnover", pl["turnover"], "total"))
+    pl_rows.append(("Cost of sales (no stock held)", 0.0, ""))
+    pl_rows.append(("Gross profit", pl["turnover"], "total"))
+    pl_rows.append(("Other business income", pl["total_other_income"], ""))
+    if len(pl["other_income"]) > 1:
+        pl_rows += [(c, a, "sub") for c, a in pl["other_income"]]
+    for label, amt, items in pl["expense_lines"]:
+        pl_rows.append((label, amt, ""))
+        if len(items) > 1:
+            pl_rows += [(c, a, "sub") for c, a in items]
+    pl_rows.append(("Total expenses", pl["total_expenses"], "total"))
+    pl_rows.append(("Net profit / (loss)", pl["net_profit"], "key"))
+
+    adj_rows = [
+        ("Net profit per accounts", adj["net_profit"], ""),
+        ("Add: non-allowable expenses (drawings already excluded above)", 0.0, ""),
+        ("Adjusted income", adj["adjusted"], "total"),
+        ("Less: capital allowances (from your asset schedule, not computed)", 0.0, ""),
+        ("Statutory income from business", adj["adjusted"], "key"),
+    ]
+
+    rel_rows = [("Individual (automatic)", rel["individual"], "")]
+    for key, label in (("epf", "EPF + life insurance"), ("socso", "SOCSO / EIS"),
+                       ("lifestyle", "Lifestyle"), ("other", "Other reliefs")):
+        if rel[key]:
+            rel_rows.append((label, rel[key], ""))
+    rel_rows.append(("Total reliefs", rel["total"], "total"))
+
+    tax_rows = [
+        ("Total income (statutory business income, no other sources)", adj["adjusted"], ""),
+        ("Less total reliefs", -rel["total"], ""),
+        ("Chargeable income", tax["chargeable"], "key"),
+    ]
+    for lower, upper, rate, amt in tax["bands"]:
+        span = f"{lower:,.0f} – {upper:,.0f}" if upper != float("inf") else f"above {lower:,.0f}"
+        tax_rows.append((f"{rate * 100:g}% on {span}", amt, "sub"))
+    tax_rows += [
+        ("Income tax on chargeable income", tax["gross"], "total"),
+        ("Less rebate (chargeable income ≤ RM35,000)" if tax["chargeable"] <= 35000
+         else "Rebate (not eligible, chargeable income > RM35,000)", -tax["rebate"], ""),
+        ("Less zakat paid", -tax["zakat"], ""),
+        ("Tax payable", tax["payable"], "key"),
+    ]
+
+    bs_rows = [
+        ("Fixed assets (net book value)", bs["fixed_assets"], ""),
+        ("Trade debtors", bs["debtors"], ""),
+        ("Cash in hand and at bank", bs["cash"], ""),
+        ("Total assets", bs["total_assets"], "total"),
+        ("Trade creditors", bs["creditors"], ""),
+        ("Total liabilities", bs["creditors"], "total"),
+        ("Capital brought forward / contributed (balancing figure)", bs["capital_bf"], ""),
+        ("Add: net profit for the year", bs["net_profit"], ""),
+        ("Less: drawings", -bs["drawings"], ""),
+        ("Capital carried forward", bs["capital_cf"], "key"),
+    ]
+
+    body = (
+        WS_CSS
+        + _header("FORM B WORKSHEET", f"Year of Assessment {ya}",
+                  [("Basis period", f"1 Jan – 31 Dec {ya}"), ("Prepared", today)], None)
+        + '<div class="muted">Figures for LHDN MyTax e-Filing (Form B, individual with business income). '
+          'Copy each amount into the matching field. This worksheet is not submitted to LHDN.</div>'
+        + '<h2 class="sec">1. PROFIT &amp; LOSS (FINANCIAL PARTICULARS OF BUSINESS)</h2>' + _ws_table(pl_rows)
+        + '<h2 class="sec">2. BUSINESS INCOME ADJUSTMENT</h2>' + _ws_table(adj_rows)
+        + '<h2 class="sec">3. RELIEFS</h2>' + _ws_table(rel_rows)
+        + '<h2 class="sec">4. TAX COMPUTATION</h2>' + _ws_table(tax_rows)
+        + '<h2 class="sec">5. BALANCE SHEET (FINANCIAL PARTICULARS OF BUSINESS)</h2>' + _ws_table(bs_rows)
+        + '<div class="ws-note">Cash is the ledger balance at year end. Debtors, creditors and fixed assets are the '
+          'values currently recorded in the system. Keep receipts for every expense and relief claimed for 7 years. '
+          f'Form B for YA {ya} is due 30 June {int(ya) + 1}. Estimate only — confirm on MyTax before submitting.</div>'
+        + _footer(doc_no, payment_terms=False)
+    )
+    return _page(body)

@@ -574,7 +574,7 @@
     <!-- TAX & ZAKAT -->
     <div class="view" id="view-tax">
       <div class="card yellow">
-        <div class="panel-head"><span class="panel-title">Income Tax (Form B) &amp; Zakat</span><span class="top-note">Sole proprietor · resident individual rates</span></div>
+        <div class="panel-head"><span class="panel-title">Income Tax (Form B) &amp; Zakat</span><button class="pill-btn dark small" data-cap="transactions" onclick="openFormBWorksheet()">📄 Form B Worksheet</button></div>
         <form class="inline" onsubmit="return false;">
           <div class="field"><label>Year of Assessment</label><select id="tax-year" onchange="render()" style="background:#fff;"></select></div>
           <div class="field"><label>EPF + Life Ins. (max 7,000)</label><input type="number" id="tax-rel-epf" class="tax-in" value="0" min="0" step="1" oninput="render()" style="background:#fff;"></div>
@@ -894,6 +894,15 @@ function openVoucher(txId, type){
   window.open('/api/documents/' + kind + '/' + txId, '_blank');
 }
 function openInvoiceDoc(invId){ window.open('/api/documents/invoice/' + invId, '_blank'); }
+function openFormBWorksheet(){
+  const v = id => Math.max(0, parseFloat(document.getElementById(id).value) || 0);
+  const q = new URLSearchParams({
+    year: document.getElementById('tax-year').value,
+    epf: v('tax-rel-epf'), socso: v('tax-rel-socso'), lifestyle: v('tax-rel-life'),
+    other: v('tax-rel-other'), zakat: v('tax-zakat-paid'),
+  });
+  window.open('/api/tax/form-b-worksheet?' + q, '_blank');
+}
 function closeReceipt(){ document.getElementById('receipt-modal-overlay').classList.remove('open'); }
 function closeVoucher(){ document.getElementById('voucher-modal-overlay').classList.remove('open'); }
 
