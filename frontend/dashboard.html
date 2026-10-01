@@ -26,19 +26,7 @@
   button{font-family:'Inter',sans-serif; cursor:pointer;}
   input,select{font-family:'Inter',sans-serif;}
 
-  .side{width:96px; flex-shrink:0; padding:24px 14px; display:flex; flex-direction:column; align-items:center; gap:8px;
-    position:sticky; top:0; height:100vh; overflow-y:auto; scrollbar-width:none;}
-  .side::-webkit-scrollbar{display:none;}
-  /* Short screens: tighten the pills so every section (incl. Docs) stays on screen */
-  @media (max-height:860px) and (min-width:641px){
-    .side{padding-top:14px; padding-bottom:10px; gap:3px;}
-    .side .brand-mark{margin-bottom:8px;}
-    .side .nav-pill{padding:7px 0; gap:2px;}
-  }
-  @media (max-height:740px) and (min-width:641px){
-    .side .nav-pill{padding:4px 0;}
-    .side .brand-mark{width:36px; height:36px;}
-  }
+  .side{width:96px; flex-shrink:0; padding:24px 14px; display:flex; flex-direction:column; align-items:center; gap:8px;}
   .brand-mark{width:44px;height:44px;border-radius:16px; background:var(--ink); display:flex;align-items:center;justify-content:center; margin-bottom:20px;}
   .brand-mark img{width:28px; height:28px; object-fit:contain;}
   .nav-pill{width:100%; padding:12px 0; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--dim); cursor:pointer;}
@@ -244,7 +232,7 @@
     .side{
       order:2; width:100%; height:auto; flex-direction:row; gap:2px;
       padding:6px 8px calc(6px + env(safe-area-inset-bottom));
-      position:fixed; top:auto; left:0; right:0; bottom:0; z-index:60;
+      position:fixed; left:0; right:0; bottom:0; z-index:60;
       background:var(--panel); border-top:1px solid var(--line);
       overflow-x:auto; scrollbar-width:none; box-shadow:0 -4px 20px rgba(20,18,25,.08);
     }
@@ -304,10 +292,6 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
     <span>Home</span>
   </div>
-  <div class="nav-pill" data-href="/document-centre" title="Document Centre — stamp and verify documents">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l2 4v3H7v-3l2-4V3Z"/><path d="M5 20h14"/></svg>
-    <span>Docs</span>
-  </div>
   <div class="nav-pill" data-view="cico">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="12" rx="3"/><circle cx="12" cy="13" r="2"/></svg>
     <span>Cash</span>
@@ -347,6 +331,10 @@
   <div class="nav-pill" data-view="team" data-cap="users">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 11a3 3 0 1 0 0-6M20 20a5.5 5.5 0 0 0-4-5.3"/></svg>
     <span>Team</span>
+  </div>
+  <div class="nav-pill" data-href="/document-centre" title="Document Centre — stamp and verify documents">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l2 4v3H7v-3l2-4V3Z"/><path d="M5 20h14"/></svg>
+    <span>Docs</span>
   </div>
 </div>
 
