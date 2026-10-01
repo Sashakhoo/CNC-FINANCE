@@ -6,7 +6,10 @@ from the dashboard (Team screen). Roles:
 
   - director : sees everything, edits everything, manages accounts
   - admin    : sees everything, can ONLY create invoices and generate
-               documents (receipts / vouchers / invoice PDFs)
+               documents (receipts / vouchers / invoice PDFs); can stamp
+               documents in the Document Centre
+  - viewer   : Document Centre only - open completed stamped documents and
+               verify them. No access to the finance ledger at all.
 
 Any other role has no access — login is refused.
 
@@ -36,12 +39,17 @@ import storage
 COOKIE_NAME = "cnc_session"
 MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 7))  # 7 days
 
+# "finance" = may read the ledger. "stamp" = may upload and stamp documents
+# in the Document Centre. "stamp_admin" = manage stamps, settings, audit
+# trail and voiding (director only, via "*").
 ROLE_CAPS = {
     "director": {"*"},
-    "admin": {"invoices", "documents"},
+    "admin": {"finance", "invoices", "documents", "stamp"},
+    "viewer": {"stamp_view"},
 }
-ALL_CAPS = ["transactions", "contacts", "invoices", "assets", "notes", "documents", "users"]
-ASSIGNABLE_ROLES = ["admin", "director"]
+ALL_CAPS = ["finance", "transactions", "contacts", "invoices", "assets", "notes", "documents",
+            "users", "stamp", "stamp_admin", "stamp_view"]
+ASSIGNABLE_ROLES = ["admin", "director", "viewer"]
 
 _SCRYPT = dict(n=2 ** 14, r=8, p=1, dklen=32)
 _DUMMY = ("00" * 16, "ff" * 32)  # burns ~equal CPU for unknown usernames
@@ -193,6 +201,14 @@ def require_auth(request: Request) -> dict:
     user = current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def require_finance(request: Request) -> dict:
+    """Read access to the ledger. Document Centre viewers don't have it."""
+    user = require_auth(request)
+    if not can(user["role"], "finance"):
+        raise HTTPException(status_code=403, detail="Your account can't view finance data")
     return user
 
 

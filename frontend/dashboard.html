@@ -332,6 +332,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 11a3 3 0 1 0 0-6M20 20a5.5 5.5 0 0 0-4-5.3"/></svg>
     <span>Team</span>
   </div>
+  <div class="nav-pill" data-href="/document-centre" title="Document Centre — stamp and verify documents">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l2 4v3H7v-3l2-4V3Z"/><path d="M5 20h14"/></svg>
+    <span>Docs</span>
+  </div>
 </div>
 
 <div class="main">
@@ -683,7 +687,7 @@
         <form class="inline" data-cap="users" onsubmit="return addUser(event)">
           <div class="field"><label>Username</label><input type="text" id="usr-name" required style="min-width:170px;"></div>
           <div class="field"><label>Password</label><input type="text" id="usr-pass" required placeholder="min 6 chars"></div>
-          <div class="field"><label>Role</label><select id="usr-role"><option value="admin">Admin — invoices &amp; documents only</option><option value="director">Director — full access</option></select></div>
+          <div class="field"><label>Role</label><select id="usr-role"><option value="admin">Admin — invoices &amp; documents only</option><option value="director">Director — full access</option><option value="viewer">Viewer — Document Centre, read-only</option></select></div>
           <button class="pill-btn dark" type="submit">＋ Add User</button>
         </form>
         <div class="panel-head"><span class="panel-title">Accounts</span><span class="top-note">Director sees all &amp; manages users · Admin can only create invoices and generate documents</span></div>
@@ -955,7 +959,10 @@ function switchView(name){
   document.getElementById('page-title').textContent = titles[name];
 }
 document.querySelectorAll('.nav-pill').forEach(item=>{
-  item.addEventListener('click', ()=>switchView(item.dataset.view));
+  item.addEventListener('click', ()=>{
+    if(item.dataset.href){ location.href = item.dataset.href; return; }
+    switchView(item.dataset.view);
+  });
 });
 
 function switchCicoTab(name){
@@ -1008,6 +1015,8 @@ function gate(){
 }
 function applyUser(u){
   currentUser = u;
+  // Document Centre viewers have no finance access — send them straight there.
+  if(u && !(u.caps || []).includes('finance')){ location.replace('/document-centre'); throw new Error('redirecting'); }
   const btn = document.getElementById('lock-toggle-btn');
   if(u){
     const role = u.role ? ' · ' + u.role : '';
@@ -1072,6 +1081,7 @@ function renderUsers(){
       <td><select class="mono" ${self?'disabled':''} onchange="patchUser(${u.id},{role:this.value})" style="font-size:11px; padding:4px 8px; border-radius:8px;">
         <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         <option value="director" ${u.role==='director'?'selected':''}>director</option>
+        <option value="viewer" ${u.role==='viewer'?'selected':''}>viewer</option>
       </select></td>
       <td><span class="tag ${u.active?'paid':'overdue'}">${u.active?'ACTIVE':'DISABLED'}</span></td>
       <td class="mono" style="color:var(--dim);">${(u.created_at||'').slice(0,10)}</td>

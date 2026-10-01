@@ -16,7 +16,7 @@ import pathlib
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import storage
@@ -26,6 +26,8 @@ import auth
 import gemini_parser
 import pdf_generator
 import lms_sync
+import stamp_store
+import stamp_api
 from api import router as api_router
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
@@ -53,10 +55,11 @@ async def security_headers(request: Request, call_next):
     # The dashboard is a single self-contained file plus Google Fonts.
     resp.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
         "script-src 'self' 'unsafe-inline'; "
+        "worker-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
     ))
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -77,9 +80,12 @@ def on_startup():
     if seed.seed_if_empty():
         print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
     migrations.run_migrations()
+    stamp_store.init_db()
+    stamp_api.seed_defaults()
 
 
 app.include_router(api_router)
+app.include_router(stamp_api.router)
 
 
 @app.get("/health")
@@ -93,6 +99,22 @@ app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="asset
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     return FileResponse(FRONTEND_DIR / "dashboard.html")
+
+
+# --- Document Centre -------------------------------------------------------
+
+@app.get("/document-centre", response_class=HTMLResponse)
+def document_centre(request: Request):
+    if not auth.is_authed(request):
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(FRONTEND_DIR / "document-centre.html", headers={"Cache-Control": "no-store"})
+
+
+# Public: anyone holding a stamped document can check it. No login.
+@app.get("/verify", response_class=HTMLResponse)
+@app.get("/verify/{document_id}", response_class=HTMLResponse)
+def verify_page(document_id: str = ""):
+    return FileResponse(FRONTEND_DIR / "verify.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/favicon.ico")

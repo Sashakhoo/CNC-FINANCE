@@ -18,6 +18,7 @@ import pdf_generator
 import auth
 import lms_sync
 import tax
+import stamp_store
 
 router = APIRouter(prefix="/api")
 
@@ -32,6 +33,15 @@ class Login(BaseModel):
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for", "")
     return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
+
+
+def _audit(request: Request, event: str, user: dict = None, **meta):
+    """Account events go to the same append-only trail the Document Centre uses."""
+    try:
+        stamp_store.audit(event, user=user, ip=_client_ip(request),
+                          user_agent=request.headers.get("user-agent", ""), metadata=meta)
+    except Exception as exc:
+        print(f"audit failed: {exc}")
 
 
 def _set_session_cookie(resp: JSONResponse, request: Request, username: str):
@@ -77,9 +87,12 @@ def login(body: Login, request: Request):
     except auth.NoAccess:
         raise HTTPException(status_code=403, detail="This account has no access. Ask the director.")
     if not username:
+        _audit(request, "LOGIN_FAILED", attempted=(body.username or "").strip()[:40])
         raise HTTPException(status_code=401, detail="Invalid username or password")
     auth.clear_login_attempts(ip)
-    role = storage.get_user(username)["role"]
+    account = storage.get_user(username)
+    role = account["role"]
+    _audit(request, "LOGIN", {"id": account["id"], "username": username})
     resp = JSONResponse({"ok": True, "username": username, "role": role,
                          "caps": auth.caps_for(role)})
     _set_session_cookie(resp, request, username)
@@ -137,7 +150,7 @@ def list_users():
 
 
 @router.post("/users", dependencies=[Depends(auth.require_cap("users"))])
-def create_user(body: UserIn):
+def create_user(body: UserIn, request: Request, me: dict = Depends(auth.require_auth)):
     name = body.username.strip()
     if not name or len(name) > 40:
         raise HTTPException(422, "Username must be 1-40 characters")
@@ -149,11 +162,12 @@ def create_user(body: UserIn):
         raise HTTPException(409, "That username already exists")
     salt, h = auth.hash_new(body.password)
     uid = storage.create_user(name, salt, h, body.role)
+    _audit(request, "USER_CREATED", me, username=name, role=body.role)
     return next(u for u in storage.list_users() if u["id"] == uid)
 
 
 @router.patch("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
-def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth)):
+def patch_user(uid: int, body: UserPatch, request: Request, me: dict = Depends(auth.require_auth)):
     target = storage.get_user_by_id(uid)
     if not target:
         raise HTTPException(404, "User not found")
@@ -173,6 +187,8 @@ def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth))
                 and storage.count_active_directors(exclude_id=uid) == 0:
             raise HTTPException(400, "There must be at least one active director")
         storage.update_user(uid, active=body.active)
+        if not body.active and target["active"]:
+            _audit(request, "USER_DISABLED", me, username=target["username"])
 
     if body.password is not None:
         if len(body.password) < 6:
@@ -184,7 +200,7 @@ def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth))
 
 
 @router.delete("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
-def remove_user(uid: int, me: dict = Depends(auth.require_auth)):
+def remove_user(uid: int, request: Request, me: dict = Depends(auth.require_auth)):
     target = storage.get_user_by_id(uid)
     if not target:
         return {"ok": True}
@@ -193,12 +209,13 @@ def remove_user(uid: int, me: dict = Depends(auth.require_auth)):
     if target["role"] == "director" and storage.count_active_directors(exclude_id=uid) == 0:
         raise HTTPException(400, "There must be at least one active director")
     storage.delete_user(uid)
+    _audit(request, "USER_DISABLED", me, username=target["username"], deleted=True)
     return {"ok": True}
 
 
 # --- aggregate state (one call the dashboard loads on startup) ----------
 
-@router.get("/state", dependencies=[Depends(auth.require_auth)])
+@router.get("/state", dependencies=[Depends(auth.require_finance)])
 def state():
     return {
         "transactions": storage.list_transactions(),
@@ -221,7 +238,7 @@ class TxIn(BaseModel):
     payer_payee: str | None = None
 
 
-@router.get("/transactions", dependencies=[Depends(auth.require_auth)])
+@router.get("/transactions", dependencies=[Depends(auth.require_finance)])
 def get_transactions():
     return storage.list_transactions()
 
@@ -278,7 +295,7 @@ class ContactIn(BaseModel):
     phone: str | None = None
 
 
-@router.get("/contacts", dependencies=[Depends(auth.require_auth)])
+@router.get("/contacts", dependencies=[Depends(auth.require_finance)])
 def get_contacts():
     return storage.list_contacts()
 
@@ -318,7 +335,7 @@ class InvoiceIn(BaseModel):
     items: list[InvoiceItemIn] | None = None
 
 
-@router.get("/invoices", dependencies=[Depends(auth.require_auth)])
+@router.get("/invoices", dependencies=[Depends(auth.require_finance)])
 def get_invoices():
     return storage.list_invoices()
 
@@ -437,7 +454,7 @@ class AssetIn(BaseModel):
     dep: float = 0.0
 
 
-@router.get("/assets", dependencies=[Depends(auth.require_auth)])
+@router.get("/assets", dependencies=[Depends(auth.require_finance)])
 def get_assets():
     return storage.list_assets()
 
@@ -460,7 +477,7 @@ class NotesIn(BaseModel):
     text: str
 
 
-@router.get("/notes", dependencies=[Depends(auth.require_auth)])
+@router.get("/notes", dependencies=[Depends(auth.require_finance)])
 def read_notes():
     return storage.get_notes()
 

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15141a">
+<meta name="robots" content="noindex">
+<title>Code N Code Document Check</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2efe8; --panel:#ffffff; --ink:#15141a; --ink-2:#3a3846; --dim:#8b8894; --line:#eae6db;
+    --lime:#d7f26d; --lime-ink:#3a4408; --coral:#ffb7a6; --coral-ink:#5c2213;
+    --cyan:#bdeef2; --cyan-ink:#0c3a3d; --yellow:#ffe08a; --yellow-ink:#4a3402;
+    --shadow:0 8px 30px rgba(20,18,25,0.06), 0 2px 8px rgba(20,18,25,0.04);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; font-size:14px; min-height:100vh; padding:28px 16px 48px;}
+  h1,h2{font-family:'Space Grotesk',sans-serif;}
+  .wrap{max-width:560px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:44px; height:44px; border-radius:16px; background:var(--ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .brand-mark img{width:28px; height:28px; object-fit:contain;}
+  .brand h1{font-size:19px; font-weight:600; letter-spacing:-0.3px;}
+  .brand .sub{color:var(--dim); font-size:12.5px; font-weight:500; margin-top:2px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:22px; box-shadow:var(--shadow);}
+  .card.VERIFIED{background:var(--lime); color:var(--lime-ink); border:none;}
+  .card.REGISTERED{background:var(--cyan); color:var(--cyan-ink); border:none;}
+  .card.MISMATCH, .card.VOID{background:var(--coral); color:var(--coral-ink); border:none;}
+  .card.NOT_FOUND{background:var(--yellow); color:var(--yellow-ink); border:none;}
+  label, .lbl{font-size:10.5px; color:var(--dim); font-weight:700; text-transform:uppercase; letter-spacing:0.2px; display:block; margin-bottom:5px;}
+  .card[class*=" "] .lbl{color:inherit; opacity:0.7;}
+  input[type=text]{background:var(--bg); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:11px 12px; font-size:14px; width:100%; font-family:'JetBrains Mono',monospace;}
+  input:focus-visible, button:focus-visible{outline:2px solid var(--ink); outline-offset:2px;}
+  .row{display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;}
+  .row > div{flex:1; min-width:200px;}
+  button{font-family:'Inter',sans-serif; cursor:pointer; background:var(--ink); color:var(--lime); border:none; border-radius:100px; padding:11px 18px; font-size:13px; font-weight:600;}
+  button:disabled{opacity:0.5;}
+  .or{font-size:11.5px; color:var(--dim); font-weight:600; margin:16px 0 8px;}
+  .status{font-size:10.5px; font-weight:700; letter-spacing:0.6px; text-transform:uppercase; opacity:0.75;}
+  h2{font-size:24px; font-weight:600; letter-spacing:-0.4px; margin:6px 0 8px;}
+  .msg{font-size:14px; line-height:1.55;}
+  .kv{display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-top:1px solid rgba(0,0,0,0.12); font-size:13px;}
+  .kv:first-of-type{margin-top:14px;}
+  .kv span:last-child{font-weight:600; text-align:right; word-break:break-word;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .hash{font-family:'JetBrains Mono',monospace; font-size:11px; word-break:break-all;}
+  .note{font-size:11.5px; color:var(--dim); line-height:1.6;}
+  .err{color:#a13d20; font-size:12.5px; min-height:18px; margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-mark"><img src="/assets/logo-icon-light.png" alt=""></div>
+    <div><h1>Document check</h1><div class="sub" id="co">Code N Code Solution</div></div>
+  </div>
+
+  <div class="card" id="result" style="display:none;" aria-live="polite"></div>
+
+  <div class="card">
+    <form id="f-id" class="row">
+      <div><label for="doc-id">Document ID</label><input type="text" id="doc-id" placeholder="CNC-20261001-AB12CD" autocomplete="off" spellcheck="false"></div>
+      <button type="submit">Check</button>
+    </form>
+    <div class="or">Or upload the PDF you received to confirm it has not been changed</div>
+    <input type="file" id="doc-file" accept="application/pdf,.pdf" aria-label="PDF to check">
+    <div class="err" id="err" role="alert"></div>
+  </div>
+
+  <div class="note">
+    This page compares a document against the copy registered by CODE N CODE SOLUTION when it was stamped.
+    An uploaded file is only fingerprinted (SHA-256) for the comparison and is not kept.
+    It is a company record check — not a government, regulatory or certificate-authority verification.
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TITLE = {VERIFIED:'Verified', REGISTERED:'Registered document', MISMATCH:'Document does not match', NOT_FOUND:'Not found', VOID:'Document void'};
+
+function show(r){
+  const box = $('result');
+  box.className = 'card ' + r.status; box.style.display = '';
+  box.innerHTML = `<div class="status">${esc(r.status.replace('_', ' '))}</div><h2>${TITLE[r.status] || esc(r.status)}</h2>
+    <div class="msg">${esc(r.message)}</div>
+    ${r.document_id ? `<div class="kv"><span>Document ID</span><span class="mono">${esc(r.document_id)}</span></div>` : ''}
+    ${r.filename ? `<div class="kv"><span>File</span><span>${esc(r.filename)}</span></div>` : ''}
+    ${r.issued ? `<div class="kv"><span>Registered on</span><span>${esc(r.issued)}</span></div>` : ''}
+    ${r.document_id ? `<div class="kv"><span>Registered by</span><span>${esc(r.company)}<br><span style="font-weight:500;">Reg. No. ${esc(r.registration_number)}</span></span></div>` : ''}
+    ${r.sha256 ? `<div class="kv" style="display:block;"><span class="lbl">SHA-256 of the uploaded file</span><span class="hash" style="text-align:left; font-weight:500;">${esc(r.sha256)}</span></div>` : ''}`;
+  box.scrollIntoView({block:'nearest'});
+}
+async function call(url, opts){
+  $('err').textContent = '';
+  try {
+    const res = await fetch(url, opts);
+    const body = await res.json().catch(() => ({}));
+    if(!res.ok){ $('err').textContent = typeof body.detail === 'string' ? body.detail : 'The check could not be completed. Please try again.'; return; }
+    show(body);
+  } catch(e){ $('err').textContent = 'Network error. Please try again.'; }
+}
+function checkId(id){
+  id = (id || '').trim().toUpperCase();
+  if(!id) return;
+  $('doc-id').value = id;
+  call('/api/verify/' + encodeURIComponent(id));
+}
+$('f-id').addEventListener('submit', e => { e.preventDefault(); checkId($('doc-id').value); });
+$('doc-file').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  const id = $('doc-id').value.trim().toUpperCase();
+  call('/api/verify' + (id ? '?document_id=' + encodeURIComponent(id) : ''), {method:'POST', body: f, headers:{'Content-Type':'application/pdf'}});
+  e.target.value = '';
+});
+const m = location.pathname.match(/^\/verify\/([A-Za-z0-9-]{1,40})$/);
+if(m) checkId(m[1]);
+</script>
+</body>
+</html>
