@@ -711,6 +711,16 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="confirm-modal-overlay" style="z-index:150;">
+  <div class="receipt-card" style="width:360px;">
+    <div id="confirm-message" style="font-size:15px; font-weight:600; margin-bottom:18px;"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="pill-btn" id="confirm-cancel">Cancel</button>
+      <button class="pill-btn danger" id="confirm-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="receipt-modal-overlay">
   <div class="receipt-card" id="receipt-modal">
     <button class="receipt-close" onclick="closeReceipt()">✕</button>
@@ -1108,8 +1118,28 @@ async function patchUser(id, patch){
   await api('/users/' + id, {method:'PATCH', body: JSON.stringify(patch)});
   await loadUsers();
 }
+// In-page replacement for window.confirm(), which some embedded browsers
+// suppress (it silently returns false, so Delete appeared to do nothing).
+function confirmDialog(message){
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
+    document.getElementById('confirm-message').textContent = message;
+    const done = result => {
+      overlay.classList.remove('open');
+      ok.onclick = cancel.onclick = overlay.onclick = null;
+      resolve(result);
+    };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+    overlay.onclick = e => { if(e.target === overlay) done(false); };
+    overlay.classList.add('open');
+    cancel.focus();
+  });
+}
+
 async function deleteUser(id, name){
-  if(!confirm('Delete account "' + name + '"? This cannot be undone.')) return;
+  if(!await confirmDialog('Delete account "' + name + '"? This cannot be undone.')) return;
   await api('/users/' + id, {method:'DELETE'});
   await loadUsers();
 }
@@ -1190,7 +1220,7 @@ async function addTransaction(e){
   return false;
 }
 async function deleteTransaction(id){
-  if(!confirm('Delete this transaction?')) return;
+  if(!await confirmDialog('Delete this transaction?')) return;
   await api('/transactions/' + id, { method:'DELETE' });
   await loadState();
 }
@@ -1228,7 +1258,7 @@ async function addContact(e){
   return false;
 }
 async function deleteContact(id){
-  if(!confirm('Delete this contact?')) return;
+  if(!await confirmDialog('Delete this contact?')) return;
   await api('/contacts/' + id, { method:'DELETE' });
   await loadState();
 }
@@ -1343,7 +1373,7 @@ async function markDeposit(id){
   await loadState();
 }
 async function deleteInvoice(id){
-  if(!confirm('Delete this invoice?')) return;
+  if(!await confirmDialog('Delete this invoice?')) return;
   await api('/invoices/' + id, { method:'DELETE' });
   await loadState();
 }
@@ -1362,7 +1392,7 @@ async function addAsset(e){
   return false;
 }
 async function deleteAsset(id){
-  if(!confirm('Delete this asset?')) return;
+  if(!await confirmDialog('Delete this asset?')) return;
   await api('/assets/' + id, { method:'DELETE' });
   await loadState();
 }
