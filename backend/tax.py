@@ -27,7 +27,7 @@ SALES_RETURNS = {"Refund Given"}
 
 # Ledger expense category -> Form B profit & loss expense line.
 EXPENSE_LINES = [
-    ("Salaries and wages", {"Payroll"}),
+    ("Salaries and wages", {"Payroll", "Staff EPF"}),
     ("Rental / lease", {"Rental"}),
     ("Commissions", {"Referral Expense"}),
     ("Promotion and advertisement", {"Marketing", "Merchandise", "Printing"}),
