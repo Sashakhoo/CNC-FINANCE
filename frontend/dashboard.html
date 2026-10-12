@@ -1452,8 +1452,10 @@ function renderTax(){
   sel.value = chosen;
 
   const yearTx = transactions.filter(x => String(x.date).startsWith(chosen));
-  const revenue = yearTx.filter(x => x.type === 'in').reduce((s,x) => s + Number(x.amount), 0);
-  const expenses = yearTx.filter(x => x.type === 'out').reduce((s,x) => s + Number(x.amount), 0);
+  // Owner's own money put in (e.g. to pay a cash salary) is equity, not income.
+  const capitalIn = yearTx.filter(x => x.category === 'Capital Introduced').reduce((s,x) => s + (x.type === 'in' ? 1 : -1) * Number(x.amount), 0);
+  const revenue = yearTx.filter(x => x.type === 'in' && x.category !== 'Capital Introduced').reduce((s,x) => s + Number(x.amount), 0);
+  const expenses = yearTx.filter(x => x.type === 'out' && x.category !== 'Capital Introduced').reduce((s,x) => s + Number(x.amount), 0);
   const drawings = yearTx.filter(x => x.type === 'out' && x.category === 'Owner Withdrawal').reduce((s,x) => s + Number(x.amount), 0);
   const adjusted = Math.max(0, revenue - expenses + drawings);
 
@@ -1480,6 +1482,7 @@ function renderTax(){
   document.getElementById('tax-steps').innerHTML =
     '<div class="group-label">Business income</div>' +
     row('Revenue', money(revenue)) +
+    (capitalIn ? row('Owner capital introduced (not income)', money(capitalIn)) : '') +
     row('Less expenses', '−' + money(expenses)) +
     row('Add back Owner Withdrawal', '+' + money(drawings)) +
     row('Adjusted business income', money(adjusted), 'total') +

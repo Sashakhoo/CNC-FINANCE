@@ -22,12 +22,15 @@ REBATE_LIMIT = 35000.0
 RELIEF_CAPS = {"epf": 7000.0, "socso": 350.0, "lifestyle": 2500.0}
 
 DRAWINGS = "Owner Withdrawal"
+# Owner's own money put into the business (e.g. to pay a cash salary).
+# Equity, not income: kept out of profit and shown in the capital account.
+CAPITAL_IN = "Capital Introduced"
 SALES_CATEGORIES = {"Course Revenue", "Workshop Revenue", "Consulting Revenue"}
 SALES_RETURNS = {"Refund Given"}
 
 # Ledger expense category -> Form B profit & loss expense line.
 EXPENSE_LINES = [
-    ("Salaries and wages", {"Payroll", "Staff EPF"}),
+    ("Salaries and wages", {"Payroll", "Staff Salary", "Staff EPF"}),
     ("Rental / lease", {"Rental"}),
     ("Commissions", {"Referral Expense"}),
     ("Promotion and advertisement", {"Marketing", "Merchandise", "Printing"}),
@@ -79,11 +82,15 @@ def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: flo
     # Net each category (wash entries such as reversed wages cancel out),
     # signed so income categories are in - out and expenses are out - in.
     net: dict = {}
+    capital_in = 0.0
     for t in txs:
         if not str(t["date"]).startswith(ya):
             continue
         cat = t["category"]
         amt = float(t["amount"])
+        if cat == CAPITAL_IN:
+            capital_in += amt if t["type"] == "in" else -amt
+            continue
         income = _is_income(cat, codes, t["type"])
         sign = 1 if (t["type"] == "in") == income else -1
         entry = net.setdefault(cat, {"income": income, "amount": 0.0})
@@ -119,7 +126,7 @@ def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: flo
     fixed_assets = sum(float(a["cost"]) - float(a["dep"]) for a in storage.list_assets())
     total_assets = fixed_assets + debtors + cash
     capital_cf = total_assets - creditors
-    capital_bf = capital_cf - net_profit + drawings
+    capital_bf = capital_cf - net_profit + drawings - capital_in
 
     capped = {k: min(max(0.0, v), RELIEF_CAPS[k]) for k, v in
               (("epf", epf), ("socso", socso), ("lifestyle", lifestyle))}
@@ -139,7 +146,7 @@ def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: flo
         "tax": {**tax, "bands": band_rows(tax["chargeable"])},
         "balance_sheet": {"fixed_assets": fixed_assets, "debtors": debtors, "cash": cash,
                           "total_assets": total_assets, "creditors": creditors,
-                          "capital_bf": capital_bf, "net_profit": net_profit,
+                          "capital_bf": capital_bf, "capital_in": capital_in, "net_profit": net_profit,
                           "drawings": drawings, "capital_cf": capital_cf},
     }
 

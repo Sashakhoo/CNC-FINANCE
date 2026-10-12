@@ -403,6 +403,7 @@ def render_form_b_worksheet_pdf(ws: dict) -> bytes:
         ("Trade creditors", bs["creditors"], ""),
         ("Total liabilities", bs["creditors"], "total"),
         ("Capital brought forward / contributed (balancing figure)", bs["capital_bf"], ""),
+        ("Add: capital introduced by owner", bs.get("capital_in", 0.0), ""),
         ("Add: net profit for the year", bs["net_profit"], ""),
         ("Less: drawings", -bs["drawings"], ""),
         ("Capital carried forward", bs["capital_cf"], "key"),
