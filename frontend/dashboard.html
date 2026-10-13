@@ -354,7 +354,7 @@
     <div class="view active" id="view-dashboard">
       <div class="bento">
         <div class="card dark kpi c-3"><div class="k-label">Cash Balance</div><div class="num" id="kpi-cash"><span class="cur">RM</span>0</div><div class="pill-status">As of 31 Aug</div></div>
-        <div class="card cyan kpi c-3"><div class="k-label">Total Revenue</div><div class="num" id="kpi-revenue"><span class="cur">RM</span>0</div><div class="pill-status">All cash in, to date</div></div>
+        <div class="card cyan kpi c-3"><div class="k-label">Total Revenue</div><div class="num" id="kpi-revenue"><span class="cur">RM</span>0</div><div class="pill-status">Income net of reversals, to date</div></div>
         <div class="card lavender kpi c-3"><div class="k-label">Total Debtors</div><div class="num" id="kpi-debtors"><span class="cur">RM</span>0</div><div class="pill-status">No open AR on bank feed</div></div>
         <div class="card coral kpi c-3"><div class="k-label">Total Creditors</div><div class="num" id="kpi-creditors"><span class="cur">RM</span>0</div><div class="pill-status">No open AP on bank feed</div></div>
 
@@ -911,6 +911,30 @@ function codeForCategory(cat, type){
   else code = knownIncomeCodes[cat] || String(nextIncomeCode++);
   categoryCodeMap[cat] = code;
   return code;
+}
+// Each category sits on ONE side of the P&L (by its account code: 4xxx
+// income, 6xxx expense) and is shown net, so a reversal or refund booked
+// in the opposite direction reduces its own category instead of showing
+// up as a phantom expense / income line (e.g. "Referral Income" under
+// expenses, or a rental refund as income).
+function categoryNets(){
+  const side = {}, net = {};
+  transactions.forEach(x => {
+    const cat = x.category;
+    if(!(cat in side)){
+      const code = categoryCodeMap[cat] || knownIncomeCodes[cat] || knownExpenseCodes[cat];
+      side[cat] = code ? (String(code).startsWith('4') ? 'in' : 'out') : x.type;
+      net[cat] = 0;
+    }
+    net[cat] += (x.type === side[cat] ? 1 : -1) * Number(x.amount);
+  });
+  const inCats = {}, outCats = {};
+  Object.keys(net).forEach(cat => {
+    if(Math.abs(net[cat]) < 0.005) return;
+    (side[cat] === 'in' ? inCats : outCats)[cat] = net[cat];
+  });
+  const sum = o => Object.values(o).reduce((a,b)=>a+b, 0);
+  return {inCats, outCats, totalRev: sum(inCats), totalExp: sum(outCats)};
 }
 let nextDebtorCode = 1201, nextCreditorCode = 2101;
 function provisionContactCode(contact){
@@ -1587,19 +1611,19 @@ function openTutorStatement(id){
 
 function render(){
   const t = totals();
+  const nets = categoryNets();
 
   document.getElementById('kpi-cash').innerHTML = '<span class="cur">RM</span>' + t.cashBalance.toLocaleString('en-MY');
-  document.getElementById('kpi-revenue').innerHTML = '<span class="cur">RM</span>' + t.totalIn.toLocaleString('en-MY');
+  document.getElementById('kpi-revenue').innerHTML = '<span class="cur">RM</span>' + nets.totalRev.toLocaleString('en-MY');
   document.getElementById('kpi-debtors').innerHTML = '<span class="cur">RM</span>' + t.totalDebtors.toLocaleString('en-MY');
   document.getElementById('kpi-creditors').innerHTML = '<span class="cur">RM</span>' + t.totalCreditors.toLocaleString('en-MY');
   document.getElementById('kpi-netpl').innerHTML = '<span class="cur">RM</span>' + t.netPL.toLocaleString('en-MY');
 
-  const cats = {};
-  transactions.filter(x=>x.type==='out').forEach(x=>{ cats[x.category] = (cats[x.category]||0) + Number(x.amount); });
+  const cats = nets.outCats;
   const maxCat = Math.max(1, ...Object.values(cats));
   let barsHtml = '';
   Object.entries(cats).sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
-    const pct = Math.round(amt/maxCat*100);
+    const pct = Math.max(0, Math.round(amt/maxCat*100));
     barsHtml += `<div style="margin-bottom:12px;">
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; font-weight:500;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
       <div style="height:7px; background:var(--bg); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--ink); border-radius:100px;"></div></div>
@@ -1672,10 +1696,10 @@ function render(){
   document.getElementById('bs-equity').textContent = fmt(equityPlug);
   document.getElementById('bs-total-eq').textContent = fmt(t.totalCreditors + equityPlug);
 
-  document.getElementById('pl-in').textContent = fmt(t.totalIn);
+  document.getElementById('pl-in').textContent = fmt(nets.totalRev);
   document.getElementById('pl-expenses').innerHTML = Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>
     `<div class="line-row"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>`).join('') || '<div class="line-row"><span class="empty-note">No expenses recorded</span><span></span></div>';
-  document.getElementById('pl-out').textContent = fmt(t.totalOut);
+  document.getElementById('pl-out').textContent = fmt(nets.totalExp);
   document.getElementById('pl-net').textContent = fmt(t.netPL);
 
   document.getElementById('cf-open').textContent = fmt(openingCash);
@@ -1683,12 +1707,13 @@ function render(){
   document.getElementById('cf-close').textContent = fmt(t.cashBalance);
 
   renderTax();
-  renderMonthlyViews(t, cats);
+  renderMonthlyViews(t, nets);
   renderTrialBalance(t);
   gate();
 }
 
-function renderMonthlyViews(t, outCats){
+function renderMonthlyViews(t, nets){
+  const {inCats, outCats} = nets;
   const months = monthlyBreakdown();
 
   // Performance / Trends
@@ -1711,15 +1736,14 @@ function renderMonthlyViews(t, outCats){
     || '<tr><td colspan="5" class="empty-note">No transactions yet.</td></tr>';
 
   // Cash In & Out → Summary sub-tab
-  const inCats = {}; transactions.filter(x=>x.type==='in').forEach(x=>{ inCats[x.category]=(inCats[x.category]||0)+Number(x.amount); });
   const maxIn = Math.max(1, ...Object.values(inCats));
   document.getElementById('summary-in-cats').innerHTML = Object.entries(inCats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
     <div style="margin-bottom:11px;"><div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
-    <div style="height:6px; background:var(--bg); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.round(amt/maxIn*100)}%; background:var(--ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No income recorded.</div>';
+    <div style="height:6px; background:var(--bg); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.max(0, Math.round(amt/maxIn*100))}%; background:var(--ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No income recorded.</div>';
   const maxOut = Math.max(1, ...Object.values(outCats));
   document.getElementById('summary-out-cats').innerHTML = Object.entries(outCats).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
     <div style="margin-bottom:11px;"><div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;"><span>${cat}</span><span class="amt">${fmt(amt)}</span></div>
-    <div style="height:6px; background:rgba(0,0,0,0.08); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.round(amt/maxOut*100)}%; background:var(--coral-ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No expenses recorded.</div>';
+    <div style="height:6px; background:rgba(0,0,0,0.08); border-radius:100px; overflow:hidden;"><div style="height:100%; width:${Math.max(0, Math.round(amt/maxOut*100))}%; background:var(--coral-ink); border-radius:100px;"></div></div></div>`).join('') || '<div class="empty-note">No expenses recorded.</div>';
   document.getElementById('cico-monthly-body').innerHTML = months.map(m=>`
     <tr><td>${m.label}</td><td style="text-align:right;" class="amt-in">${fmt(m.in)}</td><td style="text-align:right;" class="amt-out">${fmt(m.out)}</td><td style="text-align:right;" class="amt">${fmt(m.net)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="empty-note">No transactions yet.</td></tr>';
@@ -1730,8 +1754,8 @@ function renderMonthlyViews(t, outCats){
     || '<tr><td colspan="4" class="empty-note">No transactions yet.</td></tr>';
 
   // P&L Summary (Financials tab)
-  document.getElementById('pls-rev').textContent = fmt(t.totalIn);
-  document.getElementById('pls-exp').textContent = fmt(t.totalOut);
+  document.getElementById('pls-rev').textContent = fmt(nets.totalRev);
+  document.getElementById('pls-exp').textContent = fmt(nets.totalExp);
   document.getElementById('pls-net').textContent = fmt(t.netPL);
   const top = (obj,n)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);
   document.getElementById('pls-rev-cats').innerHTML = top(inCats,3).map(([cat,amt])=>
@@ -1741,8 +1765,7 @@ function renderMonthlyViews(t, outCats){
 }
 
 function renderTrialBalance(t){
-  const inCats = {}; transactions.filter(x=>x.type==='in').forEach(x=>{ inCats[x.category]=(inCats[x.category]||0)+Number(x.amount); });
-  const outCats = {}; transactions.filter(x=>x.type==='out').forEach(x=>{ outCats[x.category]=(outCats[x.category]||0)+Number(x.amount); });
+  const {inCats, outCats} = categoryNets();
 
   let rows = '';
   let totalDebit = 0, totalCredit = 0;
