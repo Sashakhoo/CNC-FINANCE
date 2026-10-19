@@ -100,6 +100,7 @@
 
 <script src="/assets/pdfjs/pdf.min.js"></script>
 <script src="/assets/sigpad.js"></script>
+<script src="/assets/dino.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -140,6 +141,10 @@ function showStatus(i){
 }
 
 async function load(){
+  Dino.show('Opening document…', 0);
+  try { await loadInner(); } finally { Dino.hide(true); }
+}
+async function loadInner(){
   try { INFO = await call(''); }
   catch(e){
     $('intro').className = 'card yellow';
@@ -231,8 +236,8 @@ async function finish(){
   if(!$('consent').checked){ $('err').textContent = 'Tick the box to agree to sign electronically.'; return; }
   const b = $('b-finish'); b.disabled = true; b.textContent = 'Signing…';
   try {
-    const i = await call('', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({consent: true, signature: state.signature, initials: state.initials, texts: state.texts})});
+    const i = await Dino.wrap(call('', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({consent: true, signature: state.signature, initials: state.initials, texts: state.texts})}), 'Signing…');
     INFO = i; showStatus(i); window.scrollTo(0, 0);
   } catch(e){ $('err').textContent = e.message; b.disabled = false; b.textContent = 'Finish'; }
 }

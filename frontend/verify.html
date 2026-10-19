@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex">
 <title>Code N Code Document Check</title>
 <link rel="icon" href="/favicon.ico">
+<script src="/assets/dino.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -97,12 +98,14 @@ function show(r){
 }
 async function call(url, opts){
   $('err').textContent = '';
+  Dino.show('Checking the document…');
   try {
     const res = await fetch(url, opts);
     const body = await res.json().catch(() => ({}));
     if(!res.ok){ $('err').textContent = typeof body.detail === 'string' ? body.detail : 'The check could not be completed. Please try again.'; return; }
     show(body);
   } catch(e){ $('err').textContent = 'Network error. Please try again.'; }
+  finally { Dino.hide(true); }
 }
 function checkId(id){
   id = (id || '').trim().toUpperCase();

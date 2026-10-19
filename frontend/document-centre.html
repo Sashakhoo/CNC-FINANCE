@@ -594,6 +594,7 @@
 
 <script src="/assets/pdfjs/pdf.min.js"></script>
 <script src="/assets/sigpad.js"></script>
+<script src="/assets/dino.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -783,9 +784,8 @@ $('file-in').addEventListener('change', e => { if(e.target.files[0]) uploadFile(
 async function uploadFile(f){
   if(!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf'){ toast('Only PDF files are supported.', true); return; }
   if(f.size > CFG.max_upload_mb * 1048576){ toast('File is larger than the ' + CFG.max_upload_mb + ' MB limit.', true); return; }
-  toast('Uploading…');
   try {
-    const d = await api('/stamp/documents?filename=' + encodeURIComponent(f.name), {method:'POST', body:f, headers:{'Content-Type':'application/pdf'}});
+    const d = await Dino.wrap(api('/stamp/documents?filename=' + encodeURIComponent(f.name), {method:'POST', body:f, headers:{'Content-Type':'application/pdf'}}), 'Uploading ' + f.name + '…');
     await openEditor(d.document_id);
   } catch(e){ fail(e); }
 }
@@ -828,6 +828,7 @@ const pageHpt = () => (doc && doc.pages && doc.pages[cur - 1] ? doc.pages[cur - 
 const ptk = () => H / pageHpt();                         // screen px per PDF point
 
 async function openEditor(id){
+  Dino.show('Opening document…');
   try {
     const d = await api('/stamp/documents/' + id);
     if(!d.can_edit){ showDoc(id); return; }
@@ -849,8 +850,10 @@ async function openEditor(id){
     $('mi-fields').lastChild.textContent = 'Hide form fields';
     const p1 = await pdf.getPage(1), v1 = p1.getViewport({scale: 1});
     fit = Math.max(0.3, Math.min(1.3, ($('stage').clientWidth - 60) / v1.width));
+    Dino.hide();
     buildThumbs(); await renderPage(); renderProps(); syncBar();
   } catch(e){ fail(e); }
+  Dino.hide(true);
 }
 function closeEditor(){ commitEdit(); if(items.length || Object.keys(fieldVals).length) saveDraft(true); disarm(); resetStamp(); }
 
@@ -1562,7 +1565,7 @@ async function finalize(){
   if(sendMode) return sendForSignature();
   const b = $('mc-go'); b.disabled = true; b.textContent = 'Generating…';
   try {
-    const d = await api('/stamp/documents/' + doc.document_id + '/finalize', {method:'POST', json: payload()});
+    const d = await Dino.wrap(api('/stamp/documents/' + doc.document_id + '/finalize', {method:'POST', json: payload()}), 'Stamping and registering your document…');
     closeModal('m-confirm');
     $('r-id').textContent = d.document_id;
     $('r-meta').textContent = d.original_filename + ' · ' + d.page_count + ' page(s) · registered by ' + CFG.settings.company_name;
@@ -1587,7 +1590,7 @@ async function copyText(t, btn){
 async function sendForSignature(){
   const b = $('mc-go'); b.disabled = true; b.textContent = 'Sending…';
   try {
-    const r = await api('/stamp/documents/' + doc.document_id + '/send-for-signature', {method:'POST', json: payload()});
+    const r = await Dino.wrap(api('/stamp/documents/' + doc.document_id + '/send-for-signature', {method:'POST', json: payload()}), 'Preparing signing links…');
     closeModal('m-confirm');
     $('ml-body').innerHTML = linkRows(r.links);
     pdf = null; doc = null; items = [];
@@ -1730,6 +1733,7 @@ async function saveSettings(){
 // ── Boot ──────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => { if(pdf && $('view-stamp').classList.contains('active')) renderPage(); });
 (async function init(){
+  Dino.show('Opening Document Centre…', 0);
   try {
     CFG = await api('/stamp/config');
     ME = await api('/me');
@@ -1742,8 +1746,9 @@ window.addEventListener('resize', () => { if(pdf && $('view-stamp').classList.co
     $('a-type').innerHTML += EVENTS.map(e => `<option>${e}</option>`).join('');
     if(CFG.user.is_admin){ $('f-user-wrap').style.display = ''; $('f-user').innerHTML += CFG.users.map(u => `<option>${esc(u)}</option>`).join(''); }
     await Promise.all([loadStampArt(), loadMySigs()]);
-    loadOverview();
+    await loadOverview();
   } catch(e){ fail(e); }
+  Dino.hide(true);
 })();
 </script>
 </body>

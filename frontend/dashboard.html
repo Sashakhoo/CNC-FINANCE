@@ -7,6 +7,7 @@
 <title>CNC Finance — Bento</title>
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/assets/favicon.png">
+<script src="/assets/dino.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -1088,7 +1089,7 @@ async function doLogin(e){
     setSetupMode(false);
     applyUser(await res.json());
     hideLogin();
-    await loadState();
+    await Dino.wrap(loadState(), 'Loading your dashboard…');
   } catch(_){ err.textContent = 'Network error'; }
   return false;
 }
@@ -1860,10 +1861,12 @@ document.querySelectorAll('table').forEach(t=>{
 
 // Bootstrap: check the session, then either load real state or show login.
 (async function init(){
+  Dino.show('Loading your dashboard…', 0);
   try {
     const res = await fetch('/api/me', {credentials:'same-origin'});
-    if(res.ok){ applyUser(await res.json()); await loadState(); return; }
+    if(res.ok){ applyUser(await res.json()); await loadState(); Dino.hide(true); return; }
   } catch(_){}
+  Dino.hide(true);
   // Not signed in — first run (no accounts yet) shows the create-account screen.
   try {
     const s = await fetch('/api/setup', {credentials:'same-origin'}).then(r=>r.json());
