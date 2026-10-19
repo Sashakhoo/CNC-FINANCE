@@ -162,6 +162,34 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS ix_stamp_verifications_created ON stamp_verifications(created_at);
 
+        CREATE TABLE IF NOT EXISTS stamp_signing (
+            document_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','COMPLETED','CANCELLED')),
+            plan_json TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_by_name TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS stamp_sign_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id TEXT NOT NULL,
+            signer_name TEXT NOT NULL,
+            signer_contact TEXT NOT NULL DEFAULT '',
+            token_hash TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'PENDING'
+                CHECK(status IN ('PENDING','SIGNED','DECLINED','CANCELLED')),
+            signature_file_key TEXT,
+            initials_file_key TEXT,
+            values_json TEXT,
+            decline_reason TEXT,
+            signed_at TEXT,
+            signer_ip TEXT,
+            signer_user_agent TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_stamp_sign_requests_doc ON stamp_sign_requests(document_id);
+
         CREATE TABLE IF NOT EXISTS stamp_settings (
             setting_key TEXT PRIMARY KEY,
             setting_value TEXT NOT NULL,
@@ -169,6 +197,17 @@ def init_db():
             updated_at TEXT NOT NULL
         );
         """)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(stamp_signatures)")}
+        if "kind" not in cols:      # signatures and initials, several saved per person
+            conn.execute("ALTER TABLE stamp_signatures ADD COLUMN kind TEXT NOT NULL DEFAULT 'signature'")
+        if "saved" not in cols:     # 0 = used once ("Save signature" unticked), hidden from the list
+            conn.execute("ALTER TABLE stamp_signatures ADD COLUMN saved INTEGER NOT NULL DEFAULT 1")
+        conn.execute("""CREATE TABLE IF NOT EXISTS stamp_doc_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id TEXT NOT NULL,
+            file_key TEXT NOT NULL,
+            created_by INTEGER,
+            created_at TEXT NOT NULL)""")
 
 
 # --- settings ------------------------------------------------------------
@@ -311,6 +350,49 @@ def get_signature(user_id: int):
         r = conn.execute(
             "SELECT * FROM stamp_signatures WHERE user_id = ? AND active = 1 ORDER BY id DESC LIMIT 1",
             (user_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def list_signatures(user_id: int) -> list:
+    with storage.get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, kind, created_at FROM stamp_signatures WHERE user_id = ? AND active = 1 AND saved = 1 "
+            "ORDER BY id DESC", (user_id,))]
+
+
+def get_own_signature(user_id: int, sig_id: int):
+    """A signature row only ever resolves for the person who created it."""
+    with storage.get_conn() as conn:
+        r = conn.execute("SELECT * FROM stamp_signatures WHERE id = ? AND user_id = ? AND active = 1",
+                         (sig_id, user_id)).fetchone()
+        return dict(r) if r else None
+
+
+def add_signature(user_id: int, file_key: str, kind: str = "signature", saved: bool = True) -> int:
+    ts = now_iso()
+    with storage.get_conn() as conn:
+        return conn.execute(
+            "INSERT INTO stamp_signatures(user_id, file_key, mime_type, active, kind, saved, created_at, updated_at) "
+            "VALUES (?,?,'image/png',1,?,?,?,?)",
+            (user_id, file_key, kind, 1 if saved else 0, ts, ts)).lastrowid
+
+
+def remove_signature(user_id: int, sig_id: int) -> bool:
+    with storage.get_conn() as conn:
+        return conn.execute("UPDATE stamp_signatures SET active = 0, updated_at = ? WHERE id = ? AND user_id = ?",
+                            (now_iso(), sig_id, user_id)).rowcount == 1
+
+
+def add_doc_image(document_id: str, file_key: str, user_id: int) -> int:
+    with storage.get_conn() as conn:
+        return conn.execute("INSERT INTO stamp_doc_images(document_id, file_key, created_by, created_at) "
+                            "VALUES (?,?,?,?)", (document_id, file_key, user_id, now_iso())).lastrowid
+
+
+def get_doc_image(document_id: str, image_id: int):
+    with storage.get_conn() as conn:
+        r = conn.execute("SELECT * FROM stamp_doc_images WHERE id = ? AND document_id = ?",
+                         (image_id, document_id)).fetchone()
         return dict(r) if r else None
 
 
@@ -491,3 +573,104 @@ def stats() -> dict:
             "drafts": c("SELECT COUNT(*) AS c FROM stamp_documents WHERE status IN ('DRAFT','FAILED')"),
             "verifications": c("SELECT COUNT(*) AS c FROM stamp_verifications"),
         }
+
+
+# --- e-signature requests -----------------------------------------------------
+# A document "out for signature" stays DRAFT in stamp_documents and has an
+# OPEN row in stamp_signing. Each signer gets a random link; only the SHA-256
+# of the link token is stored, so a database leak can't be used to sign.
+
+def token_hash(token: str) -> str:
+    import hashlib
+    return hashlib.sha256((token or "").encode()).hexdigest()
+
+
+def get_signing(document_id: str):
+    with storage.get_conn() as conn:
+        r = conn.execute("SELECT * FROM stamp_signing WHERE document_id = ?", (document_id,)).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    d["plan"] = json.loads(d.pop("plan_json") or "{}")
+    return d
+
+
+def list_sign_requests(document_id: str) -> list:
+    with storage.get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM stamp_sign_requests WHERE document_id = ? ORDER BY id", (document_id,))]
+
+
+def open_signing(document_id: str, plan: dict, signers: list, user: dict) -> dict:
+    """signers: [{name, contact}] -> {name_lower: (request_id, token)}"""
+    ts = now_iso()
+    links = {}
+    with storage.get_conn() as conn:
+        conn.execute("DELETE FROM stamp_signing WHERE document_id = ? AND status = 'CANCELLED'", (document_id,))
+        conn.execute(
+            "INSERT INTO stamp_signing(document_id, status, plan_json, created_by, created_by_name, created_at) "
+            "VALUES (?, 'OPEN', ?, ?, ?, ?)", (document_id, "{}", user["id"], user["username"], ts))
+        for s in signers:
+            token = secrets.token_urlsafe(32)
+            cur = conn.execute(
+                "INSERT INTO stamp_sign_requests(document_id, signer_name, signer_contact, token_hash, created_at) "
+                "VALUES (?,?,?,?,?)", (document_id, s["name"], s.get("contact", ""), token_hash(token), ts))
+            links[s["name"].lower()] = (cur.lastrowid, token)
+        plan = dict(plan)
+        plan["request_ids"] = {k: v[0] for k, v in links.items()}
+        conn.execute("UPDATE stamp_signing SET plan_json = ? WHERE document_id = ?", (json.dumps(plan), document_id))
+    return links
+
+
+def renew_sign_token(request_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    with storage.get_conn() as conn:
+        conn.execute("UPDATE stamp_sign_requests SET token_hash = ? WHERE id = ? AND status = 'PENDING'",
+                     (token_hash(token), request_id))
+    return token
+
+
+def get_sign_request_by_token(token: str):
+    if not token or len(token) > 100:
+        return None
+    with storage.get_conn() as conn:
+        r = conn.execute("SELECT * FROM stamp_sign_requests WHERE token_hash = ?", (token_hash(token),)).fetchone()
+    return dict(r) if r else None
+
+
+def record_signature(request_id: int, signature_key, initials_key, values: dict, ip: str,
+                     user_agent: str) -> bool:
+    with storage.get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE stamp_sign_requests SET status = 'SIGNED', signature_file_key = ?, initials_file_key = ?, "
+            "values_json = ?, signed_at = ?, signer_ip = ?, signer_user_agent = ? "
+            "WHERE id = ? AND status = 'PENDING'",
+            (signature_key, initials_key, json.dumps(values or {}), now_iso(), ip, (user_agent or "")[:300],
+             request_id))
+        return cur.rowcount == 1
+
+
+def decline_request(request_id: int, reason: str, ip: str, user_agent: str) -> bool:
+    with storage.get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE stamp_sign_requests SET status = 'DECLINED', decline_reason = ?, signed_at = ?, "
+            "signer_ip = ?, signer_user_agent = ? WHERE id = ? AND status = 'PENDING'",
+            (reason, now_iso(), ip, (user_agent or "")[:300], request_id))
+        return cur.rowcount == 1
+
+
+def cancel_signing(document_id: str) -> bool:
+    with storage.get_conn() as conn:
+        cur = conn.execute("UPDATE stamp_signing SET status = 'CANCELLED' WHERE document_id = ? AND status = 'OPEN'",
+                           (document_id,))
+        if cur.rowcount != 1:
+            return False
+        conn.execute("UPDATE stamp_sign_requests SET status = 'CANCELLED' WHERE document_id = ? "
+                     "AND status IN ('PENDING','DECLINED')", (document_id,))
+        return True
+
+
+def close_signing(document_id: str):
+    with storage.get_conn() as conn:
+        conn.execute("UPDATE stamp_signing SET status = 'COMPLETED', completed_at = ? WHERE document_id = ?",
+                     (now_iso(), document_id))

@@ -117,6 +117,13 @@ def verify_page(document_id: str = ""):
     return FileResponse(FRONTEND_DIR / "verify.html", headers={"Cache-Control": "no-store"})
 
 
+# Public: a person asked to sign opens their private link here. No login.
+@app.get("/sign/{token}", response_class=HTMLResponse)
+def sign_page(token: str):
+    return FileResponse(FRONTEND_DIR / "sign.html", headers={"Cache-Control": "no-store",
+                                                             "Referrer-Policy": "no-referrer"})
+
+
 @app.get("/favicon.ico")
 def favicon():
     return FileResponse(FRONTEND_DIR / "assets" / "favicon.ico")

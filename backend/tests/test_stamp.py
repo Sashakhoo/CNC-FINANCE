@@ -213,24 +213,37 @@ def test_cross_site_write_refused(staff):
     assert r.status_code == 403
 
 
-def test_signature_is_private(staff, staff2):
+def _sig_png():
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (300, 120), (0, 0, 0, 0))
     ImageDraw.Draw(img).line([(10, 100), (120, 20), (290, 90)], fill=(10, 10, 120, 255), width=5)
     buf = io.BytesIO()
     img.save(buf, "PNG")
-    assert staff.post("/api/stamp/signature", content=buf.getvalue(), headers=ORIGIN).status_code == 200
-    assert staff.get("/api/stamp/signature/image").status_code == 200
-    assert staff2.get("/api/stamp/signature/image").status_code == 404   # staff2 has none of their own
+    return buf.getvalue()
+
+
+def test_signature_is_private(staff, staff2):
+    sid = staff.post("/api/stamp/signatures", content=_sig_png(), headers=ORIGIN).json()["id"]
+    assert staff.get(f"/api/stamp/signatures/{sid}/image").status_code == 200
+    assert staff2.get(f"/api/stamp/signatures/{sid}/image").status_code == 404     # not theirs
+    assert sid in [s["id"] for s in staff.get("/api/stamp/signatures").json()]
+    assert sid not in [s["id"] for s in staff2.get("/api/stamp/signatures").json()]
     doc = upload(staff2).json()
     r = staff2.post(f"/api/stamp/documents/{doc['document_id']}/finalize", headers=ORIGIN,
-                    json={"items": [{**item(None), "kind": "signature"}]})
+                    json={"items": [{**item(None), "kind": "signature", "sig_id": sid}]})
     assert r.status_code == 400 and "signature" in r.json()["detail"].lower()
     # and staff's own signature stamps fine
     doc = upload(staff).json()
     r = staff.post(f"/api/stamp/documents/{doc['document_id']}/finalize", headers=ORIGIN,
-                   json={"items": [{**item(None), "kind": "signature"}]})
+                   json={"items": [{**item(None), "kind": "signature", "sig_id": sid}]})
     assert r.status_code == 200, r.text
+    # initials, and an unsaved one-off signature hidden from the list
+    ini = staff.post("/api/stamp/signatures?kind=initials", content=_sig_png(), headers=ORIGIN).json()
+    assert ini["kind"] == "initials"
+    once = staff.post("/api/stamp/signatures?saved=false", content=_sig_png(), headers=ORIGIN).json()["id"]
+    assert once not in [s["id"] for s in staff.get("/api/stamp/signatures").json()]
+    assert staff.delete(f"/api/stamp/signatures/{sid}", headers=ORIGIN).status_code == 200
+    assert staff.get(f"/api/stamp/signatures/{sid}/image").status_code == 404
 
 
 # --- upload validation --------------------------------------------------------
@@ -395,7 +408,8 @@ def test_wording_never_overclaims():
     root = pathlib.Path(main.__file__).resolve().parent.parent
     banned = ["legally certified", "government verified", "lhdn approved", "ssm verified",
               "qualified digital signature", "official digital certificate"]
-    for f in [root / "frontend" / "document-centre.html", root / "frontend" / "verify.html"]:
+    for f in [root / "frontend" / "document-centre.html", root / "frontend" / "verify.html",
+              root / "frontend" / "sign.html", root / "frontend" / "assets" / "sigpad.js"]:
         if f.exists():
             text = f.read_text(encoding="utf-8").lower()
             assert not [b for b in banned if b in text], f.name

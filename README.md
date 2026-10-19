@@ -162,4 +162,23 @@ Optional environment variables:
 | `APP_URL` | taken from the request | base URL printed in the verification QR code |
 | `MAX_UPLOAD_MB` | `50` | hard ceiling for the upload limit set in Settings |
 
-Tests: `cd backend && python -m pytest tests -q`
+### Editing and signing (Sejda-style editor)
+
+The editor toolbar offers **Text** (add text, or click existing words to
+change them — whiteout + new text), **Links**, **Forms** (fill the PDF's own
+form fields; checkmark / cross / dot), **Images** (upload, company stamps),
+**Sign** (type in a handwriting style, draw, upload or photograph a
+signature or initials; saved per person and private), **Whiteout**,
+**Annotate** (highlight, strikethrough, underline, freehand), **Shapes**
+(rectangle, ellipse, line, arrow), Undo/Redo, and "Repeat on all pages".
+Everything is flattened into the page; form fields are filled and flattened.
+
+**Send for signature**: place boxes (signature, initials, text, date) for
+other people, then copy each person's private link (`/sign/<token>`) to send
+by WhatsApp/email. Signers need no account. When the last one signs, the final
+PDF is produced with a Signature Certificate page (names, times, partly masked
+IP, device), hashed and registered. Links can be re-issued or the request
+cancelled from Documents → Details. Only a SHA-256 of each link is stored.
+
+Tests: `cd backend && python -m pytest tests -q` (needs `PyMuPDF` for the
+edit/sign tests; it is not a runtime dependency)
