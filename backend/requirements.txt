@@ -16,3 +16,9 @@ tinycss2==1.3.0
 cssselect2==0.7.0
 pyphen==0.15.0
 cffi==1.17.1
+
+# Document Centre: PDF stamping (flattened overlay), QR codes, timezone data.
+pypdf==6.19.0
+reportlab==4.4.0
+segno==1.6.6
+tzdata==2024.2

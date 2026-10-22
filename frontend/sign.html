@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15141a">
+<meta name="robots" content="noindex">
+<title>Sign Document · Code N Code</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2efe8; --panel:#ffffff; --ink:#15141a; --ink-2:#3a3846; --dim:#8b8894; --line:#eae6db;
+    --lime:#d7f26d; --lime-ink:#3a4408; --lavender:#d9d3fb; --lavender-ink:#3a3266;
+    --coral:#ffb7a6; --coral-ink:#5c2213; --cyan:#bdeef2; --cyan-ink:#0c3a3d; --yellow:#ffe08a; --yellow-ink:#4a3402;
+    --shadow:0 8px 30px rgba(20,18,25,0.06), 0 2px 8px rgba(20,18,25,0.04);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; font-size:14px; min-height:100vh; padding:20px 16px 120px;}
+  h1,h2{font-family:'Space Grotesk',sans-serif;}
+  button{font-family:'Inter',sans-serif; cursor:pointer;}
+  button:focus-visible, input:focus-visible, a:focus-visible{outline:2px solid var(--ink); outline-offset:2px;}
+  .wrap{max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:42px; height:42px; border-radius:15px; background:var(--ink); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .brand-mark img{width:26px; height:26px; object-fit:contain;}
+  .brand h1{font-size:18px; font-weight:600; letter-spacing:-0.3px;}
+  .brand .sub{color:var(--dim); font-size:12.5px; font-weight:500; margin-top:2px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:var(--shadow);}
+  .card.lime{background:var(--lime); color:var(--lime-ink); border:none;}
+  .card.coral{background:var(--coral); color:var(--coral-ink); border:none;}
+  .card.yellow{background:var(--yellow); color:var(--yellow-ink); border:none;}
+  .card h2{font-size:21px; font-weight:600; letter-spacing:-0.3px; margin-bottom:6px;}
+  .msg{font-size:14px; line-height:1.55;}
+  .kv{display:flex; justify-content:space-between; gap:14px; padding:8px 0; border-top:1px solid var(--line); font-size:13px;}
+  .kv:first-of-type{margin-top:12px;}
+  .kv span:first-child{color:var(--dim); font-weight:600;}
+  .kv span:last-child{font-weight:600; text-align:right;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .pages{display:flex; flex-direction:column; gap:14px; align-items:center;}
+  .pg{position:relative; background:#fff; box-shadow:0 10px 30px rgba(20,18,25,.14); line-height:0; max-width:100%;}
+  .pg canvas{display:block; max-width:100%;}
+  .pg-no{font-size:11px; color:var(--dim); font-weight:600; margin-top:-6px;}
+  .fld{position:absolute; border:2px dashed #e0a800; background:rgba(255,224,138,.55); border-radius:4px; display:flex; align-items:center; justify-content:center;
+       font:600 11px Inter, sans-serif; color:#4a3402; cursor:pointer; line-height:1.1; text-align:center; padding:2px; overflow:hidden;}
+  .fld.done{border:1.5px solid #7bbf3f; background:rgba(231,247,201,.35);}
+  .fld img{max-width:100%; max-height:100%; pointer-events:none;}
+  .fld input{width:100%; height:100%; border:none; background:transparent; font:12px Helvetica, Arial, sans-serif; color:#15141a; padding:0 3px;}
+  .fld input:focus{outline:2px solid #2f6df6;}
+  .fld.date{cursor:default;}
+  .bar{position:fixed; left:0; right:0; bottom:0; background:var(--panel); border-top:1px solid var(--line); box-shadow:0 -6px 24px rgba(20,18,25,.08);
+       padding:12px 16px calc(12px + env(safe-area-inset-bottom)); z-index:50;}
+  .bar-in{max-width:900px; margin:0 auto; display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  .bar label{display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.4; flex:1; min-width:220px;}
+  .bar input[type=checkbox]{margin-top:2px; accent-color:var(--ink); width:16px; height:16px; flex-shrink:0;}
+  .btn{border-radius:100px; padding:11px 20px; font-size:13px; font-weight:600; border:1px solid var(--line); background:var(--panel); color:var(--ink-2); text-decoration:none; display:inline-flex; align-items:center; gap:6px;}
+  .btn.go{background:var(--ink); color:var(--lime); border:none;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .linkish{background:none; border:none; color:var(--dim); font-size:12.5px; text-decoration:underline; padding:4px;}
+  .progress{font-size:12px; font-weight:600; color:var(--dim); white-space:nowrap;}
+  .note{font-size:11.5px; color:var(--dim); line-height:1.6;}
+  .err{color:#a13d20; font-size:12.5px; min-height:16px;}
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(21,20,26,0.55); z-index:100; align-items:center; justify-content:center; padding:16px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff; width:460px; max-width:100%; border-radius:22px; padding:24px;}
+  .modal h2{font-size:18px; margin-bottom:8px;}
+  textarea{width:100%; min-height:90px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px; font:13px Inter, sans-serif; margin-top:8px;}
+  .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-mark"><img src="/assets/logo-icon-light.png" alt=""></div>
+    <div><h1>Sign document</h1><div class="sub" id="co">Code N Code Solution</div></div>
+  </div>
+  <div class="card" id="intro" aria-live="polite"><div class="note">Loading…</div></div>
+  <div class="pages" id="pages"></div>
+  <div class="note" style="text-align:center;" id="foot-note"></div>
+</div>
+
+<div class="bar" id="bar" style="display:none;">
+  <div class="bar-in">
+    <span class="progress" id="progress"></span>
+    <label><input type="checkbox" id="consent"> I agree to sign this document electronically, and that my electronic signature here stands for my signature on this document.</label>
+    <button class="linkish" onclick="openDecline()">Decline</button>
+    <button class="btn" id="b-next" onclick="nextField()">Next field</button>
+    <button class="btn go" id="b-finish" onclick="finish()">Finish</button>
+  </div>
+  <div class="bar-in"><span class="err" id="err" role="alert"></span></div>
+</div>
+
+<div class="modal-overlay" id="m-decline"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-title">
+  <h2 id="d-title">Decline to sign?</h2>
+  <div class="note">The sender will see that you declined, and the reason if you give one.</div>
+  <textarea id="d-reason" maxlength="300" placeholder="Reason (optional)"></textarea>
+  <div class="actions"><button class="btn" onclick="document.getElementById('m-decline').classList.remove('open')">Back</button><button class="btn go" onclick="decline()">Decline</button></div>
+</div></div>
+
+<script src="/assets/pdfjs/pdf.min.js"></script>
+<script src="/assets/sigpad.js"></script>
+<script src="/assets/dino.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.js';
+const token = (location.pathname.match(/^\/sign\/([A-Za-z0-9_-]{10,100})$/) || [])[1] || '';
+let INFO = null;
+const state = {signature: null, initials: null, texts: {}};
+
+async function call(path, opts){
+  const res = await fetch('/api/sign/' + token + (path || ''), opts);
+  const body = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Something went wrong. Please try again.');
+  return body;
+}
+
+function showStatus(i){
+  $('bar').style.display = 'none';
+  const intro = $('intro');
+  const fileRow = `<div class="kv"><span>Document</span><span>${esc(i.filename)}</span></div><div class="kv"><span>Document ID</span><span class="mono">${esc(i.document_id)}</span></div>`;
+  if(i.status === 'CANCELLED'){
+    intro.className = 'card yellow';
+    intro.innerHTML = `<h2>Request withdrawn</h2><div class="msg">${esc(i.sender)} cancelled this signature request. Nothing more is needed from you.</div>${fileRow}`;
+  } else if(i.status === 'DECLINED'){
+    intro.className = 'card coral';
+    intro.innerHTML = `<h2>You declined to sign</h2><div class="msg">${esc(i.sender)} has been told. If this was a mistake, ask them to send you a new link.</div>${fileRow}`;
+  } else {
+    intro.className = 'card lime';
+    intro.innerHTML = `<h2>${i.completed ? 'Everyone has signed' : 'Thank you — you have signed'}</h2>
+      <div class="msg">${i.completed ? `The final document has been registered by ${esc(i.company)}. You can download your copy below.`
+        : `Waiting for ${i.total - i.signed_count} more ${i.total - i.signed_count === 1 ? 'person' : 'people'} to sign. Open this same link later to download the signed copy.`}</div>
+      ${fileRow}
+      ${i.completed ? `<div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;"><a class="btn go" href="/api/sign/${token}/file?download=1">Download signed PDF</a>
+        <a class="btn" href="/verify/${esc(i.document_id)}" target="_blank" rel="noopener">Check registration</a></div>` : ''}`;
+  }
+  $('pages').innerHTML = '';
+  $('foot-note').textContent = '';
+}
+
+async function load(){
+  Dino.show('Opening document…', 0);
+  try { await loadInner(); } finally { Dino.hide(true); }
+}
+async function loadInner(){
+  try { INFO = await call(''); }
+  catch(e){
+    $('intro').className = 'card yellow';
+    $('intro').innerHTML = `<h2>Link not valid</h2><div class="msg">${esc(e.message)}</div>`;
+    return;
+  }
+  $('co').textContent = INFO.company;
+  if(INFO.status !== 'PENDING'){ showStatus(INFO); return; }
+  $('intro').className = 'card';
+  $('intro').innerHTML = `<h2>${esc(INFO.signer_name)}, please sign</h2>
+    <div class="msg">${esc(INFO.sender)} at ${esc(INFO.company)} has asked you to sign this document. Click each yellow box to fill it in, then tick the agreement and press <b>Finish</b>.</div>
+    <div class="kv"><span>Document</span><span>${esc(INFO.filename)}</span></div>
+    <div class="kv"><span>Pages</span><span>${INFO.page_count}</span></div>
+    <div class="kv"><span>Signers</span><span>${INFO.signed_count} of ${INFO.total} signed</span></div>`;
+  $('foot-note').textContent = 'Your signature is added only to this document. When everyone has signed, ' + INFO.company + ' registers the final file so it can be checked later.';
+  $('bar').style.display = '';
+  await renderPages();
+  updateProgress();
+}
+
+async function renderPages(){
+  const buf = await fetch('/api/sign/' + token + '/file').then(r => { if(!r.ok) throw new Error('The document could not be loaded.'); return r.arrayBuffer(); });
+  const pdf = await pdfjsLib.getDocument({data: buf, isEvalSupported: false}).promise;
+  const box = $('pages'); box.innerHTML = '';
+  const maxW = Math.min(box.clientWidth || 860, 860), jobs = [];
+  // Lay out every page and its boxes first, then paint the pages one by one,
+  // so the boxes to fill are usable straight away.
+  for(let n = 1; n <= pdf.numPages; n++){
+    const page = await pdf.getPage(n), v1 = page.getViewport({scale: 1});
+    const vp = page.getViewport({scale: maxW / v1.width}), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const wrap = document.createElement('div'); wrap.className = 'pg'; wrap.style.width = vp.width + 'px'; wrap.style.height = vp.height + 'px';
+    const c = document.createElement('canvas'); c.width = vp.width * dpr; c.height = vp.height * dpr; c.style.width = vp.width + 'px'; c.style.height = vp.height + 'px';
+    wrap.appendChild(c); box.appendChild(wrap);
+    const no = document.createElement('div'); no.className = 'pg-no'; no.textContent = 'Page ' + n + ' of ' + pdf.numPages; box.appendChild(no);
+    for(const f of INFO.fields.filter(f => f.page === n)) wrap.appendChild(fieldEl(f, vp.width, vp.height));
+    jobs.push(() => page.render({canvasContext: c.getContext('2d'), viewport: vp, transform: dpr !== 1 ? [dpr,0,0,dpr,0,0] : null}).promise);
+  }
+  (async () => { for(const job of jobs){ try { await job(); } catch(e){} } })();
+}
+
+function fieldEl(f, W, H){
+  const el = document.createElement('div');
+  el.className = 'fld ' + f.field; el.dataset.idx = f.idx; el.dataset.kind = f.field;
+  el.style.left = f.x * W + 'px'; el.style.top = f.y * H + 'px'; el.style.width = f.w * W + 'px'; el.style.height = f.h * H + 'px';
+  if(f.rotation) el.style.transform = 'rotate(' + f.rotation + 'deg)';
+  if(f.field === 'text'){
+    el.innerHTML = `<input aria-label="Text to fill in" maxlength="200" placeholder="Type here" value="${esc(state.texts[f.idx] || '')}" style="font-size:${Math.min(f.h * H * 0.62, 16)}px">`;
+    const inp = el.querySelector('input');
+    inp.addEventListener('input', () => { state.texts[f.idx] = inp.value; el.classList.toggle('done', !!inp.value.trim()); updateProgress(); });
+  } else if(f.field === 'date'){
+    el.textContent = INFO.date_preview; el.classList.add('done'); el.title = 'Filled in automatically when you finish';
+  } else {
+    el.setAttribute('role', 'button'); el.tabIndex = 0;
+    el.setAttribute('aria-label', f.field === 'initials' ? 'Add your initials' : 'Add your signature');
+    paintSig(el);
+    el.addEventListener('click', () => signBox(f.field));
+    el.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); signBox(f.field); } });
+  }
+  return el;
+}
+function paintSig(el){
+  const v = state[el.dataset.kind];
+  el.classList.toggle('done', !!v);
+  el.innerHTML = v ? `<img src="${v}" alt="">` : (el.dataset.kind === 'initials' ? 'Click to<br>initial' : 'Click to sign');
+}
+async function signBox(kind){
+  const r = await SigCreator.open({kind, name: INFO.signer_name, allowSave: false});
+  if(!r) return;
+  state[kind] = r.dataUrl;
+  document.querySelectorAll(`.fld[data-kind="${kind}"]`).forEach(paintSig);
+  updateProgress();
+}
+function pending(){
+  return [...document.querySelectorAll('.fld')].filter(el => !el.classList.contains('done'));
+}
+function updateProgress(){
+  const all = document.querySelectorAll('.fld').length, left = pending().length;
+  $('progress').textContent = left ? `${all - left} of ${all} done` : 'All boxes filled';
+  $('b-next').style.display = left ? '' : 'none';
+}
+function nextField(){
+  const el = pending()[0]; if(!el) return;
+  el.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center'});
+  const inp = el.querySelector('input'); if(inp) setTimeout(() => inp.focus(), 300); else el.focus();
+}
+async function finish(){
+  $('err').textContent = '';
+  if(pending().length){ $('err').textContent = 'Fill in every yellow box first.'; nextField(); return; }
+  if(!$('consent').checked){ $('err').textContent = 'Tick the box to agree to sign electronically.'; return; }
+  const b = $('b-finish'); b.disabled = true; b.textContent = 'Signing…';
+  try {
+    const i = await Dino.wrap(call('', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({consent: true, signature: state.signature, initials: state.initials, texts: state.texts})}), 'Signing…');
+    INFO = i; showStatus(i); window.scrollTo(0, 0);
+  } catch(e){ $('err').textContent = e.message; b.disabled = false; b.textContent = 'Finish'; }
+}
+function openDecline(){ $('m-decline').classList.add('open'); setTimeout(() => $('d-reason').focus(), 30); }
+async function decline(){
+  try {
+    const i = await call('/decline', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({reason: $('d-reason').value})});
+    $('m-decline').classList.remove('open'); INFO = i; showStatus(i);
+  } catch(e){ $('m-decline').classList.remove('open'); $('err').textContent = e.message; }
+}
+load();
+</script>
+</body>
+</html>

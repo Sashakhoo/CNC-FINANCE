@@ -114,6 +114,15 @@ def init_db():
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS tutors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            ic TEXT NOT NULL DEFAULT '',
+            tax_no TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS documents (
             kind TEXT NOT NULL,
             ref_id INTEGER NOT NULL,
@@ -292,6 +301,19 @@ def get_invoice(iid: int):
         return _attach_items(dict(r)) if r else None
 
 
+def get_invoice_by_number(number: str):
+    """Look up an invoice by its document number (e.g. 'INV-164') — case-
+    insensitive and tolerant of a bare number ('164') or missing dash."""
+    number = (number or "").strip().upper()
+    if number and not number.startswith("INV") and number.isdigit():
+        number = f"INV-{number}"
+    elif number and "INV" in number and "-" not in number:
+        number = number.replace("INV", "INV-", 1)
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM invoices WHERE UPPER(number) = ?", (number,)).fetchone()
+        return _attach_items(dict(r)) if r else None
+
+
 def insert_asset(name, category, cost, dep=0.0) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -318,12 +340,14 @@ def mark_invoice_paid(iid: int):
     # Best-guess category — the dashboard's inline category dropdown lets you
     # correct this per-transaction (e.g. to Workshop Revenue) in one click.
     category_code("Course Revenue", "in")
-    insert_transaction(
+    tx_id = insert_transaction(
         date=inv["date"], description=desc,
         tx_type="in", category="Course Revenue", amount=inv["amount"],
         payer_payee=inv["contact"],
     )
-    return get_invoice(iid)
+    result = get_invoice(iid)
+    result["_transaction_id"] = tx_id
+    return result
 
 
 def set_invoice_status(iid: int, status: str):
@@ -475,9 +499,11 @@ def next_counter(name: str) -> int:
 
 
 def next_document_number(prefix: str) -> str:
-    """e.g. next_document_number('RCP') -> 'RCP-0007'"""
+    """e.g. next_document_number('RCP') -> 'RCP-111' — 3-digit minimum,
+    matching the business's real historical numbering (INV-159, RCP-156,
+    QUO-111, ...), not artificially padded to 4 digits."""
     n = next_counter(prefix)
-    return f"{prefix}-{n:04d}"
+    return f"{prefix}-{n:03d}"
 
 
 def category_code(category: str, tx_type: str) -> str:
@@ -507,7 +533,14 @@ def insert_transaction(date, description, tx_type, category, amount, payer_payee
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (date, description, tx_type, category, amount, payer_payee, chat_id)
         )
-        return cur.lastrowid
+        tx_id = cur.lastrowid
+    if tx_type == "in":
+        # Assign the RCP number the moment the cash-in transaction is
+        # logged, not only when someone later clicks to generate the PDF —
+        # so the RCP sequence tallies 1:1 with actual cash-in transactions
+        # instead of only counting documents someone happened to print.
+        get_or_create_document_number("receipt", tx_id, "RCP")
+    return tx_id
 
 
 def get_transaction(tx_id: int):
@@ -756,3 +789,56 @@ def post_payroll_run(run_id: int, date: str):
     with get_conn() as conn:
         conn.execute("UPDATE payroll_runs SET status = 'paid' WHERE id = ?", (run_id,))
     return get_payroll_run(run_id)
+
+
+def update_invoice(iid: int, contact, date, due, amount, description="",
+                    discount_pct=0.0, remarks="", items=None):
+    """Amends an existing invoice in place — same field shape as
+    insert_invoice. Status is left untouched (use set_invoice_status for
+    that); the invoice's document number never changes."""
+    if items:
+        amount = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM invoices WHERE id = ?", (iid,)).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE invoices SET contact = ?, date = ?, due = ?, amount = ?, "
+            "description = ?, discount_pct = ?, remarks = ? WHERE id = ?",
+            (contact, date, due, amount, description or "", discount_pct or 0, remarks or "", iid)
+        )
+    if items is not None:
+        set_invoice_items(iid, items)
+    return get_invoice(iid)
+
+
+# --- Tutors (freelance, paid per class) -----------------------------------
+# Personal details kept for yearly payment statements. Deliberately not
+# part of /api/state, so IC numbers only leave the DB via the tutor
+# endpoints (director-only).
+
+TUTOR_FIELDS = ("ic", "tax_no", "address", "phone", "email")
+
+
+def list_tutors() -> list:
+    return _rows("SELECT * FROM tutors ORDER BY name COLLATE NOCASE")
+
+
+def get_tutor(tid: int):
+    rows = _rows("SELECT * FROM tutors WHERE id = ?", (tid,))
+    return rows[0] if rows else None
+
+
+def ensure_tutor(name: str) -> dict:
+    with get_conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO tutors(name) VALUES (?)", (name,))
+    return _rows("SELECT * FROM tutors WHERE name = ? COLLATE NOCASE", (name,))[0]
+
+
+def update_tutor(tid: int, fields: dict):
+    fields = {k: (v or "").strip() for k, v in fields.items() if k in TUTOR_FIELDS}
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE tutors SET {sets} WHERE id = ?", (*fields.values(), tid))

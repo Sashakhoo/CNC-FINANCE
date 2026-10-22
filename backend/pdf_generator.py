@@ -198,7 +198,8 @@ def _payment_block(reference: str) -> str:
     return f'<h2 class="sec">PAYMENT</h2><div class="pay-grid">{cells}</div>'
 
 
-def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True) -> str:
+def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True,
+            thanks: str = "Thank you for learning with us!") -> str:
     today = _date.today().strftime("%d %B %Y")
     standard_terms = (
         '<div><b>Payment Terms:</b> Payment is due within 14 days from the issue date.</div>'
@@ -212,7 +213,7 @@ def _footer(doc_no: str, extra_terms: str = "", payment_terms: bool = True) -> s
     <div class="foot">
       <div><span class="strong">{_esc(BUSINESS_NAME)}</span> • SSM No.: 202603072017 (AS0511861-M)</div>
       <div>{_esc(BUSINESS_SITE)} • codencodemy@gmail.com • 0196811628</div>
-      <div>Thank you for learning with us!</div>
+      {f"<div>{_esc(thanks)}</div>" if thanks else ""}
       <div><i>This is a computer-generated document. No signature is required.</i></div>
       <div>{_esc(doc_no)} • Generated {today}</div>
     </div>
@@ -409,4 +410,165 @@ def render_payslip_pdf(payslip_no: str, period_label: str, teacher: dict, item: 
         deductions_html,
         net_html,
         _footer(payslip_no, payment_terms=False),
+    )
+
+
+def _ws_table(rows: list, head: tuple = ("Form B field", "Amount")) -> str:
+    """rows: (label, amount_or_None, css_class) — class '' / 'sub' / 'total'."""
+    body = ""
+    for label, amt, cls in rows:
+        if amt is None:
+            val = ""
+        elif round(amt, 2) < 0:
+            val = f"({_rm(-amt)})"
+        else:
+            val = _rm(abs(amt))
+        body += f'<tr class="{cls}"><td>{_esc(label)}</td><td class="r">{val}</td></tr>'
+    return (f'<table class="items ws"><tr><th>{_esc(head[0])}</th><th class="r">{_esc(head[1])}</th></tr>'
+            f'{body}</table>')
+
+
+WS_CSS = """
+<style>
+table.ws td { padding: 5px 10px; }
+table.ws td.r { white-space: nowrap; }
+table.ws tr.sub td { color: #555; font-size: 8pt; padding: 2px 10px 2px 26px; border-bottom: none; }
+table.ws tr.total td { font-weight: bold; border-top: 1px solid #cfcabb; }
+table.ws tr.key td { font-weight: bold; background: #e7f9f2; }
+.ws-note { font-size: 7.5pt; color: #555; margin-top: 6px; }
+</style>
+"""
+
+
+def render_form_b_worksheet_pdf(ws: dict) -> bytes:
+    """Figures for the MyTax e-Filing Form B, laid out in the order the
+    form asks for them. `ws` comes from tax.form_b_worksheet()."""
+    ya = ws["year"]
+    doc_no = f"FORM-B-YA{ya}"
+    pl, adj, rel, tax, bs = ws["pl"], ws["adjustment"], ws["reliefs"], ws["tax"], ws["balance_sheet"]
+    today = _date.today().strftime("%d %B %Y")
+
+    pl_rows = [("Gross sales / course fees", pl["gross_sales"], "")]
+    if pl["returns"]:
+        pl_rows.append(("Less refunds to customers", -pl["returns"], ""))
+    pl_rows.append(("Sales / turnover", pl["turnover"], "total"))
+    pl_rows.append(("Cost of sales (no stock held)", 0.0, ""))
+    pl_rows.append(("Gross profit", pl["turnover"], "total"))
+    pl_rows.append(("Other business income", pl["total_other_income"], ""))
+    if len(pl["other_income"]) > 1:
+        pl_rows += [(c, a, "sub") for c, a in pl["other_income"]]
+    for label, amt, items in pl["expense_lines"]:
+        pl_rows.append((label, amt, ""))
+        if len(items) > 1:
+            pl_rows += [(c, a, "sub") for c, a in items]
+    pl_rows.append(("Total expenses", pl["total_expenses"], "total"))
+    pl_rows.append(("Net profit / (loss)", pl["net_profit"], "key"))
+
+    adj_rows = [
+        ("Net profit per accounts", adj["net_profit"], ""),
+        ("Add: non-allowable expenses (drawings already excluded above)", 0.0, ""),
+        ("Adjusted income", adj["adjusted"], "total"),
+        ("Less: capital allowances (from your asset schedule, not computed)", 0.0, ""),
+        ("Statutory income from business", adj["adjusted"], "key"),
+    ]
+
+    rel_rows = [("Individual (automatic)", rel["individual"], "")]
+    for key, label in (("epf", "EPF + life insurance"), ("socso", "SOCSO / EIS"),
+                       ("lifestyle", "Lifestyle"), ("other", "Other reliefs")):
+        if rel[key]:
+            rel_rows.append((label, rel[key], ""))
+    rel_rows.append(("Total reliefs", rel["total"], "total"))
+
+    tax_rows = [
+        ("Total income (statutory business income, no other sources)", adj["adjusted"], ""),
+        ("Less total reliefs", -rel["total"], ""),
+        ("Chargeable income", tax["chargeable"], "key"),
+    ]
+    for lower, upper, rate, amt in tax["bands"]:
+        span = f"{lower:,.0f} – {upper:,.0f}" if upper != float("inf") else f"above {lower:,.0f}"
+        tax_rows.append((f"{rate * 100:g}% on {span}", amt, "sub"))
+    tax_rows += [
+        ("Income tax on chargeable income", tax["gross"], "total"),
+        ("Less rebate (chargeable income ≤ RM35,000)" if tax["chargeable"] <= 35000
+         else "Rebate (not eligible, chargeable income > RM35,000)", -tax["rebate"], ""),
+        ("Less zakat paid", -tax["zakat"], ""),
+        ("Tax payable", tax["payable"], "key"),
+    ]
+
+    bs_rows = [
+        ("Fixed assets (net book value)", bs["fixed_assets"], ""),
+        ("Trade debtors", bs["debtors"], ""),
+        ("Cash in hand and at bank", bs["cash"], ""),
+        ("Total assets", bs["total_assets"], "total"),
+        ("Trade creditors", bs["creditors"], ""),
+        ("Total liabilities", bs["creditors"], "total"),
+        ("Capital brought forward / contributed (balancing figure)", bs["capital_bf"], ""),
+        ("Add: capital introduced by owner", bs.get("capital_in", 0.0), ""),
+        ("Add: net profit for the year", bs["net_profit"], ""),
+        ("Less: drawings", -bs["drawings"], ""),
+        ("Capital carried forward", bs["capital_cf"], "key"),
+    ]
+
+    body = (
+        WS_CSS
+        + _header("FORM B WORKSHEET", f"Year of Assessment {ya}",
+                  [("Basis period", f"1 Jan – 31 Dec {ya}"), ("Prepared", today)], None)
+        + '<div class="muted">Figures for LHDN MyTax e-Filing (Form B, individual with business income). '
+          'Copy each amount into the matching field. This worksheet is not submitted to LHDN.</div>'
+        + '<h2 class="sec">1. PROFIT &amp; LOSS (FINANCIAL PARTICULARS OF BUSINESS)</h2>' + _ws_table(pl_rows)
+        + '<h2 class="sec">2. BUSINESS INCOME ADJUSTMENT</h2>' + _ws_table(adj_rows)
+        + '<h2 class="sec">3. RELIEFS</h2>' + _ws_table(rel_rows)
+        + '<h2 class="sec">4. TAX COMPUTATION</h2>' + _ws_table(tax_rows)
+        + '<h2 class="sec">5. BALANCE SHEET (FINANCIAL PARTICULARS OF BUSINESS)</h2>' + _ws_table(bs_rows)
+        + '<div class="ws-note">Cash is the ledger balance at year end. Debtors, creditors and fixed assets are the '
+          'values currently recorded in the system. Keep receipts for every expense and relief claimed for 7 years. '
+          f'Form B for YA {ya} is due 30 June {int(ya) + 1}. Estimate only — confirm on MyTax before submitting.</div>'
+        + _footer(doc_no, payment_terms=False, thanks="")
+    )
+    return _page(body)
+
+
+def render_tutor_statement_pdf(doc_no: str, year: int, tutor: dict, payments: list) -> bytes:
+    """Yearly statement of fees paid to a freelance tutor (not employment,
+    so no EA form). `payments`: ledger transactions; an "in" row is money
+    the tutor returned and is shown negative."""
+    lines = []
+    if tutor.get("ic"):
+        lines.append(f"IC No.: {tutor['ic']}")
+    if tutor.get("tax_no"):
+        lines.append(f"Income Tax No.: {tutor['tax_no']}")
+    lines += (tutor.get("address") or "").splitlines()
+    contact = " • ".join(v for v in (tutor.get("phone"), tutor.get("email")) if v)
+    if contact:
+        lines.append(contact)
+
+    body, total = "", 0.0
+    for t in payments:
+        amt = float(t["amount"]) * (1 if t["type"] == "out" else -1)
+        total += amt
+        shown = _rm(amt) if amt >= 0 else f"({_rm(-amt)})"
+        body += (f'<tr><td>{_fmt_date(t["date"])}</td><td>{_esc(t["description"])}</td>'
+                 f'<td class="r">{shown}</td></tr>')
+    table = f"""
+    <h2 class="sec">FEES PAID IN {year}</h2>
+    <table class="items">
+      <tr><th>Date</th><th>Description</th><th class="r">Amount</th></tr>
+      {body}
+    </table>
+    """
+    totals = (f'<div class="totals"><div class="row due"><span>Total fees paid in {year}:</span>'
+              f'<span>{_rm(total)}</span></div></div>')
+    terms = (
+        f'<div><b>Nature of payment:</b> Fees for teaching services provided as an independent '
+        f'(freelance) tutor, paid per class. This is not employment income; no EPF, SOCSO or PCB was deducted.</div>'
+        f'<div><b>For your tax return:</b> Declare this amount as your own business / other income for '
+        f'YA {year}.</div>'
+    )
+    return _page(
+        _header("PAYMENT STATEMENT", doc_no,
+                [("Period", f"1 Jan – 31 Dec {year}"), ("Issued", _date.today().strftime("%d %B %Y"))], None),
+        _party_block("PAID TO", tutor["name"], lines),
+        table,
+        totals,
+        _footer(doc_no, extra_terms=terms, payment_terms=False, thanks="Thank you for teaching with us!"),
     )

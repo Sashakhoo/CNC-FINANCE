@@ -72,6 +72,101 @@ def _rename_unpaid_to_pending():
     print(f"Migration {mid}: updated {n} invoice(s)")
 
 
+def _backfill_receipt_numbers():
+    """RCP numbers used to be minted only when someone clicked to generate
+    the receipt PDF, so the sequence undercounted actual cash-in
+    transactions. Assigns an RCP- number to every historical cash-in
+    transaction that doesn't have one yet, in date/id order, so the
+    sequence tallies with the real transaction count going forward."""
+    mid = "2026-09-backfill-receipt-numbers"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id FROM transactions WHERE type = 'in' "
+            "AND id NOT IN (SELECT ref_id FROM documents WHERE kind = 'receipt') "
+            "ORDER BY date, id"
+        ).fetchall()
+    for row in rows:
+        storage.get_or_create_document_number("receipt", row["id"], "RCP")
+    _finish(mid)
+    print(f"Migration {mid}: backfilled {len(rows)} receipt number(s)")
+
+
+def _restart_receipt_numbers_at_111():
+    """The previous backfill started RCP at 0001 with 4-digit padding —
+    doesn't match the business's real numbering convention (RCP-156,
+    INV-159, QUO-111, ...), which starts at 111. Wipes the receipt numbers
+    the earlier backfill assigned and reassigns them (in the same date/id
+    order) starting from 111, 3-digit format."""
+    mid = "2026-09-restart-receipt-numbers-at-111"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        conn.execute("DELETE FROM documents WHERE kind = 'receipt'")
+        conn.execute(
+            "INSERT INTO counters(name, value) VALUES ('RCP', 110) "
+            "ON CONFLICT(name) DO UPDATE SET value = 110"
+        )
+        rows = conn.execute(
+            "SELECT id FROM transactions WHERE type = 'in' ORDER BY date, id"
+        ).fetchall()
+    for row in rows:
+        storage.get_or_create_document_number("receipt", row["id"], "RCP")
+    _finish(mid)
+    print(f"Migration {mid}: restarted RCP numbering at 111 for {len(rows)} transaction(s)")
+
+
+def _restart_receipt_numbers_at_1111():
+    """Correction to _restart_receipt_numbers_at_111: the owner wants RCP
+    to start at 1111, not 111. Wipes whatever receipt numbers exist so far
+    and reassigns them (same date/id order) starting from 1111."""
+    mid = "2026-09-restart-receipt-numbers-at-1111"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        conn.execute("DELETE FROM documents WHERE kind = 'receipt'")
+        conn.execute(
+            "INSERT INTO counters(name, value) VALUES ('RCP', 1110) "
+            "ON CONFLICT(name) DO UPDATE SET value = 1110"
+        )
+        rows = conn.execute(
+            "SELECT id FROM transactions WHERE type = 'in' ORDER BY date, id"
+        ).fetchall()
+    for row in rows:
+        storage.get_or_create_document_number("receipt", row["id"], "RCP")
+    _finish(mid)
+    print(f"Migration {mid}: restarted RCP numbering at 1111 for {len(rows)} transaction(s)")
+
+
+def _restart_invoice_numbers_at_1111():
+    """Same correction as _restart_receipt_numbers_at_1111, but for invoices:
+    the owner wants INV to start at 1111 (4 digits) instead of 111. Renumbers
+    every existing invoice in date/id order starting from 1111 - e.g. the
+    54th invoice, previously INV-164, becomes INV-1164 - and resets the INV
+    counter so new invoices continue on from there."""
+    mid = "2026-09-restart-invoice-numbers-at-1111"
+    if _migration_ran(mid):
+        return
+    with storage.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO counters(name, value) VALUES ('INV', 1110) "
+            "ON CONFLICT(name) DO UPDATE SET value = 1110"
+        )
+        rows = conn.execute("SELECT id FROM invoices ORDER BY date, id").fetchall()
+        ids = [row["id"] for row in rows]
+    for iid in ids:
+        new_number = storage.next_document_number("INV")
+        with storage.get_conn() as conn:
+            conn.execute("UPDATE invoices SET number = ? WHERE id = ?", (new_number, iid))
+    _finish(mid)
+    print(f"Migration {mid}: restarted INV numbering at 1111 for {len(ids)} invoice(s)")
+
+
 def run_migrations() -> None:
     _recategorise_consulting_revenue()
     _rename_unpaid_to_pending()
+    _backfill_receipt_numbers()
+    _restart_receipt_numbers_at_111()
+    _restart_receipt_numbers_at_1111()
+    _restart_invoice_numbers_at_1111()

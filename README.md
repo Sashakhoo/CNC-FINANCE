@@ -124,3 +124,61 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   only acts for `ALLOWED_USER_IDS`.
 - **DB**: parameterised queries throughout; table names allow-listed.
 - Errors are logged server-side, not returned to the client.
+
+## Document Centre (stamping & verification)
+
+`/document-centre` (sidebar → **Docs**) lets you upload any PDF, place the
+company chop / your signature / a date / text on any page, and export a
+flattened stamped copy. Each stamped file gets a Document ID
+(`CNC-YYYYMMDD-XXXXXX`) and a SHA-256 fingerprint; anyone can check a file
+at the public page `/verify` (or `/verify/<Document ID>`).
+
+It is a company record-integrity tool: results say "registered by CODE N
+CODE SOLUTION" / "matches the registered file". It is not a government,
+regulatory or certificate-authority signature service.
+
+| Role | Can do |
+|---|---|
+| director | everything: stamp, manage stamps, settings, audit trail, void, see all documents |
+| admin | upload + stamp + download their own documents, own signature |
+| viewer | Document Centre only — open/download completed documents, verify. No finance access |
+
+Files: `backend/stamp_api.py` (routes), `stamp_pdf.py` (PDF engine +
+coordinate conversion), `stamp_store.py` (tables, append-only audit),
+`stamp_files.py` (storage), `backend/stamp_assets/company_chop.png` (the
+official chop, seeded on first boot — replace it from **Stamps**),
+`frontend/document-centre.html`, `frontend/verify.html`,
+`frontend/assets/pdfjs/` (vendored pdf.js).
+
+Tables (same SQLite DB, created on startup): `stamp_stamps`,
+`stamp_signatures`, `stamp_documents`, `stamp_document_versions`,
+`stamp_placements`, `stamp_audit`, `stamp_verifications`, `stamp_settings`.
+
+Optional environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `STAMP_STORAGE_PATH` | `stamp_files/` beside `DB_PATH` (so `/data/stamp_files` on Railway) | where PDFs, stamp images and signatures are stored |
+| `APP_URL` | taken from the request | base URL printed in the verification QR code |
+| `MAX_UPLOAD_MB` | `50` | hard ceiling for the upload limit set in Settings |
+
+### Editing and signing (Sejda-style editor)
+
+The editor toolbar offers **Text** (add text, or click existing words to
+change them — whiteout + new text), **Links**, **Forms** (fill the PDF's own
+form fields; checkmark / cross / dot), **Images** (upload, company stamps),
+**Sign** (type in a handwriting style, draw, upload or photograph a
+signature or initials; saved per person and private), **Whiteout**,
+**Annotate** (highlight, strikethrough, underline, freehand), **Shapes**
+(rectangle, ellipse, line, arrow), Undo/Redo, and "Repeat on all pages".
+Everything is flattened into the page; form fields are filled and flattened.
+
+**Send for signature**: place boxes (signature, initials, text, date) for
+other people, then copy each person's private link (`/sign/<token>`) to send
+by WhatsApp/email. Signers need no account. When the last one signs, the final
+PDF is produced with a Signature Certificate page (names, times, partly masked
+IP, device), hashed and registered. Links can be re-issued or the request
+cancelled from Documents → Details. Only a SHA-256 of each link is stored.
+
+Tests: `cd backend && python -m pytest tests -q` (needs `PyMuPDF` for the
+edit/sign tests; it is not a runtime dependency)

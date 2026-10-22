@@ -21,6 +21,8 @@ import pdf_generator
 import auth
 import lms_sync
 import crm
+import tax
+import stamp_store
 
 router = APIRouter(prefix="/api")
 
@@ -35,6 +37,15 @@ class Login(BaseModel):
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for", "")
     return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
+
+
+def _audit(request: Request, event: str, user: dict = None, **meta):
+    """Account events go to the same append-only trail the Document Centre uses."""
+    try:
+        stamp_store.audit(event, user=user, ip=_client_ip(request),
+                          user_agent=request.headers.get("user-agent", ""), metadata=meta)
+    except Exception as exc:
+        print(f"audit failed: {exc}")
 
 
 def _set_session_cookie(resp: JSONResponse, request: Request, username: str):
@@ -80,9 +91,12 @@ def login(body: Login, request: Request):
     except auth.NoAccess:
         raise HTTPException(status_code=403, detail="This account has no access. Ask the director.")
     if not username:
+        _audit(request, "LOGIN_FAILED", attempted=(body.username or "").strip()[:40])
         raise HTTPException(status_code=401, detail="Invalid username or password")
     auth.clear_login_attempts(ip)
-    role = storage.get_user(username)["role"]
+    account = storage.get_user(username)
+    role = account["role"]
+    _audit(request, "LOGIN", {"id": account["id"], "username": username})
     resp = JSONResponse({"ok": True, "username": username, "role": role,
                          "caps": auth.caps_for(role)})
     _set_session_cookie(resp, request, username)
@@ -142,7 +156,7 @@ def list_users():
 
 
 @router.post("/users", dependencies=[Depends(auth.require_cap("users"))])
-def create_user(body: UserIn):
+def create_user(body: UserIn, request: Request, me: dict = Depends(auth.require_auth)):
     name = body.username.strip()
     if not name or len(name) > 40:
         raise HTTPException(422, "Username must be 1-40 characters")
@@ -154,11 +168,12 @@ def create_user(body: UserIn):
         raise HTTPException(409, "That username already exists")
     salt, h = auth.hash_new(body.password)
     uid = storage.create_user(name, salt, h, body.role)
+    _audit(request, "USER_CREATED", me, username=name, role=body.role)
     return next(u for u in storage.list_users() if u["id"] == uid)
 
 
 @router.patch("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
-def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth)):
+def patch_user(uid: int, body: UserPatch, request: Request, me: dict = Depends(auth.require_auth)):
     target = storage.get_user_by_id(uid)
     if not target:
         raise HTTPException(404, "User not found")
@@ -178,6 +193,8 @@ def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth))
                 and storage.count_active_directors(exclude_id=uid) == 0:
             raise HTTPException(400, "There must be at least one active director")
         storage.update_user(uid, active=body.active)
+        if not body.active and target["active"]:
+            _audit(request, "USER_DISABLED", me, username=target["username"])
 
     if body.password is not None:
         if len(body.password) < 6:
@@ -189,7 +206,7 @@ def patch_user(uid: int, body: UserPatch, me: dict = Depends(auth.require_auth))
 
 
 @router.delete("/users/{uid}", dependencies=[Depends(auth.require_cap("users"))])
-def remove_user(uid: int, me: dict = Depends(auth.require_auth)):
+def remove_user(uid: int, request: Request, me: dict = Depends(auth.require_auth)):
     target = storage.get_user_by_id(uid)
     if not target:
         return {"ok": True}
@@ -198,12 +215,13 @@ def remove_user(uid: int, me: dict = Depends(auth.require_auth)):
     if target["role"] == "director" and storage.count_active_directors(exclude_id=uid) == 0:
         raise HTTPException(400, "There must be at least one active director")
     storage.delete_user(uid)
+    _audit(request, "USER_DISABLED", me, username=target["username"], deleted=True)
     return {"ok": True}
 
 
 # --- aggregate state (one call the dashboard loads on startup) ----------
 
-@router.get("/state", dependencies=[Depends(auth.require_auth)])
+@router.get("/state", dependencies=[Depends(auth.require_finance)])
 def state():
     return {
         "transactions": storage.list_transactions(),
@@ -227,7 +245,7 @@ class TxIn(BaseModel):
     payer_payee: str | None = None
 
 
-@router.get("/transactions", dependencies=[Depends(auth.require_auth)])
+@router.get("/transactions", dependencies=[Depends(auth.require_finance)])
 def get_transactions():
     return storage.list_transactions()
 
@@ -284,7 +302,7 @@ class ContactIn(BaseModel):
     phone: str | None = None
 
 
-@router.get("/contacts", dependencies=[Depends(auth.require_auth)])
+@router.get("/contacts", dependencies=[Depends(auth.require_finance)])
 def get_contacts():
     return storage.list_contacts()
 
@@ -332,7 +350,7 @@ class InvoiceIn(BaseModel):
     tax_pct: float = 0.0
 
 
-@router.get("/invoices", dependencies=[Depends(auth.require_auth)])
+@router.get("/invoices", dependencies=[Depends(auth.require_finance)])
 def get_invoices():
     return storage.list_invoices()
 
@@ -352,6 +370,24 @@ def create_invoice(body: InvoiceIn):
                                   sales_type=body.sales_type or "", sales_person=body.sales_person or "",
                                   tax_pct=body.tax_pct or 0)
     return storage.get_invoice(iid)
+
+
+@router.put("/invoices/{iid}", dependencies=[Depends(auth.require_cap("invoices"))])
+def amend_invoice(iid: int, body: InvoiceIn):
+    existing = storage.get_invoice(iid)
+    if not existing:
+        raise HTTPException(404, "Invoice not found")
+    if existing["status"] == "Paid":
+        raise HTTPException(409, "Can't amend a Paid invoice — its ledger transaction has already "
+                                   "been posted. Delete and recreate it if it's genuinely wrong.")
+    storage.find_or_create_contact(body.contact, "debtor", email=body.email or "", phone=body.phone or "")
+    items = [i.model_dump() for i in body.items] if body.items else None
+    if not items and not body.amount:
+        raise HTTPException(422, "Provide either an amount or at least one line item")
+    return storage.update_invoice(iid, body.contact, body.date, body.due, body.amount,
+                                   description=body.description or "",
+                                   discount_pct=body.discount_pct or 0, remarks=body.remarks or "",
+                                   items=items)
 
 
 class QuotationIn(BaseModel):
@@ -436,7 +472,7 @@ class AssetIn(BaseModel):
     dep: float = 0.0
 
 
-@router.get("/assets", dependencies=[Depends(auth.require_auth)])
+@router.get("/assets", dependencies=[Depends(auth.require_finance)])
 def get_assets():
     return storage.list_assets()
 
@@ -582,7 +618,7 @@ class NotesIn(BaseModel):
     text: str
 
 
-@router.get("/notes", dependencies=[Depends(auth.require_auth)])
+@router.get("/notes", dependencies=[Depends(auth.require_finance)])
 def read_notes():
     return storage.get_notes()
 
@@ -686,3 +722,57 @@ def _generate_document(kind: str, ref_id: int):
         raise HTTPException(404, "Unknown document kind")
 
     return _pdf_response(pdf, f"{no}.pdf")
+
+
+# --- tax (Form B worksheet) ----------------------------------------------
+
+@router.get("/tax/form-b-worksheet", dependencies=[Depends(auth.require_cap("transactions"))])
+def form_b_worksheet(year: int, epf: float = 0, socso: float = 0, lifestyle: float = 0,
+                     other: float = 0, zakat: float = 0):
+    ws = tax.form_b_worksheet(year, epf=epf, socso=socso, lifestyle=lifestyle,
+                              other_reliefs=other, zakat_paid=zakat)
+    return _pdf_response(pdf_generator.render_form_b_worksheet_pdf(ws), f"Form-B-Worksheet-YA{year}.pdf")
+
+
+# --- freelance tutors (payment statements) --------------------------------
+
+def _tutor_summary(year: int) -> list:
+    out = []
+    for name, txs in tax.tutor_payments(year).items():
+        tutor = storage.ensure_tutor(name)
+        out.append({**tutor, "payments": len(txs), "total": round(tax.tutor_total(txs), 2)})
+    return sorted(out, key=lambda t: t["name"].lower())
+
+
+@router.get("/tutors", dependencies=[Depends(auth.require_cap("transactions"))])
+def list_tutors(year: int):
+    return _tutor_summary(year)
+
+
+class TutorPatch(BaseModel):
+    ic: str | None = None
+    tax_no: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+@router.patch("/tutors/{tid}", dependencies=[Depends(auth.require_cap("transactions"))])
+def edit_tutor(tid: int, body: TutorPatch):
+    if not storage.get_tutor(tid):
+        raise HTTPException(404, "Tutor not found")
+    storage.update_tutor(tid, body.model_dump(exclude_none=True))
+    return storage.get_tutor(tid)
+
+
+@router.get("/tutors/{tid}/statement", dependencies=[Depends(auth.require_cap("transactions"))])
+def tutor_statement(tid: int, year: int):
+    tutor = storage.get_tutor(tid)
+    if not tutor:
+        raise HTTPException(404, "Tutor not found")
+    txs = next((v for k, v in tax.tutor_payments(year).items() if k.lower() == tutor["name"].lower()), None)
+    if not txs:
+        raise HTTPException(404, f"No payments to {tutor['name']} in {year}")
+    doc_no = f"PS-{year}-{tid:03d}"
+    pdf = pdf_generator.render_tutor_statement_pdf(doc_no, year, tutor, txs)
+    return _pdf_response(pdf, f"{doc_no}.pdf")

@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15141a">
+<title>CNC Document Centre</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* Same tokens and components as dashboard.html - this is a module of CNC Finance. */
+  :root{
+    --bg:#f2efe8; --panel:#ffffff; --ink:#15141a; --ink-2:#3a3846; --dim:#8b8894; --line:#eae6db;
+    --lime:#d7f26d; --lime-ink:#3a4408;
+    --lavender:#d9d3fb; --lavender-ink:#3a3266;
+    --coral:#ffb7a6; --coral-ink:#5c2213;
+    --cyan:#bdeef2; --cyan-ink:#0c3a3d;
+    --yellow:#ffe08a; --yellow-ink:#4a3402;
+    --shadow:0 8px 30px rgba(20,18,25,0.06), 0 2px 8px rgba(20,18,25,0.04);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; font-size:13.5px; display:flex; min-height:100vh;}
+  h1,h2,h3,.num{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  button{font-family:'Inter',sans-serif; cursor:pointer;}
+  input,select,textarea{font-family:'Inter',sans-serif;}
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, .nav-pill:focus-visible{outline:2px solid var(--ink); outline-offset:2px;}
+
+  .side{width:96px; flex-shrink:0; padding:24px 14px; display:flex; flex-direction:column; align-items:center; gap:8px;}
+  .brand-mark{width:44px;height:44px;border-radius:16px; background:var(--ink); display:flex;align-items:center;justify-content:center; margin-bottom:20px;}
+  .brand-mark img{width:28px; height:28px; object-fit:contain;}
+  .nav-pill{width:100%; padding:12px 0; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--dim); cursor:pointer; text-decoration:none; background:none; border:none;}
+  .nav-pill.active{background:var(--ink); color:var(--lime); box-shadow:var(--shadow);}
+  .nav-pill svg{width:18px; height:18px;}
+  .nav-pill span{font-size:9px; font-weight:600;}
+  .nav-sep{width:36px; height:1px; background:var(--line); margin:6px 0;}
+
+  .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:24px 26px 18px 0; flex-wrap:wrap;}
+  .topbar h1{font-size:22px; font-weight:600; letter-spacing:-0.4px;}
+  .topbar .sub{color:var(--dim); font-size:12.5px; margin-top:3px; font-weight:500;}
+  .content{padding:0 26px 50px 0; flex:1;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .bento{display:grid; grid-template-columns:repeat(12,1fr); gap:14px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:var(--shadow);}
+  .card.dark{background:var(--ink); color:#f4f2ea; border:none;}
+  .card.lime{background:var(--lime); color:var(--lime-ink); border:none;}
+  .card.lavender{background:var(--lavender); color:var(--lavender-ink); border:none;}
+  .card.coral{background:var(--coral); color:var(--coral-ink); border:none;}
+  .card.cyan{background:var(--cyan); color:var(--cyan-ink); border:none;}
+  .card.yellow{background:var(--yellow); color:var(--yellow-ink); border:none;}
+  .c-3{grid-column:span 3;} .c-4{grid-column:span 4;} .c-5{grid-column:span 5;} .c-6{grid-column:span 6;}
+  .c-7{grid-column:span 7;} .c-8{grid-column:span 8;} .c-12{grid-column:span 12;}
+  .kpi .k-label{font-size:12px; font-weight:600; opacity:0.75;}
+  .kpi .num{font-size:28px; font-weight:700; letter-spacing:-0.7px; margin-top:12px;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  .panel-title{font-size:14.5px; font-weight:600;}
+
+  .pill-btn{background:var(--panel); border:1px solid var(--line); border-radius:100px; padding:9px 16px; font-size:12.5px; font-weight:600; box-shadow:var(--shadow); color:var(--ink-2); text-decoration:none; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .pill-btn.dark{background:var(--ink); color:var(--lime); border:none;}
+  .pill-btn.lime{background:var(--lime); color:var(--lime-ink); border:none; box-shadow:none;}
+  .pill-btn.small{padding:6px 12px; font-size:11.5px;}
+  .pill-btn.danger{background:#fff0ee; color:#c23b1f; box-shadow:none; border:1px solid #f6d8d2;}
+  .pill-btn:disabled{opacity:0.45; cursor:not-allowed;}
+  .icon-btn{width:32px; height:32px; border-radius:100px; background:var(--panel); border:1px solid var(--line); color:var(--ink-2); display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:600;}
+  .icon-btn:disabled{opacity:0.4; cursor:not-allowed;}
+
+  form.inline, .inline{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label, .lbl{font-size:10.5px; color:var(--dim); font-weight:700; text-transform:uppercase; letter-spacing:0.2px;}
+  .field input, .field select, .field textarea{background:var(--bg); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:9px 11px; font-size:12.5px; min-width:0; width:100%;}
+  .check{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:500;}
+
+  .tbl-wrap{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse;}
+  th{text-align:left; font-size:10.5px; color:var(--dim); font-weight:700; padding:0 10px 10px 10px; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap;}
+  td{padding:11px 10px; font-size:12.5px; border-top:1px solid var(--line); vertical-align:middle;}
+  tr:first-child td{border-top:none;}
+  .tag{display:inline-block; font-size:10px; font-weight:700; padding:4px 10px; border-radius:100px; white-space:nowrap;}
+  .tag.COMPLETED, .tag.VERIFIED{background:#e7f7c9; color:#3a7a1f;}
+  .tag.DRAFT, .tag.PROCESSING, .tag.NOT_FOUND{background:#fff1cf; color:#8a6300;}
+  .tag.FAILED, .tag.VOID, .tag.MISMATCH{background:#ffe3dd; color:#a13d20;}
+  .tag.REGISTERED{background:var(--cyan); color:var(--cyan-ink);}
+  .tag.off{background:var(--bg); color:var(--dim);}
+  .empty-note{color:var(--dim); font-size:12px; padding:6px 0;}
+  .hash{font-family:'JetBrains Mono',monospace; font-size:11px; word-break:break-all; color:var(--ink-2);}
+  .doc-id{font-family:'JetBrains Mono',monospace; font-weight:600; white-space:nowrap;}
+  .line-row{display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .line-row:last-child{border-bottom:none;}
+  .line-row > span:first-child{color:var(--dim); font-weight:600; flex-shrink:0;}
+  .line-row > span:last-child{text-align:right; min-width:0;}
+  .note{font-size:11.5px; color:var(--dim); line-height:1.55;}
+
+  /* Upload */
+  .drop{border:2px dashed #d6d0c0; border-radius:22px; background:var(--panel); padding:46px 20px; text-align:center; cursor:pointer;}
+  .drop.over{border-color:var(--ink); background:#fbfaf6;}
+  .drop h3{font-size:17px; font-weight:600; margin:12px 0 4px;}
+  .drop svg{width:34px; height:34px; color:var(--dim);}
+
+  /* Editor */
+  .ed-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  .ed-bar .grow{flex:1;}
+  .ed-name{font-weight:600; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ed{display:grid; grid-template-columns:96px minmax(0,1fr) 262px; gap:14px; align-items:start;}
+  .thumbs{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:10px; max-height:calc(100vh - 190px); overflow-y:auto; display:flex; flex-direction:column; gap:10px; position:sticky; top:12px;}
+  .thumb{border:2px solid transparent; border-radius:8px; padding:3px; background:none; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--dim); font-size:10px; font-weight:600;}
+  .thumb canvas, .thumb .ph{width:100%; background:#fff; border:1px solid var(--line); border-radius:4px; display:block;}
+  .thumb .ph{aspect-ratio:0.707;}
+  .thumb.active{border-color:var(--ink); color:var(--ink);}
+  .thumb .dot{width:6px; height:6px; border-radius:50%; background:#3a7a1f; display:none;}
+  .thumb.has .dot{display:inline-block;}
+  .stage{background:#e4e0d5; border-radius:18px; padding:18px; overflow:auto; max-height:calc(100vh - 190px); min-height:420px; text-align:center;}
+  .paper{position:relative; display:inline-block; background:#fff; box-shadow:0 10px 34px rgba(20,18,25,0.18); line-height:0; text-align:left;}
+  .paper canvas{display:block;}
+  #ov{position:absolute; inset:0; overflow:hidden; touch-action:none;}
+  .it{position:absolute; cursor:move; touch-action:none; user-select:none; -webkit-user-select:none; line-height:0;}
+  .it img, .it svg{width:100%; height:100%; display:block; pointer-events:none;}
+  .it.sel{outline:1.5px dashed #2f6df6; outline-offset:2px;}
+  .hd{position:absolute; width:13px; height:13px; background:#fff; border:2px solid #2f6df6; border-radius:50%;}
+  .hd.rs{right:-9px; bottom:-9px; cursor:nwse-resize;}
+  .hd.rt{left:50%; top:-30px; margin-left:-6.5px; cursor:grab; background:#2f6df6;}
+  .hd.rt::after{content:''; position:absolute; left:50%; top:11px; width:1.5px; height:15px; margin-left:-0.75px; background:#2f6df6;}
+  .guide{position:absolute; background:#ff3d7f; pointer-events:none; display:none;}
+  .guide.v{top:0; bottom:0; width:1px;}
+  .guide.h{left:0; right:0; height:1px;}
+  .rp{display:flex; flex-direction:column; gap:12px; position:sticky; top:12px; max-height:calc(100vh - 190px); overflow-y:auto;}
+  .rp .card{padding:14px; border-radius:18px;}
+  .rp h4{font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600; margin-bottom:10px;}
+  .lib{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .lib button{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:8px 6px; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10.5px; font-weight:600; color:var(--ink-2); min-height:74px; justify-content:center;}
+  .lib button:hover{border-color:var(--ink);}
+  .lib img{max-width:100%; height:40px; object-fit:contain;}
+  .lib .tx{font-family:Helvetica,Arial,sans-serif; font-weight:700; font-size:10px; border:1.5px solid currentColor; border-radius:3px; padding:3px 6px;}
+  .props{display:flex; flex-direction:column; gap:10px;}
+  .props .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  input[type=range]{width:100%; accent-color:var(--ink);}
+  .small-screen{display:none; background:var(--yellow); color:var(--yellow-ink); border-radius:14px; padding:10px 14px; font-size:12px; font-weight:500; margin-bottom:12px;}
+
+  /* Editing toolbar (Sejda-style) */
+  .tb{display:flex; flex-wrap:wrap; align-items:center; gap:2px; background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:4px; margin-bottom:10px; position:relative; z-index:30;}
+  .tb-grp{position:relative; display:flex; align-items:center;}
+  .tb-btn{background:none; border:none; border-radius:11px; padding:8px 11px; font-size:12.5px; font-weight:600; color:var(--ink-2); display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .tb-btn:hover{background:var(--bg);}
+  .tb-btn.on{background:var(--ink); color:var(--lime);}
+  .tb-btn svg{width:17px; height:17px; flex-shrink:0;}
+  .tb-btn .car{font-size:9px; opacity:.6; margin-left:-2px;}
+  .tb-btn.car-only{padding:8px 6px; margin-left:-4px;}
+  .tb-sep{width:1px; align-self:stretch; background:var(--line); margin:6px 4px;}
+  .menu{display:none; position:absolute; top:calc(100% + 6px); left:0; min-width:240px; max-width:320px; max-height:70vh; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 40px rgba(20,18,25,.16); padding:6px; z-index:60;}
+  .menu.open{display:block;}
+  .mi{display:flex; width:100%; align-items:center; gap:10px; background:none; border:none; text-align:left; padding:9px 10px; border-radius:9px; font-size:12.5px; color:var(--ink-2);}
+  .mi:hover, .mi:focus-visible{background:var(--bg);}
+  .mi .ico{width:20px; display:inline-flex; justify-content:center; font-size:14px; flex-shrink:0;}
+  .mi .ico svg{width:17px; height:17px;}
+  .mi.add{color:#2f6df6; font-weight:600; justify-content:center; border:1px solid #9db6f5; margin:6px 0;}
+  .mhd{font-size:10px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.3px; padding:10px 10px 4px;}
+  .msig{display:flex; align-items:center; gap:4px; border-radius:10px; padding:2px 4px;}
+  .msig:hover{background:var(--bg);}
+  .msig .pick{flex:1; background:none; border:none; height:56px; display:flex; align-items:center; justify-content:center; padding:4px;}
+  .msig .pick img{max-height:48px; max-width:220px;}
+  .msig .del{width:26px; height:26px; border:none; background:none; color:var(--dim); border-radius:50%; font-size:14px;}
+  .msig .del:hover{background:#ffe3dd; color:#a13d20;}
+  .hint{display:none; background:var(--ink); color:#f4f2ea; border-radius:12px; padding:8px 14px; font-size:12px; margin-bottom:10px;}
+  .hint.on{display:flex; gap:10px; align-items:center; justify-content:space-between;}
+  .hint button{background:none; border:1px solid rgba(255,255,255,.3); color:#f4f2ea; border-radius:100px; padding:3px 10px; font-size:11px;}
+  .paper.armed #ov, .paper.armed .it{cursor:crosshair;}
+  .run{position:absolute; border:1px dashed transparent; cursor:text; border-radius:2px;}
+  .paper.texting .run:hover{border-color:#2f6df6; background:rgba(47,109,246,.07);}
+  .ff{position:absolute; background:rgba(189,238,242,.45); border:1px solid #7cc9d1; font-family:Helvetica, Arial, sans-serif; padding:0 3px; color:#15141a; border-radius:2px; line-height:1.15; resize:none;}
+  .ff:focus{outline:2px solid #2f6df6; background:rgba(189,238,242,.25);}
+  input.ff[type=checkbox], input.ff[type=radio]{padding:0; margin:0; accent-color:#15141a; cursor:pointer;}
+  .it textarea.ta{position:absolute; left:0; top:0; border:none; outline:1.5px dashed #2f6df6; outline-offset:2px; background:rgba(255,255,255,.55); resize:none; overflow:hidden; padding:0; margin:0; white-space:pre; line-height:1.2; cursor:text; min-width:20px;}
+  .it.signer{background:rgba(217,211,251,.6); outline:1.5px dashed #6f5fd6;}
+  .it.signer .slbl{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; font:600 10px Inter, sans-serif; color:#3a3266; line-height:1.2; text-align:center; overflow:hidden; padding:2px; pointer-events:none;}
+  .it.link{background:rgba(47,109,246,.08); outline:1.5px dashed #2f6df6;}
+  .it svg{overflow:visible;}
+  .sw{display:flex; gap:6px; flex-wrap:wrap;}
+  .swc{width:22px; height:22px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #d6d0c0; padding:0;}
+  .swc.on{box-shadow:0 0 0 2px var(--ink);}
+  .swc.none{background:linear-gradient(135deg,#fff 45%,#c0261b 45%,#c0261b 55%,#fff 55%);}
+  .seg{display:flex; gap:4px;}
+  .seg button{flex:1; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px; font-weight:700; color:var(--ink-2);}
+  .seg button.on{background:var(--ink); color:var(--lime); border-color:var(--ink);}
+  .link-row{display:flex; gap:6px; align-items:center; margin-top:6px;}
+  .link-row input{flex:1; min-width:0; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-family:'JetBrains Mono',monospace; font-size:11px;}
+
+  /* Modal + toast */
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(21,20,26,0.55); z-index:100; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff; width:520px; max-width:100%; border-radius:22px; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.3); max-height:90vh; overflow-y:auto;}
+  .modal h2{font-size:18px; font-weight:600; margin-bottom:6px;}
+  .modal .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap;}
+  #toast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--ink); color:#f4f2ea; padding:11px 18px; border-radius:100px; font-size:12.5px; font-weight:500; z-index:200; display:none; max-width:calc(100vw - 32px); box-shadow:0 12px 30px rgba(0,0,0,0.25);}
+  #toast.err{background:#a13d20;}
+
+  .result-id{font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; letter-spacing:0.5px; margin:10px 0 4px; word-break:break-all;}
+  .stamp-tile{display:flex; gap:14px; align-items:center; padding:12px 0; border-top:1px solid var(--line); flex-wrap:wrap;}
+  .stamp-tile:first-child{border-top:none;}
+  .stamp-tile .pic{width:76px; height:76px; border-radius:14px; background:var(--bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:6px;}
+  .stamp-tile .pic img{max-width:100%; max-height:100%;}
+  .stamp-tile .meta{flex:1; min-width:150px;}
+  #sig-pad{width:100%; height:200px; background:#fff; border:1px dashed #cfc8b6; border-radius:14px; touch-action:none; cursor:crosshair; display:block;}
+
+  @media (max-width:1200px){
+    .c-3{grid-column:span 6;} .c-4{grid-column:span 6;} .c-5,.c-7,.c-8{grid-column:span 12;}
+    .ed{grid-template-columns:84px minmax(0,1fr) 250px;}
+  }
+  @media (max-width:900px){
+    .side{width:76px; padding:18px 8px;}
+    .content{padding:0 16px 40px 0;}
+    .topbar{padding:18px 16px 14px 0;}
+    .c-3,.c-4,.c-6{grid-column:span 12;}
+    .ed{grid-template-columns:1fr;}
+    .thumbs{flex-direction:row; max-height:none; overflow-x:auto; position:static;}
+    .thumb{width:64px; flex-shrink:0;}
+    .rp{position:static; max-height:none;}
+    .small-screen{display:block;}
+  }
+  @media (max-width:640px){
+    body{flex-direction:column;}
+    .side{order:2; width:100%; flex-direction:row; gap:2px; padding:6px 8px calc(6px + env(safe-area-inset-bottom)); position:fixed; left:0; right:0; bottom:0; z-index:60; background:var(--panel); border-top:1px solid var(--line); overflow-x:auto; justify-content:flex-start;}
+    .brand-mark, .nav-sep{display:none;}
+    .nav-pill{min-width:60px; padding:8px 0;}
+    .main{padding-left:16px;}
+    .content{padding-bottom:96px;}
+    .kpi .num{font-size:24px;}
+  }
+  @media (prefers-reduced-motion:reduce){ *{scroll-behavior:auto !important;} }
+</style>
+</head>
+<body>
+
+<nav class="side" aria-label="Document Centre">
+  <div class="brand-mark"><img src="/assets/logo-icon-light.png" alt="codencode"></div>
+  <button class="nav-pill active" data-view="overview">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+    <span>Overview</span>
+  </button>
+  <button class="nav-pill" data-view="stamp" data-need="stamp">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v5l2 4v3H7v-3l2-4V3Z"/><path d="M5 20h14"/></svg>
+    <span>Stamp</span>
+  </button>
+  <button class="nav-pill" data-view="documents">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V5a2 2 0 0 1 2-2h6l6 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M12 3v5h6"/></svg>
+    <span>Documents</span>
+  </button>
+  <button class="nav-pill" data-view="verify">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+    <span>Verify</span>
+  </button>
+  <button class="nav-pill" data-view="signature" data-need="stamp">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17c3-6 5-9 7-9s0 8 2 8 3-5 5-5 2 3 4 3"/><path d="M3 21h18"/></svg>
+    <span>Signature</span>
+  </button>
+  <button class="nav-pill" data-view="stamps" data-need="admin">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>
+    <span>Stamps</span>
+  </button>
+  <button class="nav-pill" data-view="audit" data-need="admin">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    <span>Audit</span>
+  </button>
+  <button class="nav-pill" data-view="settings" data-need="admin">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    <span>Settings</span>
+  </button>
+  <div class="nav-sep"></div>
+  <a class="nav-pill" href="/" id="finance-link" style="display:none;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+    <span>Finance</span>
+  </a>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div><h1 id="page-title">Document Centre</h1><div class="sub" id="page-sub">Stamp any PDF with the company chop and keep a verifiable record</div></div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button class="pill-btn lime" id="who" onclick="logout()">Log out</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- OVERVIEW -->
+    <section class="view active" id="view-overview">
+      <div class="bento">
+        <div class="card dark kpi c-3"><div class="k-label">Documents stamped</div><div class="num" id="k-total">–</div></div>
+        <div class="card lime kpi c-3"><div class="k-label">Today</div><div class="num" id="k-today">–</div></div>
+        <div class="card lavender kpi c-3"><div class="k-label">This month</div><div class="num" id="k-month">–</div></div>
+        <div class="card cyan kpi c-3"><div class="k-label">Verification checks</div><div class="num" id="k-verif">–</div></div>
+        <div class="card c-8">
+          <div class="panel-head"><span class="panel-title">Recent documents</span>
+            <button class="pill-btn dark small" data-need="stamp" onclick="go('stamp')">+ Stamp a document</button></div>
+          <div class="tbl-wrap"><table><thead><tr><th>Document ID</th><th>File</th><th>Status</th><th>By</th><th>When</th><th></th></tr></thead><tbody id="ov-recent"></tbody></table></div>
+        </div>
+        <div class="card c-4">
+          <div class="panel-head"><span class="panel-title" id="ov-side-title">How it works</span></div>
+          <div id="ov-side"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STAMP: upload -> editor -> result -->
+    <section class="view" id="view-stamp">
+      <div id="st-upload">
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload a PDF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+          <h3>Drop a PDF here, or click to choose</h3>
+          <div class="note">Agreements, quotations, invoices, purchase orders, HR forms, certificates, letters — any PDF up to <span id="max-mb">20</span> MB.<br>The original file is kept unchanged; stamping creates a separate copy.</div>
+          <input type="file" id="file-in" accept="application/pdf,.pdf" hidden>
+        </div>
+        <div class="card" id="st-drafts" style="margin-top:14px; display:none;">
+          <div class="panel-head"><span class="panel-title">Continue a draft</span></div>
+          <div class="tbl-wrap"><table><tbody id="st-drafts-body"></tbody></table></div>
+        </div>
+      </div>
+
+      <div id="st-editor" style="display:none;">
+        <div class="small-screen">The editor works best on a laptop or desktop screen. You can still edit here, but precise positioning is easier on a larger display.</div>
+        <div class="ed-bar">
+          <button class="pill-btn small" onclick="closeEditor()">← Back</button>
+          <span class="ed-name" id="ed-name"></span>
+          <span class="doc-id note" id="ed-id"></span>
+          <span class="grow"></span>
+          <button class="icon-btn" title="Previous page" onclick="gotoPage(cur-1)">‹</button>
+          <span class="mono" id="ed-page" style="font-size:12px; min-width:54px; text-align:center;">1 / 1</span>
+          <button class="icon-btn" title="Next page" onclick="gotoPage(cur+1)">›</button>
+          <button class="icon-btn" title="Zoom out" onclick="setZoom(zoom/1.2)">−</button>
+          <span class="mono" id="ed-zoom" style="font-size:12px; min-width:44px; text-align:center;">100%</span>
+          <button class="icon-btn" title="Zoom in" onclick="setZoom(zoom*1.2)">+</button>
+          <button class="pill-btn small" onclick="saveDraft()">Save draft</button>
+          <button class="pill-btn dark small" id="b-apply" onclick="openConfirm()">Apply changes</button>
+        </div>
+
+        <div class="tb" id="tb" role="toolbar" aria-label="Editing tools">
+          <div class="tb-grp">
+            <button class="tb-btn" data-tool="text" title="Add text, or click existing text to change it" onclick="arm('text')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7V5h11v2M9.5 5v14M7 19h5"/><path d="M15 12h6M18 12v7"/></svg>Text</button>
+            <button class="tb-btn car-only" data-menu="mn-text" aria-label="More text tools"><span class="car">▼</span></button>
+            <div class="menu" id="mn-text">
+              <button class="mi" onclick="arm('text')"><span class="ico">T</span>Add text / edit existing text</button>
+              <button class="mi" onclick="arm('date')"><span class="ico">📅</span>Date</button>
+              <button class="mi" onclick="arm('stamptext')"><span class="ico">▭</span>Stamp text (APPROVED, PAID…)</button>
+            </div>
+          </div>
+          <button class="tb-btn" data-tool="link" onclick="arm('link')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Links</button>
+          <div class="tb-grp">
+            <button class="tb-btn" data-menu="mn-forms"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg>Forms <span class="car">▼</span></button>
+            <div class="menu" id="mn-forms">
+              <div class="mhd" id="mn-forms-info">Form fields</div>
+              <button class="mi" id="mi-fields" onclick="toggleFields()"><span class="ico">▤</span>Hide form fields</button>
+              <div class="mhd">Symbols</div>
+              <button class="mi" onclick="arm('check')"><span class="ico">✓</span>Checkmark</button>
+              <button class="mi" onclick="arm('cross')"><span class="ico">✗</span>Cross</button>
+              <button class="mi" onclick="arm('dot')"><span class="ico">●</span>Dot</button>
+            </div>
+          </div>
+          <div class="tb-grp">
+            <button class="tb-btn" data-menu="mn-images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>Images <span class="car">▼</span></button>
+            <div class="menu" id="mn-images">
+              <button class="mi" onclick="$('img-in').click()"><span class="ico">⤒</span>New image…</button>
+              <input type="file" id="img-in" accept="image/png,image/jpeg,image/webp" hidden>
+              <div class="mhd">Company stamps</div>
+              <div id="mn-stamps"></div>
+            </div>
+          </div>
+          <div class="tb-grp">
+            <button class="tb-btn" data-menu="mn-sign"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17c3-6 5-9 7-9s0 8 2 8 3-5 5-5 2 3 4 3"/><path d="M3 21h18"/></svg>Sign <span class="car">▼</span></button>
+            <div class="menu" id="mn-sign" style="min-width:290px;"></div>
+          </div>
+          <button class="tb-btn" data-tool="whiteout" onclick="arm('whiteout')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 21h12M5.5 15.5 14 7l5 5-7.5 7.5H8z"/><path d="m11 10 5 5"/></svg>Whiteout</button>
+          <div class="tb-grp">
+            <button class="tb-btn" data-menu="mn-annot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m14 4 6 6-9 9H5v-6z"/><path d="m12 6 6 6"/></svg>Annotate <span class="car">▼</span></button>
+            <div class="menu" id="mn-annot">
+              <button class="mi" onclick="arm('highlight')"><span class="ico" style="background:#ffe14d; border-radius:3px;">A</span>Highlight</button>
+              <button class="mi" onclick="arm('strike')"><span class="ico" style="text-decoration:line-through; color:#c0261b;">S</span>Strikethrough</button>
+              <button class="mi" onclick="arm('underline')"><span class="ico" style="text-decoration:underline; color:#2f6df6;">U</span>Underline</button>
+              <button class="mi" onclick="arm('ink')"><span class="ico">✎</span>Freehand drawing</button>
+            </div>
+          </div>
+          <div class="tb-grp">
+            <button class="tb-btn" data-menu="mn-shapes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="4"/><rect x="12" y="12" width="8" height="8" rx="1"/></svg>Shapes <span class="car">▼</span></button>
+            <div class="menu" id="mn-shapes">
+              <button class="mi" onclick="arm('rect')"><span class="ico">▭</span>Rectangle</button>
+              <button class="mi" onclick="arm('ellipse')"><span class="ico">◯</span>Ellipse</button>
+              <button class="mi" onclick="arm('line')"><span class="ico">╱</span>Line</button>
+              <button class="mi" onclick="arm('arrow')"><span class="ico">➝</span>Arrow</button>
+            </div>
+          </div>
+          <span class="tb-sep"></span>
+          <button class="tb-btn" id="b-undo" title="Undo (Ctrl+Z)" onclick="undo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
+          <button class="tb-btn" id="b-redo" title="Redo (Ctrl+Y)" onclick="redo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>Redo</button>
+        </div>
+        <div class="hint" id="hint"><span id="hint-text"></span><button onclick="disarm()">Cancel (Esc)</button></div>
+
+        <div class="ed">
+          <div class="thumbs" id="thumbs"></div>
+          <div class="stage" id="stage">
+            <div class="paper" id="paper">
+              <canvas id="pg"></canvas>
+              <div id="ov"><div class="guide v" id="g-v"></div><div class="guide h" id="g-h"></div></div>
+            </div>
+          </div>
+          <div class="rp">
+            <div class="card" id="props-card"><h4 id="props-title">Selected item</h4><div class="props" id="props"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="st-result" style="display:none;">
+        <div class="bento">
+          <div class="card lime c-7">
+            <div class="k-label" style="font-weight:600;">Stamped and registered</div>
+            <div class="result-id" id="r-id"></div>
+            <div style="font-size:12.5px;" id="r-meta"></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:18px;">
+              <a class="pill-btn dark" id="r-download">Download stamped PDF</a>
+              <button class="pill-btn" onclick="resetStamp()">Stamp another</button>
+              <button class="pill-btn" onclick="go('documents')">All documents</button>
+            </div>
+          </div>
+          <div class="card c-5">
+            <div class="panel-title" style="margin-bottom:8px;">Integrity record</div>
+            <div class="lbl">Original SHA-256</div><div class="hash" id="r-h1"></div>
+            <div class="lbl" style="margin-top:10px;">Stamped SHA-256</div><div class="hash" id="r-h2"></div>
+            <div class="note" style="margin-top:12px;">Anyone holding the stamped file can check it at <a id="r-verify" target="_blank" rel="noopener"></a>. Changing even one byte of the file makes the check fail.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DOCUMENTS -->
+    <section class="view" id="view-documents">
+      <div class="card">
+        <form class="inline" id="doc-filter" onsubmit="loadDocs(); return false;" style="margin-bottom:14px;">
+          <div class="field" style="flex:1; min-width:180px;"><label for="f-q">Search</label><input id="f-q" placeholder="Document ID or file name"></div>
+          <div class="field"><label for="f-status">Status</label><select id="f-status"><option value="">All</option><option>COMPLETED</option><option>DRAFT</option><option>VOID</option><option>FAILED</option></select></div>
+          <div class="field" id="f-user-wrap" style="display:none;"><label for="f-user">User</label><select id="f-user"><option value="">Everyone</option></select></div>
+          <div class="field"><label for="f-from">From</label><input type="date" id="f-from"></div>
+          <div class="field"><label for="f-to">To</label><input type="date" id="f-to"></div>
+          <button class="pill-btn dark" type="submit">Filter</button>
+        </form>
+        <div class="tbl-wrap"><table><thead><tr><th>Document ID</th><th>File</th><th>Pages</th><th>Status</th><th>By</th><th>Created</th><th></th></tr></thead><tbody id="doc-body"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- VERIFY -->
+    <section class="view" id="view-verify">
+      <div class="bento">
+        <div class="card c-6">
+          <div class="panel-title" style="margin-bottom:12px;">Check a document</div>
+          <form class="inline" onsubmit="verifyId(); return false;">
+            <div class="field" style="flex:1; min-width:200px;"><label for="v-id">Document ID</label><input id="v-id" class="mono" placeholder="CNC-20261001-AB12CD" autocomplete="off"></div>
+            <button class="pill-btn dark" type="submit">Check ID</button>
+          </form>
+          <div class="lbl" style="margin:16px 0 6px;">Or upload the PDF</div>
+          <input type="file" id="v-file" accept="application/pdf,.pdf" onchange="verifyFile(this)">
+          <div class="note" style="margin-top:12px;">The uploaded file is only hashed for comparison — it is not stored. Public page for recipients: <a href="/verify" target="_blank" rel="noopener">/verify</a></div>
+        </div>
+        <div class="card c-6" id="v-result"><div class="empty-note">The result appears here.</div></div>
+        <div class="card c-12" id="v-log-card" style="display:none;">
+          <div class="panel-title" style="margin-bottom:12px;">Recent verification checks</div>
+          <div class="tbl-wrap"><table><thead><tr><th>When</th><th>Document ID</th><th>Method</th><th>Result</th><th>IP</th></tr></thead><tbody id="v-log"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIGNATURE -->
+    <section class="view" id="view-signature">
+      <div class="bento">
+        <div class="card c-6">
+          <div class="panel-head"><span class="panel-title">My signatures</span><button class="pill-btn dark small" onclick="newSig('signature', false)">+ New Signature</button></div>
+          <div id="sig-list-signature"></div>
+        </div>
+        <div class="card c-6">
+          <div class="panel-head"><span class="panel-title">My initials</span><button class="pill-btn dark small" onclick="newSig('initials', false)">+ New Initials</button></div>
+          <div id="sig-list-initials"></div>
+        </div>
+        <div class="card c-12"><div class="note">Type, draw, upload or photograph your signature. Saved signatures are private to your account — nobody else can place them on a document, not even a director. You can also create one directly from <b>Sign</b> in the editor.</div></div>
+      </div>
+    </section>
+
+    <!-- STAMPS (director) -->
+    <section class="view" id="view-stamps">
+      <div class="bento">
+        <div class="card c-7"><div class="panel-title" style="margin-bottom:6px;">Stamp library</div><div id="stamps-list"></div></div>
+        <div class="card c-5">
+          <div class="panel-title" style="margin-bottom:12px;">Add a stamp</div>
+          <form id="ns-form" onsubmit="createStamp(); return false;" style="display:flex; flex-direction:column; gap:10px;">
+            <div class="field"><label for="ns-name">Name</label><input id="ns-name" maxlength="40" required></div>
+            <div class="props row2" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <div class="field"><label for="ns-kind">Type</label><select id="ns-kind" onchange="nsKind()"><option value="image">Image (PNG)</option><option value="text">Text</option></select></div>
+              <div class="field"><label for="ns-cat">Category</label><select id="ns-cat"></select></div>
+            </div>
+            <div class="field" id="ns-file-wrap"><label for="ns-file">Image — transparent PNG works best</label><input type="file" id="ns-file" accept="image/png,image/jpeg,image/webp"></div>
+            <div id="ns-text-wrap" style="display:none; grid-template-columns:1fr 1fr; gap:8px;">
+              <div class="field"><label for="ns-text">Stamp text</label><input id="ns-text" maxlength="40"></div>
+              <div class="field"><label for="ns-color">Colour</label><select id="ns-color"></select></div>
+            </div>
+            <label class="check"><input type="checkbox" id="ns-admin" checked> Admins can use this stamp</label>
+            <button class="pill-btn dark" type="submit" style="align-self:flex-start;">Add stamp</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUDIT (director) -->
+    <section class="view" id="view-audit">
+      <div class="card">
+        <form class="inline" onsubmit="loadAudit(); return false;" style="margin-bottom:14px;">
+          <div class="field"><label for="a-type">Event</label><select id="a-type"><option value="">All events</option></select></div>
+          <div class="field" style="flex:1; min-width:180px;"><label for="a-doc">Document ID</label><input id="a-doc" class="mono" placeholder="CNC-…"></div>
+          <button class="pill-btn dark" type="submit">Filter</button>
+        </form>
+        <div class="note" style="margin-bottom:12px;">This trail is append-only. Entries cannot be edited or deleted.</div>
+        <div class="tbl-wrap"><table><thead><tr><th>When</th><th>Event</th><th>User</th><th>Document</th><th>IP</th><th>Details</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS (director) -->
+    <section class="view" id="view-settings">
+      <form class="bento" onsubmit="saveSettings(); return false;">
+        <div class="card c-6" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="panel-title">Company</div>
+          <div class="field"><label for="s-company">Company name</label><input id="s-company" maxlength="80"></div>
+          <div class="field"><label for="s-reg">Registration number</label><input id="s-reg" maxlength="80"></div>
+          <div class="field"><label for="s-loc">Location</label><input id="s-loc" maxlength="80"></div>
+          <div class="field"><label for="s-tz">Timezone</label><input id="s-tz" disabled></div>
+        </div>
+        <div class="card c-6" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="panel-title">Stamping</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="field"><label for="s-date">Date format</label><select id="s-date"></select></div>
+            <div class="field"><label for="s-size">Default stamp width (% of page)</label><input type="number" id="s-size" min="8" max="60" step="1"></div>
+            <div class="field"><label for="s-max">Max upload (MB)</label><input type="number" id="s-max" min="1" max="50" step="1"></div>
+            <div class="field"><label for="s-qrpos">QR position</label><select id="s-qrpos"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></div>
+          </div>
+          <label class="check"><input type="checkbox" id="s-qr"> Add a verification QR code to the last page</label>
+          <label class="check"><input type="checkbox" id="s-footer"> Print the Document ID in the footer of every page</label>
+          <label class="check"><input type="checkbox" id="s-pubname"> Show the file name on the public verification page</label>
+          <div class="note">QR code and footer are added before the file is hashed, so they are part of the registered copy.</div>
+          <button class="pill-btn dark" type="submit" style="align-self:flex-start;">Save settings</button>
+        </div>
+      </form>
+    </section>
+
+  </div>
+</div>
+
+<!-- Confirm export -->
+<div class="modal-overlay" id="m-confirm"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mc-title">
+  <h2 id="mc-title">Stamp this document?</h2>
+  <div class="note" style="margin-bottom:12px;">This creates a permanent stamped copy and registers it. It can't be edited afterwards — to change it, upload the document again.</div>
+  <div id="mc-body"></div>
+  <div class="actions"><button class="pill-btn" onclick="closeModal('m-confirm')">Keep editing</button><button class="pill-btn dark" id="mc-go" onclick="finalize()">Confirm &amp; export</button></div>
+</div></div>
+
+<!-- Document details -->
+<div class="modal-overlay" id="m-doc"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="md-title" style="width:640px;">
+  <h2 id="md-title">Document</h2>
+  <div id="md-body"></div>
+  <div class="actions" id="md-actions"></div>
+</div></div>
+
+<!-- Someone else signs: who, and what kind of box -->
+<div class="modal-overlay" id="m-signer"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ms-title">
+  <h2 id="ms-title">Request a signature</h2>
+  <div class="note" style="margin-bottom:14px;">Place a box where this person should sign. When you're done, use <b>Send for signature</b> to get a private link for each person.</div>
+  <form id="ms-form" style="display:flex; flex-direction:column; gap:12px;" onsubmit="placeSigner(); return false;">
+    <div class="field"><label for="ms-name">Signer's full name</label><input id="ms-name" maxlength="60" required list="ms-names" autocomplete="off"><datalist id="ms-names"></datalist></div>
+    <div class="field"><label for="ms-contact">Email or phone (optional, for your reference)</label><input id="ms-contact" maxlength="120" autocomplete="off"></div>
+    <div class="field"><label>Box type</label>
+      <div class="seg" id="ms-field">
+        <button type="button" data-f="signature" class="on">Signature</button><button type="button" data-f="initials">Initials</button>
+        <button type="button" data-f="text">Text</button><button type="button" data-f="date">Date</button>
+      </div>
+    </div>
+    <div class="actions"><button type="button" class="pill-btn" onclick="closeModal('m-signer')">Cancel</button><button class="pill-btn dark" type="submit">Place box</button></div>
+  </form>
+</div></div>
+
+<!-- Signing links after sending -->
+<div class="modal-overlay" id="m-links"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ml-title" style="width:600px;">
+  <h2 id="ml-title">Sent for signature</h2>
+  <div class="note" style="margin-bottom:12px;">Send each person their own link — by WhatsApp, Telegram or email. Copy them now: for security a link is shown only once. You can make a new link later from <b>Documents → Details</b>.</div>
+  <div id="ml-body"></div>
+  <div class="actions"><button class="pill-btn dark" onclick="closeModal('m-links'); resetStamp(); go('documents');">Done</button></div>
+</div></div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/assets/pdfjs/pdf.min.js"></script>
+<script src="/assets/sigpad.js"></script>
+<script src="/assets/dino.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.js';
+
+let CFG = null, ME = null;
+const stampArt = {};          // stamp id -> {url, ratio}  (image stamps, fetched once)
+
+// ── API ───────────────────────────────────────────────────────────────
+async function api(path, opts = {}){
+  const o = {credentials:'same-origin', ...opts};
+  if(o.json !== undefined){ o.body = JSON.stringify(o.json); o.headers = {'Content-Type':'application/json'}; delete o.json; }
+  const res = await fetch('/api' + path, o);
+  if(res.status === 401){ location.href = '/'; throw new Error('Signed out'); }
+  if(!res.ok){
+    let msg = 'Something went wrong. Please try again.';
+    try { const d = (await res.json()).detail; if(typeof d === 'string') msg = d; } catch(e){}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+let toastTimer = null;
+function toast(msg, isErr){
+  const t = $('toast'); t.textContent = msg; t.className = isErr ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = 'none', isErr ? 5200 : 2600);
+}
+const fail = e => toast(e.message || String(e), true);
+function when(iso){
+  if(!iso) return '';
+  try { return new Date(iso).toLocaleString('en-GB', {timeZone: CFG.settings.timezone, day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+const kb = n => n == null ? '' : (n > 1048576 ? (n/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n/1024)) + ' KB');
+function openModal(id){ $(id).classList.add('open'); }
+function closeModal(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target === m) m.classList.remove('open'); }));
+async function logout(){ try { await fetch('/api/logout', {method:'POST', credentials:'same-origin'}); } catch(e){} location.href = '/'; }
+
+// ── Navigation ────────────────────────────────────────────────────────
+const TITLES = {
+  overview:['Document Centre','Stamp any PDF with the company chop and keep a verifiable record'],
+  stamp:['Stamp a document','Upload, place the chop, confirm, download'],
+  documents:['Documents','Every stamped document and draft'],
+  verify:['Verify','Check that a file matches the registered copy'],
+  signature:['My signature','Private to your account'],
+  stamps:['Manage stamps','The company chop and other stamps'],
+  audit:['Audit trail','Who did what, and when'],
+  settings:['Settings','Company details and stamping defaults'],
+};
+function allowed(need){ return !need || (need === 'stamp' && CFG.user.can_stamp) || (need === 'admin' && CFG.user.is_admin); }
+function go(name){
+  const pill = document.querySelector('.nav-pill[data-view="' + name + '"]');
+  if(!pill || !allowed(pill.dataset.need)) name = 'overview';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-pill').forEach(n => n.classList.toggle('active', n.dataset.view === name));
+  $('page-title').textContent = TITLES[name][0]; $('page-sub').textContent = TITLES[name][1];
+  ({overview:loadOverview, documents:loadDocs, stamp:loadDrafts, verify:loadVerifyLog, signature:showSignatures,
+    stamps:loadStamps, audit:loadAudit, settings:showSettings}[name] || (() => {}))();
+  if(name === 'stamp' && pdf) requestAnimationFrame(() => renderPage());
+}
+document.querySelectorAll('.nav-pill[data-view]').forEach(p => p.addEventListener('click', () => go(p.dataset.view)));
+
+// ── Overview ──────────────────────────────────────────────────────────
+function statusTag(d){
+  const sg = d.signing;
+  if(sg && sg.status === 'OPEN') return `<span class="tag ${sg.declined ? 'MISMATCH' : 'REGISTERED'}">${sg.declined ? 'DECLINED' : 'AWAITING SIGNATURES'} ${sg.signed}/${sg.total}</span>`;
+  return `<span class="tag ${d.status}">${d.status}</span>`;
+}
+function docActions(d){
+  let h = '';
+  if(d.can_edit) h += `<button class="pill-btn small" onclick="openEditor('${d.document_id}')">Continue</button> `;
+  if(d.status === 'COMPLETED' || d.status === 'VOID') h += `<a class="pill-btn small" href="/api/stamp/documents/${d.document_id}/download">Download</a> `;
+  h += `<button class="pill-btn small" onclick="showDoc('${d.document_id}')">Details</button>`;
+  return h;
+}
+async function loadOverview(){
+  try {
+    const o = await api('/stamp/overview');
+    $('k-total').textContent = o.stats.total; $('k-today').textContent = o.stats.today;
+    $('k-month').textContent = o.stats.month; $('k-verif').textContent = o.stats.verifications;
+    $('ov-recent').innerHTML = o.recent.length ? o.recent.map(d => `<tr>
+      <td class="doc-id">${esc(d.document_id)}</td><td>${esc(d.original_filename)}</td>
+      <td>${statusTag(d)}</td><td>${esc(d.created_by_name)}</td>
+      <td style="white-space:nowrap;">${when(d.completed_at || d.created_at)}</td>
+      <td style="white-space:nowrap; text-align:right;">${docActions(d)}</td></tr>`).join('')
+      : `<tr><td colspan="6" class="empty-note">No documents yet${CFG.user.can_stamp ? ' — stamp your first one.' : '.'}</td></tr>`;
+    if(CFG.user.is_admin && o.activity.length){
+      $('ov-side-title').textContent = 'Recent activity';
+      $('ov-side').innerHTML = o.activity.map(a => `<div class="line-row"><span>${esc(evName(a.event_type))}</span><span>${esc(a.username || 'public')}<br><span class="note">${when(a.created_at)}</span></span></div>`).join('');
+    } else {
+      $('ov-side').innerHTML = ['Upload any PDF — the original is stored untouched.','Place the company chop, your signature, a date or text on any page.','Confirm. The stamped copy gets a Document ID and a SHA-256 fingerprint.','Anyone can later check the file against the registered copy.']
+        .map((t,i) => `<div class="line-row"><span class="mono">${i+1}</span><span style="text-align:left; flex:1;">${t}</span></div>`).join('');
+    }
+  } catch(e){ fail(e); }
+}
+const evName = t => t.replace(/^DOCUMENT_/, '').replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+
+// ── Documents ─────────────────────────────────────────────────────────
+async function loadDocs(){
+  const p = new URLSearchParams();
+  [['q','f-q'],['status','f-status'],['user','f-user'],['date_from','f-from'],['date_to','f-to']].forEach(([k,id]) => { const v = $(id).value.trim(); if(v) p.set(k, v); });
+  try {
+    const rows = await api('/stamp/documents?' + p);
+    $('doc-body').innerHTML = rows.length ? rows.map(d => `<tr>
+      <td class="doc-id">${esc(d.document_id)}</td><td>${esc(d.original_filename)}<div class="note">${kb(d.file_size)}</div></td>
+      <td>${d.page_count}</td><td>${statusTag(d)}</td><td>${esc(d.created_by_name)}</td>
+      <td style="white-space:nowrap;">${when(d.created_at)}</td>
+      <td style="white-space:nowrap; text-align:right;">${docActions(d)}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="empty-note">No documents match.</td></tr>';
+  } catch(e){ fail(e); }
+}
+async function showDoc(id){
+  try {
+    const [d, events] = await Promise.all([api('/stamp/documents/' + id), api('/stamp/documents/' + id + '/audit')]);
+    $('md-title').textContent = d.document_id;
+    const s = d.summary || {};
+    $('md-body').innerHTML = `
+      <div class="line-row"><span>File</span><span>${esc(d.original_filename)} · ${d.page_count} page(s)</span></div>
+      <div class="line-row"><span>Status</span><span>${statusTag(d)}</span></div>
+      <div class="line-row"><span>Created by</span><span>${esc(d.created_by_name)} · ${when(d.created_at)}</span></div>
+      ${d.completed_at ? `<div class="line-row"><span>Stamped</span><span>${when(d.completed_at)}${s.stamps ? ' · ' + esc(s.stamps.join(', ')) : ''}${s.pages ? ' · page ' + esc(s.pages.join(', ')) : ''}</span></div>` : ''}
+      ${d.status === 'VOID' ? `<div class="line-row"><span>Voided</span><span>${when(d.voided_at)} — ${esc(d.void_reason)}</span></div>` : ''}
+      <div class="lbl" style="margin-top:12px;">Original SHA-256</div><div class="hash">${esc(d.original_sha256)}</div>
+      ${d.final_sha256 ? `<div class="lbl" style="margin-top:10px;">Stamped SHA-256</div><div class="hash">${esc(d.final_sha256)}</div>` : ''}
+      ${signingBlock(d)}
+      <div class="lbl" style="margin:14px 0 4px;">History</div>
+      ${events.map(a => `<div class="line-row"><span>${esc(evName(a.event_type))}</span><span>${esc(a.username || 'public')} · ${when(a.created_at)}</span></div>`).join('') || '<div class="empty-note">No events.</div>'}
+      ${d.can_void ? `<div class="field" style="margin-top:14px;"><label for="void-reason">Reason for voiding</label><input id="void-reason" maxlength="300" placeholder="e.g. issued in error"></div>` : ''}`;
+    $('md-actions').innerHTML =
+      (d.can_void ? `<button class="pill-btn danger" onclick="voidDoc('${d.document_id}')">Mark void</button>` : '') +
+      (d.final_sha256 ? `<a class="pill-btn" href="/api/stamp/documents/${d.document_id}/download">Download</a>` : '') +
+      (d.can_edit ? `<button class="pill-btn" onclick="closeModal('m-doc'); openEditor('${d.document_id}')">Continue editing</button>` : '') +
+      `<button class="pill-btn dark" onclick="closeModal('m-doc')">Close</button>`;
+    openModal('m-doc');
+  } catch(e){ fail(e); }
+}
+function signingBlock(d){
+  const sg = d.signing_detail;
+  if(!sg || !sg.requests.length) return '';
+  const open = sg.status === 'OPEN';
+  const allSigned = sg.requests.every(r => r.status === 'SIGNED');
+  const tag = r => ({PENDING:'<span class="tag DRAFT">Waiting</span>', SIGNED:'<span class="tag COMPLETED">Signed</span>',
+                     DECLINED:'<span class="tag FAILED">Declined</span>', CANCELLED:'<span class="tag off">Cancelled</span>'}[r.status]);
+  return `<div class="lbl" style="margin:14px 0 4px;">Signatures${open ? '' : ' · ' + sg.status.toLowerCase()}</div>` +
+    sg.requests.map(r => `<div class="line-row"><span>${esc(r.name)}${r.contact ? `<br><span class="note">${esc(r.contact)}</span>` : ''}</span>
+      <span>${tag(r)}${r.signed_at ? ' · ' + when(r.signed_at) : ''}${r.decline_reason ? '<br><span class="note">“' + esc(r.decline_reason) + '”</span>' : ''}
+      ${open && r.status === 'PENDING' ? `<br><button class="pill-btn small" style="margin-top:6px;" onclick="newLink('${d.document_id}', ${r.id}, this)">New link</button>` : ''}</span></div>`).join('') +
+    `<div id="nl-out"></div>` +
+    (open ? `<div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
+      ${allSigned ? `<button class="pill-btn small dark" onclick="finishSigning('${d.document_id}')">Finish now</button>` : ''}
+      <button class="pill-btn small danger" onclick="cancelSigning('${d.document_id}')">Cancel request</button></div>
+      <div class="note" style="margin-top:6px;">Cancelling stops all links. The document goes back to draft so you can change it and send again.</div>` : '');
+}
+async function newLink(id, rid, btn){
+  try {
+    const r = await api('/stamp/documents/' + id + '/signing/' + rid + '/link', {method:'POST'});
+    $('nl-out').innerHTML = '<div class="note" style="margin-top:8px;">New link — the previous one no longer works:</div>' + linkRows([{name: btn.closest('.line-row').querySelector('span').firstChild.textContent, url: r.url}]);
+  } catch(e){ fail(e); }
+}
+async function cancelSigning(id){
+  try { await api('/stamp/documents/' + id + '/signing/cancel', {method:'POST'}); toast('Signature request cancelled'); closeModal('m-doc'); loadDocs(); loadOverview(); }
+  catch(e){ fail(e); }
+}
+async function finishSigning(id){
+  try { await api('/stamp/documents/' + id + '/signing/complete', {method:'POST'}); toast('Finished and registered'); showDoc(id); loadDocs(); }
+  catch(e){ fail(e); }
+}
+async function voidDoc(id){
+  const reason = $('void-reason').value.trim();
+  if(reason.length < 3){ toast('Give a short reason for voiding this document', true); return; }
+  try {
+    await api('/stamp/documents/' + id + '/void', {method:'POST', json:{reason}});
+    toast('Document marked void'); closeModal('m-doc'); loadDocs(); loadOverview();
+  } catch(e){ fail(e); }
+}
+
+// ── Upload ────────────────────────────────────────────────────────────
+const drop = $('drop');
+drop.addEventListener('click', () => $('file-in').click());
+drop.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); $('file-in').click(); } });
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if(e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
+$('file-in').addEventListener('change', e => { if(e.target.files[0]) uploadFile(e.target.files[0]); e.target.value = ''; });
+async function uploadFile(f){
+  if(!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf'){ toast('Only PDF files are supported.', true); return; }
+  if(f.size > CFG.max_upload_mb * 1048576){ toast('File is larger than the ' + CFG.max_upload_mb + ' MB limit.', true); return; }
+  try {
+    const d = await Dino.wrap(api('/stamp/documents?filename=' + encodeURIComponent(f.name), {method:'POST', body:f, headers:{'Content-Type':'application/pdf'}}), 'Uploading ' + f.name + '…');
+    await openEditor(d.document_id);
+  } catch(e){ fail(e); }
+}
+async function loadDrafts(){
+  if(!CFG.user.can_stamp) return;
+  try {
+    const rows = (await api('/stamp/documents?status=DRAFT')).filter(d => d.can_edit).slice(0, 8);
+    $('st-drafts').style.display = rows.length && $('st-upload').style.display !== 'none' ? '' : 'none';
+    $('st-drafts-body').innerHTML = rows.map(d => `<tr><td class="doc-id">${esc(d.document_id)}</td><td>${esc(d.original_filename)}</td>
+      <td style="white-space:nowrap;">${when(d.created_at)}</td><td style="text-align:right;"><button class="pill-btn small" onclick="openEditor('${d.document_id}')">Continue</button></td></tr>`).join('');
+  } catch(e){}
+}
+function showStampPane(which){
+  ['upload','editor','result'].forEach(k => $('st-' + k).style.display = k === which ? '' : 'none');
+}
+function resetStamp(){ pdf = null; doc = null; items = []; showStampPane('upload'); loadDrafts(); }
+
+// ── Editor state ──────────────────────────────────────────────────────
+// Every element is a box given as FRACTIONS of the displayed page (origin
+// top-left, y down) plus a clockwise rotation about the box centre. Sizes of
+// text and lines are fractions of the page HEIGHT. The server uses the same
+// convention and the same constants, so what you see is what lands in the PDF.
+let doc = null, pdf = null, cur = 1, zoom = 1, fit = 1, items = [], selId = null, editId = null, seq = 1;
+let undoStack = [], redoStack = [], renderTask = null, W = 0, H = 0;
+let fields = [], fieldVals = {}, showFields = true, runs = [], tool = null, toolArgs = {};
+const docImgArt = {};          // document image id -> {url, ratio}
+const sigArt = {};             // my signature id -> {url, ratio}
+let mySigs = [];               // [{id, kind}]
+const ov = $('ov');
+
+const FONT_CSS = {helv:'Helvetica, Arial, sans-serif', times:"'Times New Roman', Times, serif", courier:"'Courier New', Courier, monospace"};
+const FONT_BASE = {helv:0.95, times:0.94, courier:0.87};
+const LH = 1.2, SYMBOL_STROKE = 0.12, CHECK = [[0.08,0.55],[0.38,0.85],[0.92,0.15]];
+const INK = ['#15141a','#16168a','#2f6df6','#c0261b','#1a7f37','#8a6300','#7a3fbf','#ffffff'];
+const HL = ['#ffe14d','#b6f36b','#9fe3f5','#ffb3c8','#ffc982'];
+const BOX_TOOLS = ['whiteout','highlight','strike','underline','rect','ellipse','line','arrow','link'];
+const SHAPE_NAMES = {whiteout:'Whiteout', highlight:'Highlight', strike:'Strikethrough', underline:'Underline', rect:'Rectangle',
+  ellipse:'Ellipse', line:'Line', arrow:'Arrow', check:'Checkmark', cross:'Cross', dot:'Dot'};
+const pageHpt = () => (doc && doc.pages && doc.pages[cur - 1] ? doc.pages[cur - 1].h : 842);
+const ptk = () => H / pageHpt();                         // screen px per PDF point
+
+async function openEditor(id){
+  Dino.show('Opening document…');
+  try {
+    const d = await api('/stamp/documents/' + id);
+    if(!d.can_edit){ showDoc(id); return; }
+    const buf = await (await fetch('/api/stamp/documents/' + id + '/file', {credentials:'same-origin'})).arrayBuffer();
+    pdf = await pdfjsLib.getDocument({data: buf, isEvalSupported: false}).promise;
+    doc = d; cur = 1; zoom = 1; selId = null; editId = null; undoStack = []; redoStack = []; tool = null;
+    fields = d.fields || [];
+    fieldVals = Object.assign({}, (d.draft && d.draft.fields) || {});
+    showFields = true;
+    items = ((d.draft && d.draft.items) || []).filter(it => it.kind !== 'stamp' || stampById(it.stamp_id)).map(it => ({...it, id: seq++}));
+    for(const it of items){
+      if(it.kind === 'signature' && it.sig_id && !sigArt[it.sig_id]) sigArt[it.sig_id] = await loadArt('/api/stamp/signatures/' + it.sig_id + '/image');
+      if(it.kind === 'image' && it.image_id && !docImgArt[it.image_id]) docImgArt[it.image_id] = await loadArt('/api/stamp/documents/' + id + '/images/' + it.image_id);
+    }
+    go('stamp'); showStampPane('editor');
+    $('ed-name').textContent = d.original_filename; $('ed-id').textContent = d.document_id;
+    $('mn-forms-info').textContent = fields.length ? fields.length + ' form field' + (fields.length > 1 ? 's' : '') + ' found — click a field on the page to fill it' : 'No fillable form fields in this PDF';
+    $('mi-fields').style.display = fields.length ? '' : 'none';
+    $('mi-fields').lastChild.textContent = 'Hide form fields';
+    const p1 = await pdf.getPage(1), v1 = p1.getViewport({scale: 1});
+    fit = Math.max(0.3, Math.min(1.3, ($('stage').clientWidth - 60) / v1.width));
+    Dino.hide();
+    buildThumbs(); await renderPage(); renderProps(); syncBar();
+  } catch(e){ fail(e); }
+  Dino.hide(true);
+}
+function closeEditor(){ commitEdit(); if(items.length || Object.keys(fieldVals).length) saveDraft(true); disarm(); resetStamp(); }
+
+async function renderPage(){
+  if(!pdf) return;
+  const page = await pdf.getPage(cur);
+  const vp = page.getViewport({scale: fit * zoom});
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const c = $('pg');
+  if(renderTask){ try { renderTask.cancel(); } catch(e){} }
+  c.width = Math.floor(vp.width * dpr); c.height = Math.floor(vp.height * dpr);
+  c.style.width = vp.width + 'px'; c.style.height = vp.height + 'px';
+  W = vp.width; H = vp.height;
+  renderTask = page.render({canvasContext: c.getContext('2d'), viewport: vp, transform: dpr !== 1 ? [dpr,0,0,dpr,0,0] : null});
+  try { await renderTask.promise; } catch(e){ if(e && e.name !== 'RenderingCancelledException') throw e; }
+  runs = await textRuns(page, vp);
+  drawItems(); syncBar();
+}
+
+// Existing text on the page, merged into lines, so "Text" can edit it.
+async function textRuns(page, vp){
+  let tc;
+  try { tc = await page.getTextContent(); } catch(e){ return []; }
+  const raw = [];
+  for(const t of tc.items){
+    if(!t.str || !t.str.trim()) continue;
+    const tx = pdfjsLib.Util.transform(vp.transform, t.transform);
+    if(Math.abs(Math.atan2(tx[1], tx[0])) > 0.01) continue;      // only horizontal text
+    const size = Math.hypot(tx[2], tx[3]);
+    if(size < 3) continue;
+    const fam = ((tc.styles[t.fontName] || {}).fontFamily || '').toLowerCase();
+    raw.push({str: t.str, left: tx[4], base: tx[5], size, width: t.width * vp.scale,
+              font: fam.includes('mono') ? 'courier' : (fam.includes('serif') && !fam.includes('sans')) ? 'times' : 'helv',
+              bold: /bold|black|heavy/i.test(t.fontName + ' ' + fam)});
+  }
+  raw.sort((a, b) => Math.abs(a.base - b.base) < 2 ? a.left - b.left : a.base - b.base);
+  const out = [];
+  for(const r of raw){
+    const last = out[out.length - 1];
+    if(last && Math.abs(last.base - r.base) < Math.max(2, r.size * 0.2) && Math.abs(last.size - r.size) < r.size * 0.25
+       && r.left - (last.left + last.width) < r.size * 0.9 && r.left >= last.left){
+      const gap = r.left - (last.left + last.width);
+      last.str += (gap > r.size * 0.15 && !last.str.endsWith(' ') && !r.str.startsWith(' ') ? ' ' : '') + r.str;
+      last.width = r.left + r.width - last.left;
+    } else out.push({...r});
+  }
+  return out;
+}
+
+function syncBar(){
+  if(!pdf) return;
+  $('ed-page').textContent = cur + ' / ' + pdf.numPages;
+  $('ed-zoom').textContent = Math.round(zoom * 100) + '%';
+  $('b-undo').disabled = !undoStack.length; $('b-redo').disabled = !redoStack.length;
+  $('b-apply').textContent = items.some(i => i.kind === 'signer') ? 'Send for signature' : 'Apply changes';
+  document.querySelectorAll('.thumb').forEach(t => {
+    const n = +t.dataset.p; t.classList.toggle('active', n === cur);
+    t.classList.toggle('has', items.some(it => onPage(it, n)));
+  });
+}
+function gotoPage(n){ if(!pdf || n < 1 || n > pdf.numPages) return; commitEdit(); cur = n; selId = null; renderPage(); renderProps(); }
+function setZoom(z){ commitEdit(); zoom = Math.max(0.5, Math.min(3, z)); renderPage(); }
+async function buildThumbs(){
+  const box = $('thumbs'); box.innerHTML = '';
+  const mine = pdf;
+  for(let n = 1; n <= pdf.numPages; n++){
+    const b = document.createElement('button');
+    b.className = 'thumb'; b.dataset.p = n; b.title = 'Page ' + n;
+    b.innerHTML = (n <= 40 ? '<canvas></canvas>' : '<div class="ph"></div>') + '<span>' + n + ' <i class="dot"></i></span>';
+    b.onclick = () => gotoPage(n);
+    box.appendChild(b);
+  }
+  for(let n = 1; n <= Math.min(pdf.numPages, 40); n++){
+    if(pdf !== mine) return;
+    const page = await pdf.getPage(n), vp = page.getViewport({scale: 1});
+    const v = page.getViewport({scale: 150 / vp.width});
+    const c = box.children[n-1].querySelector('canvas');
+    c.width = v.width; c.height = v.height;
+    try { await page.render({canvasContext: c.getContext('2d'), viewport: v}).promise; } catch(e){}
+  }
+}
+
+// Which pages an item appears on (mirrors the server's page-range rules).
+function pagesFor(it, total){
+  const spec = (it.pages || 'current').trim().toLowerCase();
+  if(spec === 'current') return [it.page];
+  if(spec === 'all') return Array.from({length: total}, (_, i) => i + 1);
+  if(spec === 'first') return [1];
+  if(spec === 'last') return [total];
+  if(!/^[\d\s,\-]+$/.test(spec)) return null;
+  const out = new Set();
+  for(const part of spec.split(',').map(s => s.trim()).filter(Boolean)){
+    const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+    if(m){ const a = +m[1], b = +m[2]; if(a > b) return null; for(let i = a; i <= b; i++) out.add(i); }
+    else if(/^\d+$/.test(part)) out.add(+part); else return null;
+  }
+  const arr = [...out].sort((a,b) => a - b);
+  return arr.length && arr.every(p => p >= 1 && p <= total) ? arr : null;
+}
+const onPage = (it, n) => { const p = pagesFor(it, pdf.numPages); return p ? p.includes(n) : it.page === n; };
+const stampById = id => CFG.stamps.find(s => s.id === id);
+
+// ── Drawing items (SVG previews mirror backend/stamp_pdf.py) ─────────────
+const meas = document.createElement('canvas').getContext('2d');
+function label(it){
+  if(it.kind === 'stamp') return stampById(it.stamp_id).text;
+  if(it.kind === 'date') return CFG.server_dates[(it.date_format || CFG.settings.date_format) + (it.with_time ? '|time' : '')];
+  return it.text || '';
+}
+function stampTextSvg(it, pw, ph){
+  const border = it.kind === 'stamp' ? true : it.kind === 'date' ? false : !!it.border;
+  const color = it.kind === 'stamp' ? stampById(it.stamp_id).color : (it.color || CFG.text_colors.blue);
+  const text = label(it), size = ph * (border ? 0.50 : 0.72);
+  meas.font = '700 ' + size + 'px Helvetica, Arial, sans-serif';
+  const natural = meas.measureText(text).width || 1, width = Math.min(natural, pw * (border ? 0.86 : 0.98)), lw = ph * 0.06;
+  return `<svg viewBox="0 0 ${pw} ${ph}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">` +
+    (border ? `<rect x="${lw/2}" y="${lw/2}" width="${pw - lw}" height="${ph - lw}" rx="${ph * 0.10}" fill="none" stroke="${esc(color)}" stroke-width="${lw}"/>` : '') +
+    `<text x="${(pw - width) / 2}" y="${ph / 2 + size * 0.718 / 2}" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="${size}" fill="${esc(color)}" textLength="${width}" lengthAdjust="spacingAndGlyphs">${esc(text)}</text></svg>`;
+}
+const fontCss = (it, px) => `${it.italic ? 'italic ' : ''}${it.bold ? '700' : '400'} ${px}px ${FONT_CSS[it.font || 'helv']}`;
+function plainSize(it){
+  const px = it.fs * H; meas.font = fontCss(it, px);
+  const lines = (it.text || '').split('\n');
+  let mw = 0; for(const l of lines) mw = Math.max(mw, meas.measureText(l).width);
+  return {w: Math.max(mw + 3, px * 0.6) / W, h: lines.length * it.fs * LH};
+}
+function plainSvg(it, pw, ph){
+  const size = it.fs * H, base = FONT_BASE[it.font || 'helv'];
+  const lines = (it.text || '').split('\n').map((l, i) => l ? `<text x="0" y="${size * (base + LH * i)}" xml:space="preserve">${esc(l)}</text>` : '').join('');
+  return `<svg viewBox="0 0 ${pw} ${ph}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" font-family="${esc(FONT_CSS[it.font || 'helv'])}" font-size="${size}" font-weight="${it.bold ? 700 : 400}" font-style="${it.italic ? 'italic' : 'normal'}" fill="${esc(it.color || '#15141a')}">${lines}</svg>`;
+}
+function shapeSvg(it, pw, ph){
+  const s = it.shape, stroke = esc(it.stroke || '#15141a'), sw = Math.max(0.2 * ptk(), (it.sw || 0.002) * H);
+  const open = `<svg viewBox="0 0 ${pw} ${ph}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" stroke-linecap="round" stroke-linejoin="round">`;
+  let body = '';
+  if(s === 'whiteout') body = `<rect width="${pw}" height="${ph}" fill="#ffffff"/>` + (it.id === selId ? `<rect width="${pw}" height="${ph}" fill="none" stroke="#c9c3b3" stroke-dasharray="3 3"/>` : '');
+  else if(s === 'highlight') body = `<rect width="${pw}" height="${ph}" fill="${esc(it.fill || HL[0])}"/>`;
+  else if(s === 'rect') body = `<rect x="${sw/2}" y="${sw/2}" width="${Math.max(pw - sw, 0.1)}" height="${Math.max(ph - sw, 0.1)}" fill="${it.fill ? esc(it.fill) : 'none'}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  else if(s === 'ellipse') body = `<ellipse cx="${pw/2}" cy="${ph/2}" rx="${Math.max(pw/2 - sw/2, 0.1)}" ry="${Math.max(ph/2 - sw/2, 0.1)}" fill="${it.fill ? esc(it.fill) : 'none'}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  else if(s === 'line' || s === 'strike') body = `<line x1="0" y1="${ph/2}" x2="${pw}" y2="${ph/2}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  else if(s === 'underline') body = `<line x1="0" y1="${ph - sw/2}" x2="${pw}" y2="${ph - sw/2}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  else if(s === 'arrow'){
+    const hs = Math.max(sw * 4, 6 * ptk());
+    body = `<line x1="0" y1="${ph/2}" x2="${pw - hs * 0.8}" y2="${ph/2}" stroke="${stroke}" stroke-width="${sw}"/><polygon points="${pw},${ph/2} ${pw - hs},${ph/2 - hs * 0.55} ${pw - hs},${ph/2 + hs * 0.55}" fill="${stroke}"/>`;
+  }
+  else if(s === 'check') body = `<polyline points="${CHECK.map(([x, y]) => x * pw + ',' + y * ph).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${SYMBOL_STROKE * Math.min(pw, ph)}"/>`;
+  else if(s === 'cross'){ const k = SYMBOL_STROKE * Math.min(pw, ph); body = `<line x1="${.15*pw}" y1="${.15*ph}" x2="${.85*pw}" y2="${.85*ph}" stroke="${stroke}" stroke-width="${k}"/><line x1="${.85*pw}" y1="${.15*ph}" x2="${.15*pw}" y2="${.85*ph}" stroke="${stroke}" stroke-width="${k}"/>`; }
+  else if(s === 'dot') body = `<circle cx="${pw/2}" cy="${ph/2}" r="${0.35 * Math.min(pw, ph)}" fill="${stroke}"/>`;
+  return open + body + '</svg>';
+}
+function inkSvg(it, pw, ph){
+  const sw = Math.max(0.2 * ptk(), (it.sw || 0.002) * H);
+  return `<svg viewBox="0 0 ${pw} ${ph}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><polyline points="${(it.points || []).map(([x, y]) => x * pw + ',' + y * ph).join(' ')}" fill="none" stroke="${esc(it.stroke || '#16168a')}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+const isImage = it => it.kind === 'signature' || it.kind === 'image' || (it.kind === 'stamp' && stampById(it.stamp_id).kind === 'image');
+function artFor(it){ return it.kind === 'signature' ? sigArt[it.sig_id] : it.kind === 'image' ? docImgArt[it.image_id] : stampArt[it.stamp_id]; }
+function place(el, it){
+  el.style.left = it.x * W + 'px'; el.style.top = it.y * H + 'px';
+  el.style.width = it.w * W + 'px'; el.style.height = it.h * H + 'px';
+  el.style.transform = 'rotate(' + (it.rotation || 0) + 'deg)'; el.style.opacity = it.opacity;
+}
+function fill(el, it){
+  const handles = it.id === selId && it.id !== editId ? '<i class="hd rs" data-h="rs"></i>' + (['link','signer'].includes(it.kind) ? '' : '<i class="hd rt" data-h="rt"></i>') : '';
+  const pw = it.w * W, ph = it.h * H;
+  el.classList.toggle('signer', it.kind === 'signer'); el.classList.toggle('link', it.kind === 'link');
+  if(it.id === editId){ el.innerHTML = '<textarea class="ta" spellcheck="false" aria-label="Text"></textarea>'; bindEditor(el, it); return; }
+  let inner = '';
+  if(isImage(it)){ const a = artFor(it); inner = a ? `<img src="${a.url}" alt="" draggable="false">` : ''; }
+  else if(it.kind === 'plain') inner = plainSvg(it, pw, ph);
+  else if(it.kind === 'shape') inner = shapeSvg(it, pw, ph);
+  else if(it.kind === 'ink') inner = inkSvg(it, pw, ph);
+  else if(it.kind === 'link') inner = '';
+  else if(it.kind === 'signer') inner = `<span class="slbl"><span>${esc({signature:'Signature', initials:'Initials', text:'Text', date:'Date'}[it.field])}</span><span style="font-weight:500;">${esc(it.signer_name)}</span></span>`;
+  else inner = stampTextSvg(it, pw, ph);
+  el.innerHTML = inner + handles;
+}
+function drawItems(){
+  ov.querySelectorAll('.it, .run, .ff').forEach(e => e.remove());
+  if(!pdf) return;
+  $('paper').classList.toggle('armed', !!tool && tool !== 'text');
+  $('paper').classList.toggle('texting', tool === 'text');
+  if(tool === 'text') for(const r of runs){
+    const el = document.createElement('div'); el.className = 'run';
+    el.style.left = r.left - 1 + 'px'; el.style.top = r.base - r.size * 0.92 + 'px';
+    el.style.width = r.width + 2 + 'px'; el.style.height = r.size * 1.2 + 'px';
+    el.dataset.run = runs.indexOf(r); el.title = 'Click to edit this text';
+    ov.appendChild(el);
+  }
+  if(showFields) drawFields();
+  for(const it of items){
+    if(!onPage(it, cur)) continue;
+    const el = document.createElement('div');
+    el.className = 'it' + (it.id === selId ? ' sel' : ''); el.dataset.id = it.id;
+    place(el, it); fill(el, it); ov.appendChild(el);
+  }
+  const ta = ov.querySelector('textarea.ta'); if(ta) setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 0);
+}
+const elFor = id => ov.querySelector('.it[data-id="' + id + '"]');
+const sel = () => items.find(i => i.id === selId);
+
+// ── Existing form fields ───────────────────────────────────────────────
+function drawFields(){
+  for(const f of fields){
+    if(f.page !== cur) continue;
+    const v = fieldVals[f.name] !== undefined ? fieldVals[f.name] : (f.value || '');
+    let el;
+    if(f.type === 'checkbox' || f.type === 'radio'){
+      el = document.createElement('input'); el.type = f.type;
+      if(f.type === 'radio') el.name = 'rf_' + f.name;
+      el.checked = f.type === 'checkbox' ? !!v && v !== 'Off' : v === f.export;
+      el.onchange = () => { fieldVals[f.name] = f.type === 'checkbox' ? (el.checked ? f.export : 'Off') : f.export; };
+    } else if(f.type === 'choice'){
+      el = document.createElement('select');
+      el.innerHTML = '<option value=""></option>' + (f.options || []).map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('');
+      el.onchange = () => { fieldVals[f.name] = el.value; };
+    } else {
+      el = document.createElement(f.multiline ? 'textarea' : 'input');
+      if(!f.multiline) el.type = 'text';
+      el.value = v; el.oninput = () => { fieldVals[f.name] = el.value; };
+    }
+    el.className = 'ff'; el.title = f.name; el.setAttribute('aria-label', f.name);
+    el.style.left = f.x * W + 'px'; el.style.top = f.y * H + 'px'; el.style.width = f.w * W + 'px'; el.style.height = f.h * H + 'px';
+    if(f.type === 'text' || f.type === 'choice') el.style.fontSize = Math.min(f.h * H * 0.62, 11 * ptk()) + 'px';
+    ov.appendChild(el);
+  }
+}
+function toggleFields(){ showFields = !showFields; $('mi-fields').lastChild.textContent = showFields ? 'Hide form fields' : 'Show form fields'; closeMenus(); drawItems(); }
+
+// ── Undo / redo ───────────────────────────────────────────────────────
+function snap(){ undoStack.push(JSON.stringify(items)); if(undoStack.length > 100) undoStack.shift(); redoStack = []; }
+function restore(from, to){
+  commitEdit();
+  if(!from.length) return;
+  to.push(JSON.stringify(items)); items = JSON.parse(from.pop());
+  if(!sel()) selId = null;
+  drawItems(); renderProps(); syncBar();
+}
+const undo = () => restore(undoStack, redoStack), redo = () => restore(redoStack, undoStack);
+
+// ── Tools ─────────────────────────────────────────────────────────────
+const HINTS = {text:'Click anywhere to add text — or click existing text on the page to change it', date:'Click where the date should go',
+  stamptext:'Click where the stamp text should go', link:'Drag a box over the area that should open the link', check:'Click to place a checkmark',
+  cross:'Click to place a cross', dot:'Click to place a dot', image:'Click where the image should go', stamp:'Click where the stamp should go',
+  sig:'Click where you want to sign', signer:'Click where this person should sign', whiteout:'Drag over the area to cover with white',
+  highlight:'Drag over the text to highlight', strike:'Drag across the text to strike it through', underline:'Drag across the text to underline it',
+  rect:'Drag to draw a rectangle', ellipse:'Drag to draw an ellipse', line:'Drag to draw a line', arrow:'Drag to draw an arrow', ink:'Draw freehand on the page'};
+function arm(t, args){
+  closeMenus(); commitEdit();
+  if(!pdf) return;
+  if(tool === t && !args){ disarm(); return; }
+  tool = t; toolArgs = args || {};
+  selId = null; renderProps();
+  $('hint-text').textContent = HINTS[t] || ''; $('hint').classList.add('on');
+  document.querySelectorAll('.tb-btn[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  drawItems();
+}
+function disarm(){
+  tool = null; toolArgs = {};
+  $('hint').classList.remove('on');
+  document.querySelectorAll('.tb-btn[data-tool]').forEach(b => b.classList.remove('on'));
+  if(pdf) drawItems();
+}
+function newItem(base){ return {id: seq++, page: cur, pages: 'current', rotation: 0, opacity: 1, ...base}; }
+function addAt(it, px, py, anchor){
+  // anchor 'center' places the box centred on the click, 'tl' puts its top-left there
+  if(anchor === 'tl'){ it.x = px / W; it.y = py / H; }
+  else { it.x = px / W - it.w / 2; it.y = py / H - it.h / 2; }
+  items.push(it); selId = it.id;
+}
+function imgBox(ratio, frac){ const w = frac, h = (w * W / (ratio || 1)) / H; return {w, h}; }
+function clickTool(px, py, e){
+  snap();
+  const k = ptk(), t = tool, a = toolArgs;
+  if(t === 'text'){
+    const runEl = e.target.closest('.run');
+    if(runEl){ convertRun(runs[+runEl.dataset.run]); return; }
+    const it = newItem({kind:'plain', text:'', font:'helv', fs: 11 / pageHpt(), color:'#15141a', bold:false, italic:false});
+    Object.assign(it, plainSize(it));
+    addAt(it, px, py - 11 * k * 0.6, 'tl'); editId = it.id;
+  }
+  else if(t === 'date') addAt(newItem({kind:'date', w:0.2, h:(0.2 * W / 8) / H, color:'#15141a', date_format: CFG.settings.date_format, with_time:false}), px, py);
+  else if(t === 'stamptext'){ const it = newItem({kind:'text', text: CFG.text_presets[0], color: CFG.text_colors.blue, border:true, w:0.26}); it.h = (0.26 * W / 3.4) / H; addAt(it, px, py); }
+  else if(['check','cross','dot'].includes(t)) addAt(newItem({kind:'shape', shape:t, stroke:'#15141a', w: 14 * k / W, h: 14 * k / H}), px, py);
+  else if(t === 'stamp'){
+    const s = stampById(a.stamp_id);
+    const it = newItem({kind:'stamp', stamp_id: a.stamp_id});
+    if(s.kind === 'image') Object.assign(it, imgBox((stampArt[s.id] || {}).ratio, CFG.settings.default_stamp_size));
+    else Object.assign(it, {w:0.26, h:(0.26 * W / 3.4) / H});
+    addAt(it, px, py);
+  }
+  else if(t === 'sig'){
+    const s = mySigs.find(x => x.id === a.sig_id) || {kind:'signature'};
+    addAt(Object.assign(newItem({kind:'signature', sig_id: a.sig_id}), imgBox((sigArt[a.sig_id] || {}).ratio, s.kind === 'initials' ? 0.08 : 0.22)), px, py);
+  }
+  else if(t === 'image') addAt(Object.assign(newItem({kind:'image', image_id: a.image_id}), imgBox((docImgArt[a.image_id] || {}).ratio, 0.25)), px, py);
+  else if(t === 'signer'){
+    const dims = {signature:[0.24, 0.06], initials:[0.08, 0.04], text:[0.26, 0.025], date:[0.18, 0.025]}[a.field];
+    addAt(newItem({kind:'signer', signer_name: a.name, signer_contact: a.contact, field: a.field, w: dims[0], h: dims[1]}), px, py);
+  }
+  disarm(); renderProps(); syncBar();
+}
+function convertRun(r){
+  // Cover the original words with white, then put an editable copy on top.
+  const k = 1;
+  const white = newItem({kind:'shape', shape:'whiteout', x:(r.left - 1) / W, y:(r.base - r.size * 0.98) / H,
+                         w:(r.width + 2 + k) / W, h:(r.size * 1.26) / H});
+  const fs = r.size / H, base = FONT_BASE[r.font];
+  const txt = newItem({kind:'plain', text: r.str, font: r.font, bold: r.bold, italic:false, fs, color:'#15141a'});
+  Object.assign(txt, plainSize(txt));
+  txt.x = r.left / W; txt.y = (r.base - r.size * base) / H;
+  items.push(white, txt); selId = txt.id; editId = txt.id;
+  disarm(); renderProps(); syncBar();
+}
+
+// ── Pointer: place / draw / move / resize / rotate ─────────────────────
+let drag = null;
+ov.addEventListener('pointerdown', e => {
+  if(e.target.closest('.ff') || e.target.closest('textarea.ta')) return;
+  const r = ov.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  if(tool){
+    e.preventDefault();
+    if(BOX_TOOLS.includes(tool) || tool === 'ink'){
+      snap();
+      const t = tool, k = ptk();
+      const base = t === 'link' ? {kind:'link', url:''}
+        : t === 'ink' ? {kind:'ink', stroke:'#16168a', sw: 2 / pageHpt(), points:[]}
+        : {kind:'shape', shape:t, stroke: t === 'strike' ? '#c0261b' : t === 'underline' ? '#2f6df6' : '#15141a',
+           sw: (t === 'strike' || t === 'underline' ? 1.2 : 1.5) / pageHpt(), fill: t === 'highlight' ? HL[0] : null,
+           opacity: t === 'highlight' ? 0.45 : 1};
+      const it = newItem({...base, x: px / W, y: py / H, w: 1 / W, h: 1 / H});
+      items.push(it); selId = it.id;
+      drag = {mode:'draw', tool:t, it, sx:px, sy:py, r, pts:[[px, py]], el:null};
+      ov.setPointerCapture(e.pointerId);
+      drawItems(); drag.el = elFor(it.id);
+      return;
+    }
+    clickTool(px, py, e); drawItems();
+    return;
+  }
+  const el = e.target.closest('.it');
+  if(!el){ if(selId !== null || editId !== null){ commitEdit(); selId = null; drawItems(); renderProps(); } return; }
+  e.preventDefault();
+  const id = +el.dataset.id;
+  if(editId !== null && editId !== id) commitEdit();
+  if(selId !== id){ selId = id; drawItems(); renderProps(); }
+  const it = sel();
+  drag = {mode: e.target.dataset.h || 'mv', it, el: elFor(id), sx: e.clientX, sy: e.clientY, ox: it.x, oy: it.y,
+          ow: it.w, ofs: it.fs, cx: (it.x + it.w / 2) * W, cy: (it.y + it.h / 2) * H, ratio: (it.w * W) / (it.h * H), r, before: JSON.stringify(items), moved: false};
+  ov.setPointerCapture(e.pointerId);
+});
+ov.addEventListener('dblclick', e => {
+  const el = e.target.closest('.it'); if(!el) return;
+  const it = items.find(i => i.id === +el.dataset.id);
+  if(it && it.kind === 'plain'){ snap(); editId = it.id; selId = it.id; drawItems(); renderProps(); }
+});
+ov.addEventListener('pointermove', e => {
+  if(!drag) return;
+  const {it} = drag;
+  const px = e.clientX - drag.r.left, py = e.clientY - drag.r.top;
+  if(drag.mode === 'draw'){
+    const t = drag.tool;
+    if(t === 'ink'){
+      drag.pts.push([px, py]);
+      const xs = drag.pts.map(p => p[0]), ys = drag.pts.map(p => p[1]);
+      const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(Math.max(...xs) - x0, 1), h = Math.max(Math.max(...ys) - y0, 1);
+      it.x = x0 / W; it.y = y0 / H; it.w = w / W; it.h = h / H;
+      it.points = drag.pts.map(([x, y]) => [(x - x0) / w, (y - y0) / h]);
+    } else if(t === 'line' || t === 'arrow'){
+      const dx = px - drag.sx, dy = py - drag.sy, len = Math.max(Math.hypot(dx, dy), 1), hpx = Math.max(12, 8 * ptk());
+      const cx = (px + drag.sx) / 2, cy = (py + drag.sy) / 2;
+      it.w = len / W; it.h = hpx / H; it.x = cx / W - it.w / 2; it.y = cy / H - it.h / 2;
+      it.rotation = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    } else {
+      const x0 = Math.min(px, drag.sx), y0 = Math.min(py, drag.sy);
+      it.x = x0 / W; it.y = y0 / H; it.w = Math.max(Math.abs(px - drag.sx), 1) / W; it.h = Math.max(Math.abs(py - drag.sy), 1) / H;
+    }
+    place(drag.el, it); fill(drag.el, it);
+    return;
+  }
+  if(!drag.moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 2) return;
+  drag.moved = true;
+  let gv = false, gh = false;
+  if(drag.mode === 'mv'){
+    let cx = (drag.ox + it.w / 2) * W + (e.clientX - drag.sx), cy = (drag.oy + it.h / 2) * H + (e.clientY - drag.sy);
+    if(Math.abs(cx - W / 2) < 6){ cx = W / 2; gv = true; }          // alignment guides: snap to page centre
+    if(Math.abs(cy - H / 2) < 6){ cy = H / 2; gh = true; }
+    cx = Math.max(0, Math.min(W, cx)); cy = Math.max(0, Math.min(H, cy));
+    it.x = cx / W - it.w / 2; it.y = cy / H - it.h / 2;
+  } else if(drag.mode === 'rs'){
+    // Resize in the item's own (rotated) frame.
+    const a = (it.rotation || 0) * Math.PI / 180, dx = px - drag.cx, dy = py - drag.cy;
+    const lx = dx * Math.cos(a) + dy * Math.sin(a), ly = -dx * Math.sin(a) + dy * Math.cos(a);
+    if(it.kind === 'plain'){
+      // text scales its font; it keeps its top-left corner
+      const left = drag.ox * W, nw = Math.max(10, px - left);
+      it.fs = Math.max(0.003, Math.min(0.2, drag.ofs * nw / (drag.ow * W)));
+      Object.assign(it, plainSize(it));
+    } else {
+      const lockRatio = isImage(it) || (['stamp','text','date'].includes(it.kind) && !e.shiftKey);
+      let nw = Math.max(8, 2 * Math.abs(lx)), nh = lockRatio ? nw / drag.ratio : Math.max(['line','arrow'].includes(it.shape) ? it.h * H : 6, 2 * Math.abs(ly));
+      if(['line','arrow'].includes(it.shape)) nh = it.h * H;
+      if(nw > W * 1.5){ nw = W * 1.5; if(lockRatio) nh = nw / drag.ratio; }
+      it.w = nw / W; it.h = nh / H; it.x = drag.cx / W - it.w / 2; it.y = drag.cy / H - it.h / 2;
+    }
+    if(!isImage(it)) fill(drag.el, it);
+  } else {
+    let deg = Math.atan2(py - drag.cy, px - drag.cx) * 180 / Math.PI + 90;
+    deg = ((deg % 360) + 360) % 360;
+    if(e.shiftKey) deg = Math.round(deg / 15) * 15;
+    else for(const s of [0, 90, 180, 270, 360]) if(Math.abs(deg - s) < 4) deg = s % 360;
+    it.rotation = Math.round(deg * 10) / 10 % 360;
+  }
+  $('g-v').style.display = gv ? 'block' : 'none'; $('g-v').style.left = W / 2 + 'px';
+  $('g-h').style.display = gh ? 'block' : 'none'; $('g-h').style.top = H / 2 + 'px';
+  place(drag.el, it);
+});
+function endDrag(){
+  if(!drag) return;
+  if(drag.mode === 'draw'){
+    const {it, tool: t} = drag;
+    const tiny = it.w * W < 4 && it.h * H < 4;
+    if(t === 'ink' && drag.pts.length < 2){ items = items.filter(i => i !== it); undoStack.pop(); }
+    else if(tiny && t !== 'ink'){
+      // a plain click: give the box a sensible default size
+      const k = ptk(), dw = {link:140, whiteout:120, highlight:120, strike:120, underline:120, rect:120, ellipse:120, line:120, arrow:120}[t] * k;
+      const dh = {link:16, whiteout:20, highlight:14, strike:12, underline:12, rect:70, ellipse:70, line:12, arrow:12}[t] * k;
+      it.w = dw / W; it.h = dh / H;
+    }
+    drag = null; disarm(); renderProps(); syncBar();
+    if(it.kind === 'link') setTimeout(() => { const u = $('p-url'); if(u) u.focus(); }, 30);
+    return;
+  }
+  if(drag.moved){ undoStack.push(drag.before); if(undoStack.length > 100) undoStack.shift(); redoStack = []; renderProps(); syncBar(); }
+  $('g-v').style.display = $('g-h').style.display = 'none';
+  drag = null;
+}
+ov.addEventListener('pointerup', endDrag); ov.addEventListener('pointercancel', endDrag);
+
+// Inline text editing (Sejda-style typing on the page)
+function bindEditor(el, it){
+  const ta = el.querySelector('textarea');
+  const k = it.fs * H;
+  ta.value = it.text || '';
+  ta.style.font = fontCss(it, k); ta.style.lineHeight = LH; ta.style.color = it.color || '#15141a';
+  const fit2 = () => { const s = plainSize(it); it.w = s.w; it.h = s.h; place(el, it);
+    ta.style.width = Math.max(s.w * W + k, 30) + 'px'; ta.style.height = s.h * H + 2 + 'px'; };
+  fit2();
+  ta.addEventListener('input', () => { it.text = ta.value; fit2(); });
+  ta.addEventListener('keydown', e => { if(e.key === 'Escape'){ e.preventDefault(); commitEdit(); drawItems(); renderProps(); } e.stopPropagation(); });
+  ta.addEventListener('blur', () => setTimeout(() => { if(editId === it.id){ commitEdit(); drawItems(); renderProps(); syncBar(); } }, 120));
+}
+function commitEdit(){
+  if(editId === null) return;
+  const it = items.find(i => i.id === editId);
+  editId = null;
+  if(it && !(it.text || '').trim()){ items = items.filter(i => i !== it); if(selId === it.id) selId = null; }
+}
+
+document.addEventListener('keydown', e => {
+  if(!pdf || $('st-editor').style.display === 'none' || !$('view-stamp').classList.contains('active')) return;
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || document.querySelector('.modal-overlay.open, .sg-ov')) return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if(e.key === 'Escape'){ if(tool) disarm(); else if(selId !== null){ selId = null; drawItems(); renderProps(); } closeMenus(); return; }
+  if(mod && k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if(mod && k === 'y'){ e.preventDefault(); redo(); return; }
+  const s = sel(); if(!s) return;
+  if(e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); removeSel(); return; }
+  if(e.key === 'Enter' && s.kind === 'plain'){ e.preventDefault(); snap(); editId = s.id; drawItems(); return; }
+  const step = (e.shiftKey ? 10 : 1), d = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]}[e.key];
+  if(d){ e.preventDefault(); snap(); s.x += d[0] * step / W; s.y += d[1] * step / H; place(elFor(s.id), s); syncBar(); }
+});
+function removeSel(){ if(!sel()) return; snap(); items = items.filter(i => i.id !== selId); selId = null; editId = null; drawItems(); renderProps(); syncBar(); }
+function dupSel(){
+  const s = sel(); if(!s) return; snap();
+  const c = {...JSON.parse(JSON.stringify(s)), id: seq++, x: s.x + 0.02, y: s.y + 0.02};
+  items.push(c); selId = c.id; drawItems(); renderProps(); syncBar();
+}
+
+// ── Menus ─────────────────────────────────────────────────────────────
+function closeMenus(except){ document.querySelectorAll('.menu.open').forEach(m => { if(m !== except) m.classList.remove('open'); }); }
+document.querySelectorAll('[data-menu]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const m = $(b.dataset.menu);
+  if(b.dataset.menu === 'mn-sign') buildSignMenu();
+  if(b.dataset.menu === 'mn-images') buildImagesMenu();
+  closeMenus(m); m.classList.toggle('open');
+}));
+document.addEventListener('click', e => { if(!e.target.closest('.menu') && !e.target.closest('[data-menu]')) closeMenus(); });
+document.querySelectorAll('.menu').forEach(m => m.addEventListener('click', e => { if(e.target.closest('.mi, .pick')) setTimeout(closeMenus, 0); }));
+
+function buildImagesMenu(){
+  $('mn-stamps').innerHTML = CFG.stamps.map(s => `<button class="mi" onclick="arm('stamp', {stamp_id:${s.id}})"><span class="ico">${s.kind === 'image' && stampArt[s.id] ? `<img src="${stampArt[s.id].url}" alt="" style="width:20px; height:20px; object-fit:contain;">` : '▭'}</span>${esc(s.name)}</button>`).join('')
+    || '<div class="empty-note" style="padding:6px 10px;">No stamps available to your account.</div>';
+}
+$('img-in').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if(!f || !doc) return;
+  try {
+    const r = await api('/stamp/documents/' + doc.document_id + '/images', {method:'POST', body: f, headers:{'Content-Type':'application/octet-stream'}});
+    docImgArt[r.id] = await loadArt('/api/stamp/documents/' + doc.document_id + '/images/' + r.id);
+    arm('image', {image_id: r.id});
+  } catch(err){ fail(err); }
+});
+
+function buildSignMenu(){
+  const row = s => `<div class="msig"><button class="pick" onclick="arm('sig', {sig_id:${s.id}})" title="Place this ${s.kind}">${sigArt[s.id] ? `<img src="${sigArt[s.id].url}" alt="${s.kind}">` : s.kind}</button><button class="del" title="Delete" onclick="event.stopPropagation(); deleteSig(${s.id})">✕</button></div>`;
+  const sigs = mySigs.filter(s => s.kind === 'signature'), inis = mySigs.filter(s => s.kind === 'initials');
+  const signers = [...new Map(items.filter(i => i.kind === 'signer').map(i => [i.signer_name.toLowerCase(), i])).values()];
+  $('mn-sign').innerHTML = `<div class="mhd">My signature</div>${sigs.map(row).join('')}
+    <button class="mi add" onclick="newSig('signature', true)">＋ New Signature</button>
+    <div class="mhd">My initials</div>${inis.map(row).join('')}
+    <button class="mi add" onclick="newSig('initials', true)">＋ New Initials</button>
+    <button class="mi" onclick="quickSign()"><span class="ico">⚡</span>Sign &amp; stamp — signature, company chop and date in one go</button>
+    <div class="mhd">Someone else signs</div>
+    ${signers.map(s => `<button class="mi" onclick="openSignerModal(${JSON.stringify(s.signer_name).replace(/"/g, '&quot;')})"><span class="ico">＋</span>Add a box for ${esc(s.signer_name)}</button>`).join('')}
+    <button class="mi" onclick="openSignerModal()"><span class="ico">✉</span>Request signature from someone else…</button>`;
+}
+async function newSig(kind, placeAfter){
+  closeMenus();
+  const r = await SigCreator.open({kind, name: ''});
+  if(!r) return;
+  try {
+    const s = await api('/stamp/signatures?kind=' + kind + '&saved=' + (r.saved ? 'true' : 'false'), {method:'POST', body: r.blob, headers:{'Content-Type':'application/octet-stream'}});
+    sigArt[s.id] = await loadArt('/api/stamp/signatures/' + s.id + '/image');
+    if(r.saved) mySigs.unshift({id: s.id, kind});
+    else mySigs.push({id: s.id, kind, once: true});
+    showSignatures();
+    if(placeAfter && pdf) arm('sig', {sig_id: s.id}); else toast(kind === 'initials' ? 'Initials saved' : 'Signature saved');
+  } catch(e){ fail(e); }
+}
+async function deleteSig(id){
+  try {
+    await api('/stamp/signatures/' + id, {method:'DELETE'});
+    mySigs = mySigs.filter(s => s.id !== id);
+    buildSignMenu(); showSignatures(); toast('Deleted');
+  } catch(e){ fail(e); }
+}
+function quickSign(){
+  closeMenus();
+  const s = mySigs.find(x => x.kind === 'signature' && !x.once);
+  if(!s){ toast('Create your signature first — Sign → New Signature.', true); return; }
+  const chop = CFG.stamps.find(x => x.kind === 'image' && x.is_default) || CFG.stamps.find(x => x.kind === 'image');
+  snap();
+  const sg = Object.assign(newItem({kind:'signature', sig_id: s.id}), imgBox((sigArt[s.id] || {}).ratio, 0.22));
+  sg.x = 0.70 - sg.w / 2; sg.y = 0.80;
+  items.push(sg);
+  const dt = newItem({kind:'date', w:0.18, h:(0.18 * W / 8) / H, color:'#15141a', date_format: CFG.settings.date_format, with_time:false});
+  dt.x = 0.70 - dt.w / 2; dt.y = sg.y + sg.h + 0.004; items.push(dt);
+  if(chop){
+    const c = Object.assign(newItem({kind:'stamp', stamp_id: chop.id}), imgBox((stampArt[chop.id] || {}).ratio, CFG.settings.default_stamp_size));
+    c.x = Math.max(0.02, sg.x - c.w - 0.02); c.y = sg.y + sg.h / 2 - c.h / 2; items.push(c);
+  }
+  selId = sg.id; drawItems(); renderProps(); syncBar();
+  toast('Placed — drag them into position');
+}
+let signerField = 'signature';
+document.querySelectorAll('#ms-field button').forEach(b => b.addEventListener('click', () => {
+  signerField = b.dataset.f; document.querySelectorAll('#ms-field button').forEach(x => x.classList.toggle('on', x === b));
+}));
+function openSignerModal(name){
+  closeMenus();
+  const known = [...new Map(items.filter(i => i.kind === 'signer').map(i => [i.signer_name.toLowerCase(), i])).values()];
+  $('ms-names').innerHTML = known.map(i => `<option value="${esc(i.signer_name)}">`).join('');
+  $('ms-name').value = name || '';
+  const prev = known.find(i => i.signer_name === name);
+  $('ms-contact').value = prev ? (prev.signer_contact || '') : '';
+  openModal('m-signer'); setTimeout(() => $(name ? 'ms-contact' : 'ms-name').focus(), 30);
+}
+function placeSigner(){
+  const name = $('ms-name').value.replace(/\s+/g, ' ').trim();
+  if(!name){ toast("Enter the signer's name", true); return; }
+  const prev = items.find(i => i.kind === 'signer' && i.signer_name.toLowerCase() === name.toLowerCase());
+  closeModal('m-signer');
+  arm('signer', {name: prev ? prev.signer_name : name, contact: $('ms-contact').value.trim() || (prev ? prev.signer_contact : ''), field: signerField});
+}
+
+// ── Properties panel ──────────────────────────────────────────────────
+function swatches(id, list, value, allowNone){
+  return `<div class="sw" id="${id}">${allowNone ? `<button type="button" class="swc none ${!value ? 'on' : ''}" data-v="" title="None"></button>` : ''}${list.map(c => `<button type="button" class="swc ${value === c ? 'on' : ''}" data-v="${c}" style="background:${c}" title="${c}"></button>`).join('')}</div>`;
+}
+function renderProps(){
+  const it = sel(), box = $('props');
+  if(!it){
+    $('props-title').textContent = 'Tips';
+    box.innerHTML = `<div class="note">Pick a tool in the toolbar, then click or drag on the page.<br><br>
+      <b>Text</b> — click empty space to type, or click existing words to change them.<br>
+      <b>Sign</b> — type, draw, upload or photograph your signature, or ask someone else to sign.<br>
+      Drag an item to move it; use the corner dot to resize and the top dot to rotate. Ctrl+Z undoes.</div>` +
+      (fields.length ? `<div class="note" style="margin-top:10px; color:var(--cyan-ink);">This PDF has ${fields.length} form field${fields.length > 1 ? 's' : ''} — click a blue field on the page to fill it.</div>` : '');
+    return;
+  }
+  const names = {stamp: (stampById(it.stamp_id) || {}).name, signature:'Signature', image:'Image', text:'Stamp text', date:'Date', plain:'Text',
+    shape: SHAPE_NAMES[it.shape], ink:'Drawing', link:'Link', signer:'Box for ' + (it.signer_name || '')};
+  $('props-title').textContent = names[it.kind] || 'Selected item';
+  const std = ['current','all','first','last'].includes(it.pages), custom = std ? '' : it.pages;
+  let h = '';
+  if(it.kind === 'plain') h += `
+    <div class="row2"><div class="field"><label for="p-font">Font</label><select id="p-font"><option value="helv" ${it.font === 'helv' ? 'selected' : ''}>Helvetica</option><option value="times" ${it.font === 'times' ? 'selected' : ''}>Times New Roman</option><option value="courier" ${it.font === 'courier' ? 'selected' : ''}>Courier</option></select></div>
+    <div class="field"><label for="p-size">Size (pt)</label><input type="number" id="p-size" min="4" max="96" step="0.5" value="${Math.round(it.fs * pageHpt() * 2) / 2}"></div></div>
+    <div class="seg"><button type="button" id="p-bold" class="${it.bold ? 'on' : ''}" style="font-weight:800;">B</button><button type="button" id="p-ital" class="${it.italic ? 'on' : ''}" style="font-style:italic;">I</button><button type="button" id="p-edit">Edit text</button></div>
+    <div class="field"><label>Colour</label>${swatches('p-color', INK, it.color)}</div>`;
+  if(it.kind === 'text') h += `
+    <div class="field"><label for="p-text">Stamp text</label><input id="p-text" maxlength="60" list="p-presets" value="${esc(it.text)}"><datalist id="p-presets">${CFG.text_presets.map(t => `<option value="${esc(t)}">`).join('')}</datalist></div>
+    <div class="field"><label>Colour</label>${swatches('p-color', Object.values(CFG.text_colors), it.color)}</div>
+    <label class="check"><input type="checkbox" id="p-border" ${it.border ? 'checked' : ''}> Border</label>`;
+  if(it.kind === 'date') h += `
+    <div class="field"><label for="p-fmt">Format</label><select id="p-fmt">${CFG.date_formats.map(f => `<option ${it.date_format === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
+    <label class="check"><input type="checkbox" id="p-time" ${it.with_time ? 'checked' : ''}> Include time</label>
+    <div class="field"><label>Colour</label>${swatches('p-color', INK.slice(0, 7), it.color)}</div>
+    <div class="note">The date is set by the server when you apply the changes.</div>`;
+  if(it.kind === 'shape' && it.shape === 'highlight') h += `<div class="field"><label>Colour</label>${swatches('p-fill', HL, it.fill)}</div>`;
+  else if(it.kind === 'shape' && it.shape !== 'whiteout') h += `<div class="field"><label>${['check','cross','dot'].includes(it.shape) ? 'Colour' : 'Line colour'}</label>${swatches('p-stroke', INK, it.stroke)}</div>` +
+    (['rect','ellipse'].includes(it.shape) ? `<div class="field"><label>Fill</label>${swatches('p-fill', ['#ffffff', ...HL, '#d9d3fb', '#bdeef2'], it.fill, true)}</div>` : '') +
+    (['check','cross','dot'].includes(it.shape) ? '' : `<div class="field"><label for="p-sw">Line width (pt)</label><input type="number" id="p-sw" min="0.25" max="20" step="0.25" value="${Math.round(it.sw * pageHpt() * 4) / 4}"></div>`);
+  if(it.kind === 'ink') h += `<div class="field"><label>Colour</label>${swatches('p-stroke', INK, it.stroke)}</div>
+    <div class="field"><label for="p-sw">Line width (pt)</label><input type="number" id="p-sw" min="0.25" max="20" step="0.25" value="${Math.round(it.sw * pageHpt() * 4) / 4}"></div>`;
+  if(it.kind === 'link') h += `<div class="field"><label for="p-url">Link address</label><input id="p-url" placeholder="https://… or mailto:…" value="${esc(it.url || '')}" maxlength="500"></div>
+    <div class="note">The box itself is invisible in the PDF — clicking that area opens the link.</div>`;
+  if(it.kind === 'signer') h += `
+    <div class="field"><label for="p-sname">Signer</label><input id="p-sname" maxlength="60" value="${esc(it.signer_name)}"></div>
+    <div class="field"><label for="p-scontact">Email or phone</label><input id="p-scontact" maxlength="120" value="${esc(it.signer_contact || '')}"></div>
+    <div class="field"><label for="p-sfield">Box type</label><select id="p-sfield">${['signature','initials','text','date'].map(f => `<option value="${f}" ${it.field === f ? 'selected' : ''}>${f[0].toUpperCase() + f.slice(1)}</option>`).join('')}</select></div>
+    <div class="note">They'll fill this box from their own link after you choose <b>Send for signature</b>.</div>`;
+  h += `
+    <div class="field"><label for="p-pages">Pages</label><select id="p-pages">
+      <option value="current" ${it.pages === 'current' ? 'selected' : ''}>This page only (${it.page})</option>
+      <option value="all" ${it.pages === 'all' ? 'selected' : ''}>Repeat on all pages</option>
+      <option value="first" ${it.pages === 'first' ? 'selected' : ''}>First page</option>
+      <option value="last" ${it.pages === 'last' ? 'selected' : ''}>Last page</option>
+      <option value="custom" ${!std ? 'selected' : ''}>Custom…</option></select></div>
+    <div class="field" id="p-custom-wrap" style="${std ? 'display:none;' : ''}"><label for="p-custom">Page numbers</label><input id="p-custom" class="mono" placeholder="1,3,5-8" value="${esc(custom)}"></div>` +
+    (['link','signer'].includes(it.kind) ? '' : `
+    <div class="row2"><div class="field"><label for="p-rot">Rotation °</label><input type="number" id="p-rot" min="0" max="359" step="1" value="${Math.round(it.rotation || 0)}"></div>
+    <div class="field"><label for="p-op">Opacity ${Math.round(it.opacity * 100)}%</label><input type="range" id="p-op" min="10" max="100" step="5" value="${Math.round(it.opacity * 100)}"></div></div>`) + `
+    <div style="display:flex; gap:6px;"><button class="pill-btn small" onclick="dupSel()">Duplicate</button><button class="pill-btn small danger" onclick="removeSel()">Delete</button></div>`;
+  box.innerHTML = h;
+  const redraw = () => { drawItems(); syncBar(); };
+  const on = (id, fn, ev = 'change') => { const n = $(id); if(n) n.addEventListener(ev, () => { snap(); fn(n); redraw(); }); };
+  const sw = (id, fn) => { const n = $(id); if(n) n.querySelectorAll('.swc').forEach(b => b.addEventListener('click', () => { snap(); fn(b.dataset.v || null); n.querySelectorAll('.swc').forEach(x => x.classList.toggle('on', x === b)); redraw(); })); };
+  const refit = () => { if(it.kind === 'plain') Object.assign(it, plainSize(it)); };
+  on('p-font', n => { it.font = n.value; refit(); });
+  on('p-size', n => { it.fs = Math.max(4, Math.min(96, +n.value || 11)) / pageHpt(); refit(); });
+  const tog = (id, key) => { const n = $(id); if(n) n.addEventListener('click', () => { snap(); it[key] = !it[key]; n.classList.toggle('on', it[key]); refit(); redraw(); }); };
+  tog('p-bold', 'bold'); tog('p-ital', 'italic');
+  if($('p-edit')) $('p-edit').addEventListener('click', () => { snap(); editId = it.id; redraw(); });
+  sw('p-color', v => { it.color = v; }); sw('p-stroke', v => { it.stroke = v; }); sw('p-fill', v => { it.fill = v; });
+  on('p-text', n => { it.text = n.value.replace(/\s+/g, ' ').trim().slice(0, 60) || 'TEXT'; });
+  on('p-border', n => { it.border = n.checked; });
+  on('p-fmt', n => { it.date_format = n.value; });
+  on('p-time', n => { it.with_time = n.checked; });
+  on('p-sw', n => { it.sw = Math.max(0.25, Math.min(20, +n.value || 1)) / pageHpt(); });
+  on('p-url', n => { it.url = n.value.trim(); });
+  on('p-sname', n => { it.signer_name = n.value.replace(/\s+/g, ' ').trim() || it.signer_name; renderProps(); });
+  on('p-scontact', n => { it.signer_contact = n.value.trim(); });
+  on('p-sfield', n => { it.field = n.value; });
+  on('p-pages', n => {
+    if(n.value === 'custom'){ it.pages = String(it.page); } else it.pages = n.value;
+    if(it.pages === 'current') it.page = cur;
+    renderProps();
+  });
+  on('p-custom', n => {
+    const v = n.value.trim(), ok = pagesFor({pages: v, page: it.page}, pdf.numPages);
+    if(!ok || ['current','all','first','last'].includes(v)){ toast('Invalid page selection. This document has ' + pdf.numPages + ' page(s).', true); n.value = it.pages; return; }
+    it.pages = v;
+  });
+  on('p-rot', n => { it.rotation = (((+n.value || 0) % 360) + 360) % 360; });
+  const op = $('p-op');
+  if(op){
+    op.addEventListener('pointerdown', snap);
+    op.addEventListener('input', () => { it.opacity = +op.value / 100; op.previousElementSibling.textContent = 'Opacity ' + op.value + '%'; const el = elFor(it.id); if(el) el.style.opacity = it.opacity; });
+  }
+}
+
+// ── Save / confirm / export / send ────────────────────────────────────
+const EDITOR_ONLY = ['id'];
+const payload = () => {
+  commitEdit();
+  return {items: items.map(it => { const o = {}; for(const [k, v] of Object.entries(it)) if(!EDITOR_ONLY.includes(k) && v !== null && v !== undefined) o[k] = v;
+    for(const k of ['x','y','w','h']) o[k] = +o[k].toFixed(6); return o; }), fields: fieldVals};
+};
+async function saveDraft(quiet){
+  if(!doc) return;
+  try { await api('/stamp/documents/' + doc.document_id + '/draft', {method:'PUT', json: payload()}); if(quiet !== true) toast('Draft saved'); }
+  catch(e){ if(quiet !== true) fail(e); }
+}
+let sendMode = false;
+async function openConfirm(){
+  disarm();
+  const missing = items.find(i => i.kind === 'link' && !/^(https?:\/\/|mailto:)\S+$/i.test(i.url || ''));
+  if(missing){ selId = missing.id; if(missing.page !== cur){ cur = missing.page; await renderPage(); } else drawItems(); renderProps(); toast('Enter the link address first.', true); return; }
+  try {
+    const s = await api('/stamp/documents/' + doc.document_id + '/preview-summary', {method:'POST', json: payload()});
+    sendMode = s.signers.length > 0;
+    $('mc-title').textContent = sendMode ? 'Send for signature?' : 'Apply changes and register?';
+    $('mc-body').innerHTML = `
+      <div class="line-row"><span>Document</span><span>${esc(s.document)}</span></div>
+      <div class="line-row"><span>Document ID</span><span class="doc-id">${esc(s.document_id)}</span></div>
+      <div class="line-row"><span>Pages changed</span><span>${esc(s.pages.join(', ') || '—')} of ${s.page_count}</span></div>
+      <div class="line-row"><span>Added</span><span>${esc(s.stamps.join(', ') || '—')}</span></div>
+      ${sendMode ? `<div class="line-row"><span>To be signed by</span><span>${esc(s.signers.join(', '))}</span></div>` : ''}
+      <div class="line-row"><span>By</span><span>${esc(s.signed_by)}</span></div>
+      <div class="line-row"><span>Date</span><span>${esc(s.date)}</span></div>
+      <div class="line-row"><span>Registered by</span><span>${esc(s.company)}</span></div>
+      ${sendMode ? '<div class="note" style="margin-top:10px;">You\'ll get a private link for each person. When the last person signs, the final PDF is produced automatically, with a signature certificate page, and registered.</div>' : ''}`;
+    $('mc-go').disabled = false; $('mc-go').textContent = sendMode ? 'Send for signature' : 'Apply & export';
+    openModal('m-confirm');
+  } catch(e){ fail(e); }
+}
+async function finalize(){
+  if(sendMode) return sendForSignature();
+  const b = $('mc-go'); b.disabled = true; b.textContent = 'Generating…';
+  try {
+    const d = await Dino.wrap(api('/stamp/documents/' + doc.document_id + '/finalize', {method:'POST', json: payload()}), 'Stamping and registering your document…');
+    closeModal('m-confirm');
+    $('r-id').textContent = d.document_id;
+    $('r-meta').textContent = d.original_filename + ' · ' + d.page_count + ' page(s) · registered by ' + CFG.settings.company_name;
+    $('r-download').href = '/api/stamp/documents/' + d.document_id + '/download';
+    $('r-h1').textContent = d.original_sha256; $('r-h2').textContent = d.final_sha256;
+    const url = location.origin + '/verify/' + d.document_id;
+    $('r-verify').href = url; $('r-verify').textContent = url;
+    pdf = null; doc = null; items = []; showStampPane('result');
+  } catch(e){ b.disabled = false; b.textContent = 'Apply & export'; closeModal('m-confirm'); fail(e); }
+}
+function linkRows(links){
+  return links.map(l => `<div style="padding:10px 0; border-bottom:1px solid var(--line);">
+    <div style="font-weight:600;">${esc(l.name)}</div>
+    <div class="link-row"><input readonly value="${esc(l.url)}" aria-label="Signing link for ${esc(l.name)}" onclick="this.select()">
+      <button class="pill-btn small" onclick="copyText(${JSON.stringify(l.url).replace(/"/g, '&quot;')}, this)">Copy</button>
+      <a class="pill-btn small" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Please sign this document from ' + CFG.settings.company_name + ': ' + l.url)}">WhatsApp</a></div></div>`).join('');
+}
+async function copyText(t, btn){
+  try { await navigator.clipboard.writeText(t); if(btn){ btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy', 1600); } }
+  catch(e){ toast('Select the link and copy it manually', true); }
+}
+async function sendForSignature(){
+  const b = $('mc-go'); b.disabled = true; b.textContent = 'Sending…';
+  try {
+    const r = await Dino.wrap(api('/stamp/documents/' + doc.document_id + '/send-for-signature', {method:'POST', json: payload()}), 'Preparing signing links…');
+    closeModal('m-confirm');
+    $('ml-body').innerHTML = linkRows(r.links);
+    pdf = null; doc = null; items = [];
+    openModal('m-links');
+  } catch(e){ b.disabled = false; b.textContent = 'Send for signature'; closeModal('m-confirm'); fail(e); }
+}
+
+// ── Verify ────────────────────────────────────────────────────────────
+const V_TITLE = {VERIFIED:'Verified', REGISTERED:'Registered', MISMATCH:'Document does not match', NOT_FOUND:'Not found', VOID:'Document void'};
+function showVerify(r){
+  $('v-result').innerHTML = `<span class="tag ${r.status}">${esc(r.status.replace('_', ' '))}</span>
+    <h2 style="font-size:20px; margin:12px 0 6px;">${V_TITLE[r.status] || esc(r.status)}</h2>
+    <div style="font-size:13px; line-height:1.55; margin-bottom:12px;">${esc(r.message)}</div>
+    ${r.document_id ? `<div class="line-row"><span>Document ID</span><span class="doc-id">${esc(r.document_id)}</span></div>` : ''}
+    ${r.issued ? `<div class="line-row"><span>Registered on</span><span>${esc(r.issued)}</span></div>` : ''}
+    ${r.document_id ? `<div class="line-row"><span>Registered by</span><span>${esc(r.company)}</span></div>` : ''}
+    ${r.sha256 ? `<div class="lbl" style="margin-top:12px;">SHA-256 of the uploaded file</div><div class="hash">${esc(r.sha256)}</div>` : ''}`;
+  loadVerifyLog();
+}
+async function verifyId(){
+  const id = $('v-id').value.trim().toUpperCase(); if(!id) return;
+  try { showVerify(await api('/verify/' + encodeURIComponent(id))); } catch(e){ fail(e); }
+}
+async function verifyFile(inp){
+  const f = inp.files[0]; if(!f) return;
+  try { showVerify(await api('/verify', {method:'POST', body: f, headers:{'Content-Type':'application/pdf'}})); } catch(e){ fail(e); }
+  inp.value = '';
+}
+async function loadVerifyLog(){
+  if(!CFG.user.is_admin) return;
+  try {
+    const o = await api('/stamp/overview');
+    $('v-log-card').style.display = o.verifications.length ? '' : 'none';
+    $('v-log').innerHTML = o.verifications.map(v => `<tr><td style="white-space:nowrap;">${when(v.created_at)}</td><td class="doc-id">${esc(v.document_id || '—')}</td>
+      <td>${v.verification_type === 'file' ? 'File upload' : 'Document ID'}</td><td><span class="tag ${esc(v.result)}">${esc(v.result.replace('_', ' '))}</span></td><td class="mono">${esc(v.ip_address)}</td></tr>`).join('');
+  } catch(e){}
+}
+
+// ── My signatures ─────────────────────────────────────────────────────
+function showSignatures(){
+  if(!$('sig-list-signature')) return;
+  for(const kind of ['signature', 'initials']){
+    const list = mySigs.filter(s => s.kind === kind && !s.once);
+    $('sig-list-' + kind).innerHTML = list.length ? list.map(s => `<div class="stamp-tile">
+        <div class="pic" style="width:180px;">${sigArt[s.id] ? `<img src="${sigArt[s.id].url}" alt="${kind}">` : ''}</div>
+        <div class="meta"><div class="note">Saved ${when(s.created_at) || 'just now'}</div></div>
+        <button class="pill-btn small danger" onclick="deleteSig(${s.id})">Delete</button></div>`).join('')
+      : `<div class="empty-note">No ${kind === 'initials' ? 'initials' : 'signature'} saved yet.</div>`;
+  }
+}
+function loadArt(url){
+  return fetch(url, {credentials:'same-origin'}).then(r => r.ok ? r.blob() : null).then(b => b && new Promise(res => {
+    const u = URL.createObjectURL(b), im = new Image();
+    im.onload = () => res({url: u, ratio: im.naturalWidth / im.naturalHeight || 1}); im.onerror = () => res(null); im.src = u;
+  })).catch(() => null);
+}
+async function loadMySigs(){
+  mySigs = CFG.user.can_stamp ? (CFG.signatures || []) : [];
+  await Promise.all(mySigs.map(async s => { if(!sigArt[s.id]) sigArt[s.id] = await loadArt('/api/stamp/signatures/' + s.id + '/image'); }));
+}
+
+// ── Stamps admin ──────────────────────────────────────────────────────
+async function loadStamps(){
+  try {
+    const rows = await api('/stamp/stamps');
+    for(const s of rows) if(s.kind === 'image' && !stampArt[s.id]) stampArt[s.id] = await loadArt('/api/stamp/stamps/' + s.id + '/image');
+    $('stamps-list').innerHTML = rows.map(s => `<div class="stamp-tile">
+      <div class="pic">${s.kind === 'image' ? `<img src="${stampArt[s.id] ? stampArt[s.id].url : ''}" alt="">` : `<span class="lib"><span class="tx" style="color:${esc(s.color)}">${esc(s.text)}</span></span>`}</div>
+      <div class="meta"><div style="font-weight:600;">${esc(s.name)} ${s.is_default ? '<span class="tag REGISTERED">Official chop</span>' : ''} ${s.active ? '' : '<span class="tag off">Disabled</span>'}</div>
+        <div class="note">${esc(s.category)} · ${s.kind} · used by ${esc(s.allowed_roles.join(', '))}</div></div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${s.kind === 'image' ? `<label class="pill-btn small" style="cursor:pointer;">Replace image<input type="file" accept="image/png,image/jpeg,image/webp" hidden onchange="replaceStamp(${s.id}, this)"></label>` : ''}
+        <button class="pill-btn small" onclick="patchStamp(${s.id}, {roles:'${s.allowed_roles.includes('admin') ? 'director' : 'director,admin'}'})">${s.allowed_roles.includes('admin') ? 'Director only' : 'Allow admins'}</button>
+        <button class="pill-btn small ${s.active ? 'danger' : ''}" onclick="patchStamp(${s.id}, {active:${!s.active}})">${s.active ? 'Disable' : 'Enable'}</button>
+      </div></div>`).join('');
+  } catch(e){ fail(e); }
+}
+async function refreshConfig(){ CFG = await api('/stamp/config'); await loadStampArt(); }
+async function patchStamp(id, body){
+  try { await api('/stamp/stamps/' + id, {method:'PUT', json: body}); await refreshConfig(); loadStamps(); toast('Stamp updated'); } catch(e){ fail(e); }
+}
+async function replaceStamp(id, inp){
+  const f = inp.files[0]; if(!f) return;
+  try {
+    await api('/stamp/stamps/' + id + '/image', {method:'POST', body: f, headers:{'Content-Type':'application/octet-stream'}});
+    delete stampArt[id]; await refreshConfig(); loadStamps(); toast('Stamp image replaced');
+  } catch(e){ fail(e); }
+  inp.value = '';
+}
+function nsKind(){
+  const t = $('ns-kind').value === 'text';
+  $('ns-file-wrap').style.display = t ? 'none' : ''; $('ns-text-wrap').style.display = t ? 'grid' : 'none';
+}
+async function createStamp(){
+  const kind = $('ns-kind').value, f = $('ns-file').files[0];
+  if(kind === 'image' && !f){ toast('Choose a PNG image for the stamp.', true); return; }
+  const p = new URLSearchParams({name: $('ns-name').value, category: $('ns-cat').value, kind,
+    text: $('ns-text').value.toUpperCase(), color: $('ns-color').value, roles: $('ns-admin').checked ? 'director,admin' : 'director'});
+  try {
+    await api('/stamp/stamps?' + p, {method:'POST', body: kind === 'image' ? f : '', headers:{'Content-Type':'application/octet-stream'}});
+    $('ns-form').reset(); nsKind(); await refreshConfig(); loadStamps(); toast('Stamp added');
+  } catch(e){ fail(e); }
+}
+async function loadStampArt(){
+  for(const s of CFG.stamps) if(s.kind === 'image' && !stampArt[s.id]) stampArt[s.id] = await loadArt('/api/stamp/stamps/' + s.id + '/image');
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────
+const EVENTS = ['LOGIN','LOGIN_FAILED','USER_CREATED','USER_DISABLED','DOCUMENT_UPLOADED','DOCUMENT_STAMPED','DOCUMENT_STAMP_FAILED','DOCUMENT_DOWNLOADED','DOCUMENT_VERIFIED','DOCUMENT_VERIFICATION_FAILED','DOCUMENT_VOIDED','STAMP_CREATED','STAMP_UPDATED','STAMP_DISABLED','SIGNATURE_UPDATED','SIGNATURE_REMOVED','SETTINGS_UPDATED'];
+async function loadAudit(){
+  const p = new URLSearchParams();
+  if($('a-type').value) p.set('event_type', $('a-type').value);
+  if($('a-doc').value.trim()) p.set('document_id', $('a-doc').value.trim().toUpperCase());
+  try {
+    const rows = await api('/stamp/audit?' + p);
+    $('audit-body').innerHTML = rows.length ? rows.map(a => `<tr><td style="white-space:nowrap;">${when(a.created_at)}</td><td>${esc(a.event_type)}</td>
+      <td>${esc(a.username || '—')}</td><td class="doc-id">${esc(a.document_id || '—')}</td><td class="mono">${esc(a.ip_address || '')}</td>
+      <td class="note">${esc(Object.entries(a.metadata || {}).map(([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : v)).join(' · '))}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty-note">No events.</td></tr>';
+  } catch(e){ fail(e); }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────
+function showSettings(){
+  const s = CFG.settings;
+  $('s-company').value = s.company_name; $('s-reg').value = s.registration_number; $('s-loc').value = s.location; $('s-tz').value = s.timezone;
+  $('s-date').innerHTML = CFG.date_formats.map(f => `<option ${s.date_format === f ? 'selected' : ''}>${f}</option>`).join('');
+  $('s-size').value = Math.round(s.default_stamp_size * 100); $('s-max').value = s.max_upload_mb; $('s-qrpos').value = s.qr_position;
+  $('s-qr').checked = !!s.qr_enabled; $('s-footer').checked = !!s.footer_enabled; $('s-pubname').checked = !!s.public_show_filename;
+}
+async function saveSettings(){
+  try {
+    await api('/stamp/settings', {method:'PUT', json:{company_name: $('s-company').value, registration_number: $('s-reg').value, location: $('s-loc').value,
+      date_format: $('s-date').value, default_stamp_size: (+$('s-size').value || 22) / 100, max_upload_mb: +$('s-max').value || 20,
+      qr_position: $('s-qrpos').value, qr_enabled: $('s-qr').checked, footer_enabled: $('s-footer').checked, public_show_filename: $('s-pubname').checked}});
+    await refreshConfig(); $('max-mb').textContent = CFG.max_upload_mb; showSettings(); toast('Settings saved');
+  } catch(e){ fail(e); }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => { if(pdf && $('view-stamp').classList.contains('active')) renderPage(); });
+(async function init(){
+  Dino.show('Opening Document Centre…', 0);
+  try {
+    CFG = await api('/stamp/config');
+    ME = await api('/me');
+    $('who').textContent = CFG.user.username + ' · ' + CFG.user.role + ' · Log out';
+    if((ME.caps || []).includes('finance')) $('finance-link').style.display = '';
+    document.querySelectorAll('[data-need]').forEach(el => { if(!allowed(el.dataset.need)) el.style.display = 'none'; });
+    $('max-mb').textContent = CFG.max_upload_mb;
+    $('ns-cat').innerHTML = CFG.categories.map(c => `<option>${c}</option>`).join('');
+    $('ns-color').innerHTML = Object.keys(CFG.text_colors).map(c => `<option>${c}</option>`).join('');
+    $('a-type').innerHTML += EVENTS.map(e => `<option>${e}</option>`).join('');
+    if(CFG.user.is_admin){ $('f-user-wrap').style.display = ''; $('f-user').innerHTML += CFG.users.map(u => `<option>${esc(u)}</option>`).join(''); }
+    await Promise.all([loadStampArt(), loadMySigs()]);
+    await loadOverview();
+  } catch(e){ fail(e); }
+  Dino.hide(true);
+})();
+</script>
+</body>
+</html>

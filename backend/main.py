@@ -17,7 +17,7 @@ import pathlib
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import storage
@@ -27,6 +27,8 @@ import auth
 import gemini_parser
 import pdf_generator
 import lms_sync
+import stamp_store
+import stamp_api
 from api import router as api_router
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
@@ -54,10 +56,11 @@ async def security_headers(request: Request, call_next):
     # The dashboard is a single self-contained file plus Google Fonts.
     resp.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
         "script-src 'self' 'unsafe-inline'; "
+        "worker-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
     ))
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -83,9 +86,12 @@ def on_startup():
     if seed.seed_if_empty():
         print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
     migrations.run_migrations()
+    stamp_store.init_db()
+    stamp_api.seed_defaults()
 
 
 app.include_router(api_router)
+app.include_router(stamp_api.router)
 
 
 @app.get("/health")
@@ -99,6 +105,29 @@ app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="asset
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     return FileResponse(FRONTEND_DIR / "dashboard.html")
+
+
+# --- Document Centre -------------------------------------------------------
+
+@app.get("/document-centre", response_class=HTMLResponse)
+def document_centre(request: Request):
+    if not auth.is_authed(request):
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(FRONTEND_DIR / "document-centre.html", headers={"Cache-Control": "no-store"})
+
+
+# Public: anyone holding a stamped document can check it. No login.
+@app.get("/verify", response_class=HTMLResponse)
+@app.get("/verify/{document_id}", response_class=HTMLResponse)
+def verify_page(document_id: str = ""):
+    return FileResponse(FRONTEND_DIR / "verify.html", headers={"Cache-Control": "no-store"})
+
+
+# Public: a person asked to sign opens their private link here. No login.
+@app.get("/sign/{token}", response_class=HTMLResponse)
+def sign_page(token: str):
+    return FileResponse(FRONTEND_DIR / "sign.html", headers={"Cache-Control": "no-store",
+                                                             "Referrer-Policy": "no-referrer"})
 
 
 @app.get("/favicon.ico")
@@ -178,15 +207,22 @@ def is_allowed(user_id):
     return not ALLOWED_USER_IDS or user_id in ALLOWED_USER_IDS
 
 
+def _safe_float(v) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_doc_fields(body: str) -> dict:
     """Parses the multi-line /invoice and /quote field format:
-        Contact: Name
+        Contact: Name        (or "Name:")
         Email: optional
         Phone: optional
-        Due: YYYY-MM-DD      (or "Valid:" for /quote)
+        Due: YYYY-MM-DD      (or "Valid:" for /quote) — optional
         Discount: 10
         Remarks: free text
-        Item: description, qty, unit price   (repeatable)
+        Item: description, qty, unit price   (repeatable — or "Course:")
     """
     fields = {"items": []}
     for line in body.splitlines():
@@ -195,7 +231,7 @@ def _parse_doc_fields(body: str) -> dict:
             continue
         key, _, value = line.partition(":")
         key, value = key.strip().lower(), value.strip()
-        if key == "item":
+        if key in ("item", "course"):
             # Split from the right so a description containing its own
             # commas (e.g. "Claude - Chat, Code & Cowork") isn't broken up —
             # only the trailing qty and unit price are peeled off.
@@ -217,7 +253,9 @@ def _parse_doc_fields(body: str) -> dict:
                 fields["discount"] = float(value.replace("%", "").strip())
             except ValueError:
                 pass
-        elif key in ("contact", "email", "phone", "due", "valid", "remarks"):
+        elif key in ("contact", "name"):
+            fields["contact"] = value
+        elif key in ("email", "phone", "due", "valid", "remarks"):
             fields[key] = value
     return fields
 
@@ -363,13 +401,19 @@ async def telegram_webhook(request: Request):
             "<code>/invoice ContactName Amount YYYY-MM-DD</code>\n"
             "e.g. <code>/invoice Sinar Retail 4200 2026-09-24</code>\n"
             "or with a description: <code>/invoice Contact | Amount | YYYY-MM-DD | Description</code>\n\n"
-            "<b>Multi-line invoice</b> (several line items, like a quotation):\n"
-            "<code>/invoice\nContact: Sinar Retail\nDue: 2026-09-24\n"
-            "Item: AI for Automation, 3, 288\nItem: Vibe Coding, 3, 800\n"
+            "<b>Multi-line invoice</b> (several line items, like a quotation — "
+            "Name:/Course: also work instead of Contact:/Item:, and Due: is optional):\n"
+            "<code>/invoice\nName: Sinar Retail\n"
+            "Course: AI for Automation, 3, 288\nCourse: Vibe Coding, 3, 800\n"
             "Discount: 10\nRemarks: Weekly Saturday sessions</code>\n\n"
             "<b>Quotation</b> (same multi-line format, never logged to the ledger):\n"
             "<code>/quote\nContact: Sinar Retail\nValid: 2026-09-24\n"
             "Item: AI for Automation, 3, 288</code>\n\n"
+            "Don't want to match any of these exactly? Just write it naturally, "
+            "e.g. <code>/invoice Samuel Kam, Python Fundamentals RM1500, "
+            "loadinginterestexe@gmail.com</code> — I'll read it either way.\n\n"
+            "<b>Mark an invoice paid</b> (posts the income transaction + clears their balance):\n"
+            "<code>/paid INV-164</code> (or just <code>/paid 164</code>)\n\n"
             "<b>New student</b> (creates/enrolls in the LMS — Chinese or English labels, any order):\n"
             "<code>/student\n姓名：许玟涵 Koh Wen Han\n电话号码：0108212528\n"
             "邮件：whkoh12@gmail.com\ncourse : AI for workplace\n"
@@ -498,76 +542,134 @@ async def telegram_webhook(request: Request):
         cmd = "/quote" if is_quote else "/invoice"
         body = msg["text"][len(cmd):].strip()
 
-        if "\n" in body or "item:" in body.lower():
-            fields = _parse_doc_fields(body)
-            contact_name = fields.get("contact", "")
-            items = fields.get("items", [])
-            when = fields.get("valid" if is_quote else "due", "")
-            if not contact_name or not items or not when:
-                await tg_send_message(chat_id, f"Need at least Contact:, {'Valid:' if is_quote else 'Due:'}, "
-                                                 "and one Item: line (description, qty, unit price).")
-                return {"ok": True}
-            discount = fields.get("discount", 0.0)
-            remarks = fields.get("remarks")
-            email = fields.get("email")
-            phone = fields.get("phone")
-
-            if is_quote:
-                no = storage.next_document_number("QUO")
-                pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
-                                                          discount_pct=discount, remarks=remarks,
-                                                          email=email, phone=phone)
+        # 1) Cheap legacy positional parse for /invoice — unchanged, no AI
+        #    involved, only when the message is plainly in that exact shape
+        #    (no "Key:" labels at all — those go through the parsers below).
+        if not is_quote and body and ":" not in body:
+            description = ""
+            if "|" in body:
+                parts_pipe = [f.strip() for f in body.split("|")]
+                if len(parts_pipe) >= 3:
+                    contact_name, amount_str, due = parts_pipe[0], parts_pipe[1], parts_pipe[2]
+                    description = parts_pipe[3] if len(parts_pipe) > 3 else ""
+                    amount = _safe_float(amount_str)
+                else:
+                    contact_name = amount = due = None
             else:
-                storage.find_or_create_contact(contact_name, "debtor", email=email or "", phone=phone or "")
+                parts = body.split()
+                if len(parts) >= 3:
+                    due, amount_str = parts[-1], parts[-2]
+                    contact_name = " ".join(parts[:-2])
+                    amount = _safe_float(amount_str)
+                else:
+                    contact_name = amount = due = None
+            if contact_name and amount is not None:
+                storage.find_or_create_contact(contact_name, "debtor")
                 no = storage.next_document_number("INV")
-                iid = storage.insert_invoice(no, contact_name, today, when, 0, status="Pending",
-                                              remarks=remarks or "", discount_pct=discount, items=items)
-                inv = storage.get_invoice(iid)
-                pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, when, inv["amount"],
-                                                        status="Pending", email=email, phone=phone,
-                                                        discount_pct=discount, remarks=remarks, items=items)
-            total = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
-            total *= (1 - (discount or 0) / 100)
-            await tg_send_document(chat_id, f"{no}.pdf", pdf,
-                                    caption=f"{no} — {contact_name} — RM {total:,.2f}")
+                storage.insert_invoice(no, contact_name, today, due, amount, status="Pending", description=description)
+                pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
+                await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                        caption=f"{no} — {contact_name} — RM {amount:,.2f}, due {due}")
+                return {"ok": True}
+            # Didn't cleanly fit the legacy shape — fall through to the
+            # structured/AI parse below instead of erroring immediately.
+
+        # 2) Structured "Key: value" parse (free, no AI) — Contact:/Name:,
+        #    Item:/Course:, Email:, Phone:, Due:/Valid:, Discount:, Remarks:.
+        fields = _parse_doc_fields(body) if body else {"items": []}
+
+        # 3) If that didn't find both a contact and at least one item, let
+        #    Gemini read the free-form text instead of rejecting it — the
+        #    message doesn't have to follow any particular line format.
+        if body and (not fields.get("contact") or not fields.get("items")):
+            try:
+                ai_fields = await gemini_parser.parse_invoice_fields(body, today)
+            except Exception as exc:
+                ai_fields = {}
+                await tg_send_message(chat_id, f"⚠️ Couldn't reach Gemini to read that: {exc}")
+                return {"ok": True}
+            fields = {
+                "contact": fields.get("contact") or ai_fields.get("contact") or "",
+                "email": fields.get("email") or ai_fields.get("email"),
+                "phone": fields.get("phone") or ai_fields.get("phone"),
+                "due": fields.get("due") or ai_fields.get("due") or "",
+                "valid": fields.get("valid") or ai_fields.get("due") or "",
+                "discount": fields.get("discount") or ai_fields.get("discount") or 0.0,
+                "remarks": fields.get("remarks") or ai_fields.get("remarks"),
+                "items": fields.get("items") or ai_fields.get("items") or [],
+            }
+
+        contact_name = fields.get("contact", "")
+        items = fields.get("items", [])
+        when = fields.get("valid" if is_quote else "due", "")
+        if not contact_name or not items:
+            await tg_send_message(chat_id, "Couldn't find enough info for an invoice — I need at least "
+                                             "a customer name and one course/item (with a price if you "
+                                             "have it). Send it however reads naturally, e.g. \"Invoice "
+                                             "Samuel Kam, Python Fundamentals RM1500\".")
             return {"ok": True}
+        discount = fields.get("discount", 0.0)
+        remarks = fields.get("remarks")
+        email = fields.get("email")
+        phone = fields.get("phone")
 
         if is_quote:
-            await tg_send_message(chat_id, "Quotations need the multi-line format — send /quote with no "
-                                             "arguments to see it.")
-            return {"ok": True}
-
-        # Legacy single-line-item /invoice — unchanged.
-        description = ""
-        if "|" in body:
-            parts_pipe = [f.strip() for f in body.split("|")]
-            if len(parts_pipe) < 3:
-                await tg_send_message(chat_id, "Format: /invoice Contact | Amount | YYYY-MM-DD | Description")
-                return {"ok": True}
-            contact_name, amount_str, due = parts_pipe[0], parts_pipe[1], parts_pipe[2]
-            description = parts_pipe[3] if len(parts_pipe) > 3 else ""
+            no = storage.next_document_number("QUO")
+            pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
+                                                      discount_pct=discount, remarks=remarks,
+                                                      email=email, phone=phone)
         else:
-            parts = body.split()
-            if len(parts) < 3:
-                await tg_send_message(chat_id, "Format: /invoice ContactName Amount YYYY-MM-DD\ne.g. /invoice Sinar Retail 4200 2026-09-24")
-                return {"ok": True}
-            due = parts[-1]
-            amount_str = parts[-2]
-            contact_name = " ".join(parts[:-2])
-        try:
-            amount = float(amount_str)
-        except ValueError:
-            await tg_send_message(chat_id, "Couldn't read the amount — make sure it's a plain number, e.g. 4200")
+            storage.find_or_create_contact(contact_name, "debtor", email=email or "", phone=phone or "")
+            no = storage.next_document_number("INV")
+            iid = storage.insert_invoice(no, contact_name, today, when, 0, status="Pending",
+                                          remarks=remarks or "", discount_pct=discount, items=items)
+            inv = storage.get_invoice(iid)
+            pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, when, inv["amount"],
+                                                    status="Pending", email=email, phone=phone,
+                                                    discount_pct=discount, remarks=remarks, items=items)
+        total = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in items)
+        total *= (1 - (discount or 0) / 100)
+        await tg_send_document(chat_id, f"{no}.pdf", pdf,
+                                caption=f"{no} — {contact_name} — RM {total:,.2f}")
+        return {"ok": True}
+
+    if "text" in msg and msg["text"].startswith("/paid"):
+        number = msg["text"][len("/paid"):].strip()
+        if not number:
+            await tg_send_message(chat_id, "Usage: <code>/paid INV-164</code> (or just <code>/paid 164</code>)")
             return {"ok": True}
-        if not contact_name:
-            await tg_send_message(chat_id, "Missing contact name.")
+        inv = storage.get_invoice_by_number(number)
+        if not inv:
+            await tg_send_message(chat_id, f"Couldn't find an invoice matching \"{number}\" — check the number and try again.")
             return {"ok": True}
-        storage.find_or_create_contact(contact_name, "debtor")
-        no = storage.next_document_number("INV")
-        storage.insert_invoice(no, contact_name, today, due, amount, status="Pending", description=description)
-        pdf = pdf_generator.render_invoice_pdf(no, contact_name, today, due, amount, description=description)
-        caption = f"{no} — {contact_name} — RM {amount:,.2f}, due {due}"
-        await tg_send_document(chat_id, f"{no}.pdf", pdf, caption=caption)
+        if inv["status"] == "Paid":
+            await tg_send_message(chat_id, f"{inv['number']} ({inv['contact']}) is already marked Paid — nothing to do.")
+            return {"ok": True}
+        updated = storage.mark_invoice_paid(inv["id"])
+        tx_id = updated.pop("_transaction_id", None)
+        await tg_send_message(
+            chat_id,
+            f"✅ {updated['number']} marked <b>Paid</b>\n"
+            f"👤 {updated['contact']}\n"
+            f"💰 RM {updated['amount']:,.2f}\n"
+            f"Logged to the ledger and their balance is cleared."
+        )
+        if tx_id:
+            tx = storage.get_transaction(tx_id)
+            rcp_no = storage.get_or_create_document_number("receipt", tx_id, "RCP")
+            pdf = pdf_generator.render_receipt_pdf(rcp_no, tx["date"], tx["payer_payee"], tx["description"], tx["amount"])
+            await tg_send_document(chat_id, f"{rcp_no}.pdf", pdf, caption=f"{rcp_no} — RM {tx['amount']:,.2f}")
+
+        # Same LMS auto-enroll sync the dashboard's "mark paid" button
+        # triggers — fire-and-log, never blocks the invoice update itself.
+        contact = storage.get_contact_by_name(updated["contact"], "debtor")
+        note = lms_sync.sync_invoice_to_lms(
+            updated, "Paid",
+            email=(contact or {}).get("email", ""),
+            phone=(contact or {}).get("phone", ""),
+        )
+        storage.set_invoice_lms_sync(updated["id"], note)
+        await tg_send_message(chat_id, f"🔗 LMS: {note}")
         return {"ok": True}
 
     try:
