@@ -1,0 +1,72 @@
+"""Business configuration loaded on first migration — editable in Settings."""
+
+TRAINING_PROGRAMS = [
+    ("AI_PRODUCTIVITY", "AI Productivity", "Everyday AI assistants for office work: drafting, summarising, analysis.",
+     ["HR", "Operations", "Management"], ["productivity", "office", "admin", "reporting", "documentation"]),
+    ("GENERATIVE_AI", "Generative AI", "Prompting, retrieval-augmented generation and responsible use of generative AI.",
+     ["IT", "Management"], ["generative ai", "genai", "chatgpt", "llm", "artificial intelligence", "ai initiative"]),
+    ("ARTIFICIAL_INTELLIGENCE", "Artificial Intelligence", "Foundations of AI and machine learning for business teams.",
+     ["IT", "Management"], ["artificial intelligence", "machine learning", "ai"]),
+    ("AI_FOR_ENGINEERS", "AI for Engineers", "AI applied to engineering design, maintenance, quality and data.",
+     ["Engineering"], ["engineering", "automation", "industry 4.0", "smart manufacturing", "predictive maintenance"]),
+    ("PYTHON_PROGRAMMING", "Python Programming", "Python fundamentals for engineers, analysts and graduates.",
+     ["Engineering", "IT"], ["python", "programming", "scripting"]),
+    ("PYTHON_AUTOMATION", "Python Automation", "Automating Excel, reports and repetitive tasks with Python.",
+     ["Operations", "Engineering", "IT"], ["automation", "excel", "reporting", "rpa", "process improvement"]),
+    ("DATA_ANALYTICS", "Data Analytics", "From spreadsheets to dashboards: cleaning, analysing and visualising data.",
+     ["Operations", "Engineering", "Management"], ["data", "analytics", "dashboard", "business intelligence", "yield"]),
+    ("CYBERSECURITY_AWARENESS", "Cybersecurity Awareness", "Phishing, passwords and safe data handling for all staff.",
+     ["HR", "IT"], ["cybersecurity", "phishing", "data protection", "pdpa", "information security"]),
+    ("TECHNICAL_CYBERSECURITY", "Technical Cybersecurity", "Network defence, hardening and incident response for IT teams.",
+     ["IT"], ["iso 27001", "soc", "network security", "penetration", "incident response", "cybersecurity"]),
+    ("PROGRAMMING", "Programming", "Foundational programming for non-developers and graduate engineers.",
+     ["Engineering", "IT"], ["programming", "coding", "software"]),
+    ("SOFTWARE_DEVELOPMENT", "Software Development", "Modern software development practices for in-house dev teams.",
+     ["IT"], ["software development", "developer", "devops", "cloud", "web application"]),
+    ("DIGITAL_TRANSFORMATION", "Digital Transformation", "Strategy and change management for digitising operations.",
+     ["Management", "Operations"], ["digital transformation", "digitalisation", "digitalization", "erp", "cloud migration"]),
+]
+
+LEAD_SCORING = {
+    "titles": {
+        "L&D Manager": 30, "Training Manager": 30, "Talent Development Manager": 30, "HR Director": 28,
+        "HR Manager": 25, "Head of HR": 26, "People & Culture Manager": 24, "Head of IT": 25, "IT Director": 25,
+        "IT Manager": 23, "CTO": 25, "CIO": 25, "Digital Transformation Manager": 25, "Engineering Manager": 20,
+        "Engineering Director": 22, "Head of Engineering": 22, "Automation Manager": 20, "Technical Manager": 18,
+        "Operations Manager": 16, "General Manager": 18, "Managing Director": 18, "CEO": 18, "COO": 18,
+    },
+    "default_title": 5,
+    "locations": {"Johor": 15, "Singapore": 10, "Kuala Lumpur": 9, "Selangor": 9, "Penang": 7},
+    "default_location": 3,
+    "target_industries": ["Manufacturing", "Engineering", "Electrical", "Electronics", "Automation", "Semiconductor"],
+    "target_industry": 15,
+    "company_size_min": 30,
+    "company_size_max": 1000,
+    "ideal_company_size": 15,
+    "verified_email": 20,
+    "likely_email": 10,
+    "strong_training_match": 20,
+    "strong_training_match_threshold": 75,
+    "strong_buying_signal": 15,
+    "contact_confidence_weight": 10,
+    "priority_high": 80,
+    "priority_medium": 60,
+}
+
+CONTACT_CONFIDENCE = {
+    "name_confirmed_on_company_site": 25,
+    "title_confirmed": 20,
+    "company_confirmed": 15,
+    "professional_profile_matched": 15,
+    "verified_business_email": 25,
+    "likely_business_email": 12,
+    "inferred_email": 3,
+}
+
+DEFAULT_SETTINGS = {
+    "lead_scoring": LEAD_SCORING,
+    "contact_confidence": CONTACT_CONFIDENCE,
+    "general": {"company_name": "Codencode Academy", "sender_name": "", "sender_title": "Corporate Training Lead",
+                "currency": "RM"},
+    "retention": {"activity_days": 1095, "crawl_page_days": 365, "rejected_contact_days": 180},
+}

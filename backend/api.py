@@ -9,14 +9,18 @@ rendered by the SAME backend.pdf_generator functions the Telegram bot
 uses, with numbers drawn from the SAME storage.counters sequences, so
 both surfaces produce byte-identical documents.
 """
+import hmac
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import storage
 import pdf_generator
 import auth
 import lms_sync
+import crm
 
 router = APIRouter(prefix="/api")
 
@@ -39,7 +43,7 @@ def _set_session_cookie(resp: JSONResponse, request: Request, username: str):
     is_https = request.url.scheme == "https" or forwarded == "https"
     resp.set_cookie(
         auth.COOKIE_NAME, token, max_age=auth.MAX_AGE, httponly=True,
-        samesite="lax", secure=is_https, path="/",
+        samesite="lax", secure=is_https, path="/", domain=auth.COOKIE_DOMAIN,
     )
 
 
@@ -89,6 +93,8 @@ def login(body: Login, request: Request):
 def logout():
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(auth.COOKIE_NAME, path="/")
+    if auth.COOKIE_DOMAIN:
+        resp.delete_cookie(auth.COOKIE_NAME, path="/", domain=auth.COOKIE_DOMAIN)
     return resp
 
 
@@ -584,6 +590,30 @@ def read_notes():
 @router.put("/notes", dependencies=[Depends(auth.require_cap("notes"))])
 def write_notes(body: NotesIn):
     return storage.save_notes(body.text)
+
+
+# --- Sales CRM integration (service-to-service, shared secret) ----------
+
+CRM_INTEGRATION_SECRET = os.environ.get("CRM_INTEGRATION_SECRET", "")
+
+
+class CrmWonIn(BaseModel):
+    external_ref: str = Field(min_length=1, max_length=120)
+    company: str = Field(min_length=1, max_length=300)
+    attention: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=320)
+    phone: str = Field(default="", max_length=60)
+    amount: float = Field(gt=0, le=10_000_000)
+    program: str = Field(default="Corporate training", max_length=200)
+    sales_person: str = Field(default="", max_length=80)
+
+
+@router.post("/integrations/crm/won")
+def crm_won(body: CrmWonIn, request: Request):
+    supplied = request.headers.get("x-crm-secret", "")
+    if not CRM_INTEGRATION_SECRET or not hmac.compare_digest(supplied, CRM_INTEGRATION_SECRET):
+        raise HTTPException(401, "Invalid integration secret")
+    return crm.raise_won_invoice(**body.model_dump())
 
 
 # --- documents (PDF) --------------------------------------------------

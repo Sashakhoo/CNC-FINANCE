@@ -8,3 +8,9 @@ venv/
 backend/cnc.db
 .DS_Store
 _docpreview/
+node_modules/
+sales/frontend/dist/
+sales/frontend/dist-single/
+.pytest_cache/
+sales/.env
+tsconfig.tsbuildinfo

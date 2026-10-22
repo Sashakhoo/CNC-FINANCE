@@ -38,9 +38,12 @@ MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 7))  # 7 
 
 ROLE_CAPS = {
     "director": {"*"},
-    "admin": {"invoices", "documents"},
+    "admin": {"invoices", "documents", "crm"},
 }
-ALL_CAPS = ["transactions", "contacts", "invoices", "assets", "notes", "documents", "users", "payroll"]
+ALL_CAPS = ["transactions", "contacts", "invoices", "assets", "notes", "documents", "users", "payroll", "crm"]
+
+# e.g. ".codencode.my" so one sign-in covers main. and sales.; unset = host-only.
+COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "").strip() or None
 ASSIGNABLE_ROLES = ["admin", "director"]
 
 _SCRYPT = dict(n=2 ** 14, r=8, p=1, dklen=32)

@@ -158,6 +158,12 @@ def init_db():
             transaction_id INTEGER,
             employer_cost_transaction_id INTEGER
         );
+        CREATE TABLE IF NOT EXISTS crm_invoice_links (
+            external_ref TEXT PRIMARY KEY,
+            invoice_id INTEGER NOT NULL,
+            invoice_number TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """)
         conn.execute("INSERT OR IGNORE INTO notes(id, text, updated_at) VALUES (1, '', NULL)")
         # Additive columns for databases created before these existed —

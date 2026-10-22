@@ -1,0 +1,135 @@
+# Local development stack for Codencode Lead Intelligence (the Sales CRM).
+#   docker compose up -d
+#   CRM:     http://localhost:8080   (nginx → built frontend + /api → backend)
+#   Vite:    http://localhost:5173   (hot-reload frontend, proxies /api to backend)
+#   Finance: http://localhost:8081   (CNC Finance — owns accounts and sign-in)
+name: codencode-sales
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  DEMO_MODE: ${DEMO_MODE:-false}
+  DATABASE_URL: postgresql+asyncpg://crm:${POSTGRES_PASSWORD:-crm-dev-password}@postgres:5432/crm
+  REDIS_URL: redis://redis:6379/0
+  FINANCE_INTERNAL_URL: http://finance:8000
+  FINANCE_PUBLIC_URL: ${FINANCE_PUBLIC_URL:-http://localhost:8081}
+  CRM_INTEGRATION_SECRET: ${CRM_INTEGRATION_SECRET:-dev-integration-secret-change-me}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-}
+  SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+  EMAIL_DISCOVERY_PROVIDER: ${EMAIL_DISCOVERY_PROVIDER:-}
+  EMAIL_DISCOVERY_API_KEY: ${EMAIL_DISCOVERY_API_KEY:-}
+  EMAIL_VERIFICATION_PROVIDER: ${EMAIL_VERIFICATION_PROVIDER:-}
+  EMAIL_VERIFICATION_API_KEY: ${EMAIL_VERIFICATION_API_KEY:-}
+  LLM_PROVIDER: ${LLM_PROVIDER:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm-dev-password}
+      POSTGRES_DB: crm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment: *backend-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO", "--concurrency=4"]
+    environment: *backend-env
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+
+  scheduler:
+    build: ./backend
+    command: ["celery", "-A", "app.worker", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    environment: *backend-env
+    depends_on:
+      backend: { condition: service_healthy }
+
+  frontend:
+    image: node:22-slim
+    working_dir: /app
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0"]
+    environment:
+      VITE_API_PROXY: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend: { condition: service_healthy }
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  finance:
+    build: ..
+    environment:
+      DB_PATH: /data/cnc.db
+      SESSION_SECRET: ${FINANCE_SESSION_SECRET:-dev-only-finance-session-secret}
+      CRM_INTEGRATION_SECRET: ${CRM_INTEGRATION_SECRET:-dev-integration-secret-change-me}
+    volumes:
+      - financedata:/data
+    ports:
+      - "8081:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgdata:
+  redisdata:
+  financedata:
+  frontend_node_modules:
