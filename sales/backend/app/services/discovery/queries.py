@@ -15,7 +15,10 @@ INDUSTRY_PHRASES: dict[str, list[str]] = {
     "Technology": ["technology company", "IT solutions company"],
     "Logistics": ["logistics company", "warehousing and logistics"],
     "Construction": ["construction company", "building contractor"],
+    "Schools": ["international school", "private school"],
 }
+# Schools rarely carry a legal suffix in their name, so don't add "Sdn Bhd" to their queries.
+NO_SUFFIX = {"Schools", "Education"}
 
 MAIN_CITY = {
     "Johor": "Johor Bahru", "Selangor": "Shah Alam", "Kuala Lumpur": "Kuala Lumpur", "Penang": "Penang",
@@ -75,7 +78,7 @@ def build_queries(criteria: Mapping[str, Any] | Any, max_queries: int = 40) -> l
                     continue
                 phrase = phrases[phrase_idx]
                 where = loc if singapore or loc == country else f"{loc} {country}"
-                if phrase_idx == 0:
+                if phrase_idx == 0 and industry not in NO_SUFFIX:
                     add(f'{phrase} {where} "{suffix}"', industry, loc)
                 else:
                     add(f"{phrase} {where}", industry, loc)

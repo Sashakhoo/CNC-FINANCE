@@ -225,3 +225,51 @@ async def test_training_provider_is_not_scored_as_a_prospect(db, env, monkeypatc
     assert co.industry == "Education"
     assert not (await db.execute(select(TrainingOpportunity).where(TrainingOpportunity.is_current.is_(True)))).scalars().all()
     assert any("training provider" in w["message"] for w in job.warnings)
+
+
+SCHOOL = """<html><head><title>Example International School Johor Bahru</title></head><body><h1>Example International School</h1>
+<p>A Cambridge curriculum international school for pupils from Year 1 to Year 13, with IGCSE and A Levels.</p>
+<p>Our STEM and coding co-curricular programmes include robotics clubs, and admissions are open for 2027.</p>
+<p>Parents can view school fees online.</p><a href="/our-team">Our Team</a></body></html>"""
+SCHOOL_TEAM = """<html><head><title>Leadership | Example International School</title></head><body><h1>Leadership Team</h1>
+<div class="card"><h3>Grace Lim</h3><p>Principal</p></div>
+<div class="card"><h3>Arif Hakim</h3><p>Head of Computing</p></div>
+<div class="card"><h3>Mei Tan</h3><p>Year 5 Teacher</p></div></body></html>"""
+
+
+async def test_school_is_a_prospect_not_a_competitor(db, env, monkeypatch):
+    monkeypatch.setenv("SEARCH_PROVIDER", "")
+    get_settings.cache_clear()
+    SITES["example-school.edu.my"] = "93.184.216.13"
+    try:
+        with respx.mock(assert_all_called=False) as mock:
+            _site(mock, "93.184.216.13", "example-school.edu.my", {"/": SCHOOL, "/our-team": SCHOOL_TEAM})
+            job_id = await _run(db, {**CRITERIA, "seed_websites": ["example-school.edu.my"]})
+    finally:
+        SITES.pop("example-school.edu.my")
+    job = await db.get(Job, job_id)
+    await db.refresh(job)
+    co = (await db.execute(select(Company))).scalar_one()
+    assert co.industry == "Schools"
+    assert not any("training provider" in w["message"] for w in job.warnings)
+    people = {c.full_name: c.normalized_title for c in (await db.execute(select(Contact))).scalars()}
+    assert people == {"Grace Lim": "Principal", "Arif Hakim": "Head of ICT/Computing"}     # the teacher isn't kept
+    opps = (await db.execute(select(TrainingOpportunity).where(TrainingOpportunity.is_current.is_(True)))).scalars().all()
+    assert opps
+
+
+CAMPUSES = """<html><head><title>Contact | Southern Precision Automation</title></head><body><h1>Our Offices</h1>
+<p>Lot 5, Jalan Hulu 2, Seksyen 15</p><p>40200 Shah Alam, Selangor</p>
+<p>Lot 12, Jalan Perindustrian 3, Taman Perindustrian Maju</p><p>81100 Johor Bahru, Johor</p></body></html>"""
+
+
+async def test_target_state_address_becomes_primary(db, env, monkeypatch):
+    from app.models import CompanyLocation
+    monkeypatch.setenv("SEARCH_PROVIDER", "")
+    get_settings.cache_clear()
+    with respx.mock(assert_all_called=False) as mock:
+        _site(mock, "93.184.216.10", "southern-precision.com.my", {"/": HOME, "/contact": CAMPUSES})
+        await _run(db, {**CRITERIA, "seed_websites": ["southern-precision.com.my"]})
+    locs = (await db.execute(select(CompanyLocation))).scalars().all()
+    assert {loc.state for loc in locs} >= {"Selangor", "Johor"}
+    assert [loc.state for loc in locs if loc.is_primary] == ["Johor"]

@@ -40,6 +40,8 @@ _NOT_NAME_WORDS = {
     "key", "personnel", "executive", "committee", "profile", "linkedin", "facebook", "jan", "feb", "mar", "apr",
     "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "monday", "friday", "quality", "safety", "customer",
     "customers", "partners", "award", "awards", "certified", "iso", "chairman", "founder", "ceo",
+    "corporate", "milestone", "milestones", "overview", "achievements", "investor", "relations", "sustainability",
+    "governance", "annual", "report", "announcements", "quick", "links", "campus", "campuses", "school", "schools",
 }
 _SEPARATORS = re.compile(r"\s+[–—-]\s+|\s*\|\s*|,\s+(?=[A-Za-z])")
 

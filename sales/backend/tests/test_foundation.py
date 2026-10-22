@@ -19,7 +19,7 @@ def test_models_match_migrations(migrated):
 
 
 async def test_default_training_programs_loaded(db):
-    assert await db.scalar(select(func.count()).select_from(TrainingProgram)) == 12
+    assert await db.scalar(select(func.count()).select_from(TrainingProgram)) == 14
 
 
 async def _job(db) -> int:

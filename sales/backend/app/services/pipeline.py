@@ -122,11 +122,77 @@ _PROVIDER_TERMS = re.compile(r"\b(courses?|enrol(?:l|ment)?s?|bootcamps?|syllabu
                              r"lesson|instructor[s-]?led)\b", re.I)
 
 
+_SCHOOL_TERMS = re.compile(r"\b(international school|primary school|secondary school|private school|kindergarten|preschool|"
+                           r"pupils|principal'?s? (message|welcome)|headmaster|headmistress|head of school|admissions|"
+                           r"igcse|a[- ]levels?|cambridge (primary|lower secondary|curriculum)|year [1-9]|form [1-6]|"
+                           r"school fees|parents|pta|boarding)\b", re.I)
+
+
+def school_evidence(pages: list[CrawledPage]) -> list[str]:
+    """Distinct school terms. A school is a training *buyer* (staff and students), not a competitor."""
+    text = " ".join(p.text[:8000] for p in pages if p.page_type in ("home", "about", "other", "contact"))
+    return sorted({m.group(0).lower() for m in _SCHOOL_TERMS.finditer(text)})
+
+
 def training_provider_evidence(pages: list[CrawledPage]) -> list[str]:
     """Distinct course-selling terms on the home/about pages. A company that
     sells training is a competitor, not a training prospect."""
     text = " ".join(p.text[:8000] for p in pages if p.page_type in ("home", "about", "services", "other"))
     return sorted({m.group(0).lower() for m in _PROVIDER_TERMS.finditer(text)})
+
+
+_LEGAL_RE = re.compile(r"\b(sdn\.? ?bhd\.?|berhad|bhd\.?|pte\.? ?ltd\.?|limited|ltd\.?|plc|inc\.?)\b|\bschool\b|\bcollege\b", re.I)
+_REG_NO = re.compile(r"\s*\((?=[^)]*\d{5,})[^)]*\)")
+_GENERIC_NAME = re.compile(r"^(home|about|contact|enquir|overview|welcome|investor|our |corporate|news|products?|services?)", re.I)
+
+
+def _choose_name(company: Company, candidates, from_search_title: bool = False) -> tuple[str | None, str]:
+    """Picks the organisation's own name from the site. Returns (name, how): how is "site" or "domain".
+    Only replaces a placeholder (the domain) or a name taken from a search-result title — never a typed name."""
+    domain = company.domain or domain_from_url(company.website) or ""
+    label = domain.split(".")[0]
+    placeholder = company.legal_name.lower() in (domain, label, f"www.{domain}")
+    from rapidfuzz import fuzz
+    scored = []
+    for v in candidates:
+        name = _REG_NO.sub("", v.value).strip(" -|,")
+        if not name or len(name) > 120 or _GENERIC_NAME.match(name):
+            continue
+        legal = bool(_LEGAL_RE.search(name))
+        sim = fuzz.partial_ratio(re.sub(r"[^a-z0-9]", "", name.lower()), re.sub(r"[^a-z0-9]", "", label.lower())) / 100
+        if legal or sim >= 0.8:
+            scored.append((v.confidence + (0.3 if legal else 0) + 0.3 * sim, name))
+    if scored:
+        score, name = max(scored)
+        if placeholder or (from_search_title and score >= 0.9):
+            return name, "site"
+    if placeholder:
+        return label.replace("-", " ").title(), "domain"
+    return None, ""
+
+
+_PLACES = ["johor bahru", "johor", "iskandar puteri", "senai", "kulai", "pasir gudang", "batu pahat", "muar", "kluang",
+           "kuala lumpur", "cheras", "shah alam", "selangor", "petaling jaya", "subang", "puchong", "klang", "cyberjaya",
+           "putrajaya", "penang", "bayan lepas", "george town", "ipoh", "perak", "melaka", "malacca", "seremban",
+           "negeri sembilan", "kota kinabalu", "sabah", "kuching", "sarawak", "kedah", "kelantan", "terengganu",
+           "pahang", "kuantan", "singapore"]
+_JOHOR = {"johor", "johor bahru", "iskandar puteri", "senai", "kulai", "pasir gudang", "batu pahat", "muar", "kluang"}
+
+
+def outside_target_area(text: str, criteria: dict) -> str | None:
+    """A place named in a person's title/page that is clearly not the target area (multi-campus/branch sites)."""
+    state = (criteria.get("state") or "").lower()
+    city = (criteria.get("city") or "").lower()
+    if not state and not city:
+        return None
+    target = {state, city} - {""}
+    if state == "johor":
+        target |= _JOHOR
+    t = text.lower().replace("-", " ")
+    named = [p for p in _PLACES if re.search(rf"\b{re.escape(p)}\b", t)]
+    if not named or any(p in target for p in named):
+        return None
+    return named[0]
 
 
 def _is_decision_maker(title: str | None, criteria: dict) -> tuple[bool, object]:
@@ -210,6 +276,10 @@ async def _crawl(ctx: Ctx, company: Company) -> list[CrawledPage]:
     await ctx.db.flush()
     if result.cancelled:
         await ctx.run.check_cancel()
+    if result.pages and len(result.pages) == 1 and (result.pages[0].status_code == 202 or len(result.pages[0].text or "") < 300):
+        await ctx.run.note("warning", f"{company.display_name}: the website appears to block automated access (bot protection) "
+                                      "or needs JavaScript — only an empty page came back. It is not bypassed; add details manually.",
+                           company_id=company.id)
     if not result.pages:
         await ctx.run.note("warning", f"{company.display_name}: website could not be crawled",
                            company_id=company.id, reason=cj.error or ("robots.txt disallows crawling" if result.robots_allowed is False else "no pages"))
@@ -223,23 +293,26 @@ async def _company_intel(ctx: Ctx, company: Company, pages: list[CrawledPage]) -
     info = extract_company_info(pages)
     web = SourceType.COMPANY_WEBSITE
 
-    best_name = max(info.name_candidates, key=lambda v: v.confidence, default=None)
-    if best_name and company.domain_status in ("UNRESOLVED", "USER_PROVIDED") and best_name.confidence >= 0.7 \
-            and normalize_company_name(best_name.value) and company.legal_name == company.display_name \
-            and not await db.scalar(select(CompanySource.id).where(CompanySource.company_id == company.id,
-                                                                   CompanySource.field_name == "legal_name",
-                                                                   CompanySource.source_type == SourceType.USER_ENTRY,
-                                                                   CompanySource.value == company.legal_name,
-                                                                   CompanySource.source_url.is_(None))):
-        # Search-result titles are a weak name source; the site's own organisation name wins.
-        company.legal_name = company.display_name = best_name.value[:300]
-        company.normalized_name = normalize_company_name(best_name.value)
+    search_named = bool(await db.scalar(select(CompanySource.id).where(
+        CompanySource.company_id == company.id, CompanySource.field_name == "legal_name",
+        CompanySource.source_type == SourceType.SEARCH_PROVIDER, CompanySource.value == company.legal_name)))
+    user_named = bool(await db.scalar(select(CompanySource.id).where(
+        CompanySource.company_id == company.id, CompanySource.field_name == "legal_name",
+        CompanySource.source_type.in_([SourceType.USER_ENTRY, SourceType.USER_IMPORT]), CompanySource.value == company.legal_name,
+        CompanySource.value != (company.domain or domain_from_url(company.website) or ""))))
+    chosen, how = (None, "") if user_named else _choose_name(company, info.name_candidates, search_named)
+    if chosen and chosen != company.legal_name:
+        company.legal_name = company.display_name = chosen[:300]
+        company.normalized_name = normalize_company_name(chosen) or chosen.lower()
+        if how == "domain":
+            db.add(_csrc(company.id, "legal_name", chosen, prov=Provenance.INFERRED, stype=web, url=company.website,
+                         evidence="No organisation name on the site; derived from the domain", confidence=0.3))
     for v in info.name_candidates[:3]:
         db.add(_csrc(company.id, "legal_name", v.value, prov=Provenance.DISCOVERED, stype=web, url=v.evidence.source_url,
                      evidence=v.evidence.snippet, confidence=v.confidence))
 
-    def fill(attr: str, values, field_name: str, transform=lambda x: x):
-        best = max(values, key=lambda v: v.confidence, default=None)
+    def fill(attr: str, values, field_name: str, transform=lambda x: x, prefer=lambda v: 0.0):
+        best = max(values, key=lambda v: v.confidence + prefer(v), default=None)
         if not best:
             return
         db.add(_csrc(company.id, field_name, best.value, prov=Provenance.DISCOVERED, stype=web,
@@ -248,9 +321,13 @@ async def _company_intel(ctx: Ctx, company: Company, pages: list[CrawledPage]) -
             setattr(company, attr, transform(best.value))
 
     fill("description", info.descriptions, "description", lambda v: v[:5000])
-    fill("phone", [p for p in info.phones if p.kind != "fax"], "phone", lambda v: v[:60])
-    fill("general_email", [e for e in info.emails if e.kind == "role"], "general_email",
-         lambda v: v.lower()[:320])
+    # Multi-branch companies list several offices: prefer the one in the target area / on the company's own domain.
+    area = [x.lower() for x in (ctx.criteria.get("city"), ctx.criteria.get("state")) if x]
+    own = company.domain or domain_from_url(company.website) or ""
+    fill("phone", [p for p in info.phones if p.kind != "fax"], "phone", lambda v: v[:60],
+         prefer=lambda v: 0.5 if any(a in (v.evidence.snippet or "").lower() for a in area) else 0.0)
+    fill("general_email", [e for e in info.emails if e.kind == "role"], "general_email", lambda v: v.lower()[:320],
+         prefer=lambda v: 0.5 if own and v.value.lower().endswith("@" + own) else 0.0)
     best_emp = max(info.employee_counts, key=lambda v: v.confidence, default=None)
     if best_emp:
         try:
@@ -266,16 +343,33 @@ async def _company_intel(ctx: Ctx, company: Company, pages: list[CrawledPage]) -
         db.add(_csrc(company.id, f"profile:{link.kind or 'link'}", link.value, prov=Provenance.DISCOVERED, stype=web,
                      url=link.evidence.source_url, evidence=link.evidence.snippet, confidence=link.confidence))
 
-    has_loc = await db.scalar(select(CompanyLocation.id).where(CompanyLocation.company_id == company.id).limit(1))
-    for i, addr in enumerate(sorted(info.addresses, key=lambda v: v.confidence, reverse=True)[:3]):
+    target_state = (ctx.criteria.get("state") or "").lower()
+    existing_locs = (await db.execute(select(CompanyLocation).where(CompanyLocation.company_id == company.id))).scalars().all()
+    known = {(loc.address or "").strip().lower() for loc in existing_locs}
+    # Multi-site companies list several addresses: keep the ones in the target state first.
+    ranked = sorted(info.addresses, key=lambda v: ((v.data.get("state") or "").lower() == target_state, v.confidence), reverse=True)
+    for addr in ranked[:5]:
+        if addr.value.strip().lower() in known:
+            continue
         src = _csrc(company.id, "address", addr.value, prov=Provenance.DISCOVERED, stype=web,
                     url=addr.evidence.source_url, evidence=addr.evidence.snippet, confidence=addr.confidence)
         db.add(src)
         await db.flush()
         d = addr.data
-        db.add(CompanyLocation(company_id=company.id, address=addr.value[:1000], city=d.get("city"), state=d.get("state"),
-                               postcode=d.get("postcode"), country=d.get("country") or "Malaysia",
-                               is_primary=(i == 0 and not has_loc), source_id=src.id))
+        loc = CompanyLocation(company_id=company.id, address=addr.value[:1000], city=d.get("city"), state=d.get("state"),
+                              postcode=d.get("postcode"), country=d.get("country") or "Malaysia",
+                              is_primary=not existing_locs, source_id=src.id)
+        db.add(loc)
+        existing_locs.append(loc)
+        known.add(addr.value.strip().lower())
+    await db.flush()
+    if target_state and existing_locs:
+        primary = next((loc for loc in existing_locs if loc.is_primary), None)
+        in_area = next((loc for loc in existing_locs if (loc.state or "").lower() == target_state), None)
+        # Only re-point a discovered primary address; one a person entered (no source_id) is left alone.
+        if in_area and (primary is None or (primary.source_id and (primary.state or "").lower() != target_state)):
+            for loc in existing_locs:
+                loc.is_primary = loc is in_area
 
     if not company.industry:
         text = " ".join([company.description or ""] + [p.text[:4000] for p in pages if p.page_type in ("home", "about", "services")])
@@ -344,11 +438,14 @@ async def _people(ctx: Ctx, company: Company, pages: list[CrawledPage]) -> list[
     found = extract_people_from_pages(pages, [company.legal_name, company.display_name])
     existing = (await db.execute(select(Contact).where(Contact.company_id == company.id, Contact.deleted_at.is_(None)))).scalars().all()
     created: list[Contact] = []
-    kept = skipped = 0
+    kept = skipped = elsewhere = 0
     for person in found:
         ok, nt = _is_decision_maker(person.original_title, ctx.criteria)
         if not ok:
             skipped += 1
+            continue
+        if outside_target_area(f"{person.original_title or ''} {person.source_url}", ctx.criteria):
+            elsewhere += 1
             continue
         kept += 1
         rec = PersonRecord(full_name=person.full_name, company_id=company.id, emails=[person.email] if person.email else [],
@@ -395,6 +492,9 @@ async def _people(ctx: Ctx, company: Company, pages: list[CrawledPage]) -> list[
     if skipped:
         await ctx.run.note("warning", f"{company.display_name}: {skipped} people found but not decision makers for this search",
                            company_id=company.id)
+    if elsewhere:
+        await ctx.run.note("warning", f"{company.display_name}: {elsewhere} decision makers skipped — they work at a branch/campus "
+                                      "outside the target area", company_id=company.id)
     await db.flush()
     return created
 
@@ -629,7 +729,12 @@ async def enrich_company(ctx: Ctx, company: Company, location_hint: str | None =
         if trusted:
             await ctx.run.bump(domains_resolved=1)
             signals = await _company_intel(ctx, company, pages)
-            provider_terms = training_provider_evidence(pages)
+            school_terms = school_evidence(pages)
+            provider_terms = [] if len(school_terms) >= 3 else training_provider_evidence(pages)
+            if len(school_terms) >= 3 and company.industry in (None, "", "Other", "Education"):
+                company.industry = "Schools"
+                db.add(_csrc(company.id, "industry", "Schools", prov=Provenance.INFERRED, stype=SourceType.COMPANY_WEBSITE,
+                             url=pages[0].source_url, evidence="School terms: " + ", ".join(school_terms[:10]), confidence=0.75))
             if len(provider_terms) >= 3:
                 if company.industry in (None, "", "Other"):
                     company.industry = "Education"
@@ -763,8 +868,15 @@ async def run_enrich(db: AsyncSession, run: JobRun, providers: Providers, user_i
     fetcher, robots = build_crawler(user_agent=s.crawler_user_agent, timeout=s.crawler_timeout_seconds,
                                     min_delay=s.crawler_min_delay_seconds, pin_dns=True)
     loc = await db.scalar(select(CompanyLocation.state).where(CompanyLocation.company_id == company.id).limit(1))
+    criteria = dict(job.params.get("criteria") or {})
+    if not criteria.get("state"):
+        # A re-enrich has no search criteria: target the best-scoring location from the lead-score settings.
+        from app.services.scores import load_weights
+        locations = (await load_weights(db))[0].get("locations") or {}
+        if locations:
+            criteria["state"] = max(locations, key=locations.get)
     ctx = Ctx(db=db, run=run, providers=providers, fetcher=fetcher, robots=robots,
-              criteria=job.params.get("criteria") or {}, steps=steps, user_id=user_id, programs=await _programs(db))
+              criteria=criteria, steps=steps, user_id=user_id, programs=await _programs(db))
     try:
         await run.bump(stage=f"Enriching {company.display_name}", **{k: 0 for k in COUNTERS})
         await enrich_company(ctx, company, loc)

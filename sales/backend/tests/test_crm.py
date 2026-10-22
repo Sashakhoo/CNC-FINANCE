@@ -207,7 +207,7 @@ async def test_settings_validation_and_audit_admin_only(client, finance):
     audit_log = (await client.get("/api/audit")).json()
     assert "settings_changed" in audit_log["actions"]
     meta = (await client.get("/api/meta")).json()
-    assert "DO_NOT_CONTACT" in meta["statuses"] and len(meta["programs"]) == 12
+    assert "DO_NOT_CONTACT" in meta["statuses"] and len(meta["programs"]) == 14
 
     client.cookies.clear()
     client.cookies.update(finance_session(finance, username="sam", role="admin", token="tok-sam"))

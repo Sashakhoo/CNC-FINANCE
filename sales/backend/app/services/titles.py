@@ -16,12 +16,23 @@ class NormalizedTitle:
 
 # (pattern, normalized title, department, seniority) — first match wins, so
 # more specific titles come first.
-_RULES: list[tuple[str, str, Department, Seniority]] = [
+_RULES: list[tuple[str, str | None, Department, Seniority]] = [
     (r"\b(chief executive|ceo)\b", "CEO", Department.MANAGEMENT, Seniority.C_LEVEL),
     (r"\b(chief operating|coo)\b", "COO", Department.MANAGEMENT, Seniority.C_LEVEL),
     (r"\b(chief information officer|cio)\b", "CIO", Department.IT, Seniority.C_LEVEL),
     (r"\b(chief technology|cto)\b", "CTO", Department.IT, Seniority.C_LEVEL),
     (r"\b(chief human|chief people|chro|cpo)\b", "Chief People Officer", Department.HR, Seniority.C_LEVEL),
+    # Schools — "Principal Engineer/Consultant…" is an industrial title, not a school head.
+    (r"\b(vice principal|deputy (head|principal)|assistant principal)\b", "Vice Principal", Department.MANAGEMENT, Seniority.DIRECTOR),
+    (r"\b(headmaster|headmistress|head ?teacher|head of school)\b|\bprincipal\b(?!['’]s)(?!\s*(engineer|consultant|scientist|architect|software|designer|analyst|specialist|officer|investigator|partner|product|program|research))",
+     "Principal", Department.MANAGEMENT, Seniority.HEAD),
+    (r"\b(director of studies|academic director|head of (teaching (and|&) learning|academics?|curriculum)|curriculum (coordinator|director))\b",
+     "Director of Studies", Department.LD, Seniority.DIRECTOR),
+    (r"\bbursar\b|\bschool business manager\b", "Bursar", Department.OPERATIONS, Seniority.MANAGER),
+    # Board roles: independent / non-executive / alternate directors don't run the business — not decision makers.
+    (r"\b(independent|non[- ]?executive|alternate)\b.*\b(director|chairman|chairperson)\b", None, Department.MANAGEMENT, Seniority.INDIVIDUAL),
+    (r"\b(executive )?(chairman|chairperson)\b", "Chairman", Department.MANAGEMENT, Seniority.C_LEVEL),
+    (r"\b(group )?executive director\b", "Executive Director", Department.MANAGEMENT, Seniority.DIRECTOR),
     (r"\bmanaging director\b", "Managing Director", Department.MANAGEMENT, Seniority.C_LEVEL),
     (r"\b(founder|co-founder|owner|proprietor)\b", "Owner", Department.MANAGEMENT, Seniority.OWNER),
     (r"\bgeneral manager\b", "General Manager", Department.MANAGEMENT, Seniority.HEAD),
@@ -43,6 +54,9 @@ _RULES: list[tuple[str, str, Department, Seniority]] = [
     (r"\b(it|information technology|ict)\b.*\bmanager\b|\bmanager\b.*\b(it|information technology)\b",
      "IT Manager", Department.IT, Seniority.MANAGER),
     (r"\btechnology manager\b", "Technology Manager", Department.IT, Seniority.MANAGER),
+    (r"\b(ict|computing|computer science|digital learning|edtech|educational technology)\b.*\b(coordinator|head|lead|director)\b|\bhead of (computing|computer science|digital learning)\b",
+     "Head of ICT/Computing", Department.IT, Seniority.HEAD),
+    (r"\bstem\b.*\b(coordinator|head|lead|director)\b|\bhead of stem\b", "Head of STEM", Department.LD, Seniority.HEAD),
     (r"\bengineering\b.*\bdirector\b|\bdirector\b.*\bengineering\b", "Engineering Director", Department.ENGINEERING, Seniority.DIRECTOR),
     (r"\bhead of engineering\b", "Head of Engineering", Department.ENGINEERING, Seniority.HEAD),
     (r"\bautomation\b.*\bmanager\b", "Automation Manager", Department.ENGINEERING, Seniority.MANAGER),
