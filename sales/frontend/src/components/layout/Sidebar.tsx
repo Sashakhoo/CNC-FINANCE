@@ -10,7 +10,7 @@ import logoLightText from '../../assets/codencode-logo-light-text.png';
 
 export function Logo({ compact }: { compact?: boolean }) {
   return (
-    <div className="flex flex-col gap-1.5 leading-tight">
+    <div className="flex flex-col items-start gap-1.5 leading-tight">
       <img src={logoLightText} alt="codencode.my" className="logo-on-dark h-[22px] w-auto" />
       <img src={logoDarkText} alt="codencode.my" className="logo-on-light h-[22px] w-auto" />
       {!compact && <div className="text-[11px] text-mute">Lead Intelligence</div>}
