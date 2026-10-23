@@ -1,4 +1,4 @@
-# Public entry for main.codencode.my (launcher) and sales.codencode.my (CRM):
+# Public entry for main.codencode.my (launcher) and crm.codencode.my (CRM):
 # serves the built React app and proxies /api to the backend.
 FROM node:22-slim AS build
 WORKDIR /web
