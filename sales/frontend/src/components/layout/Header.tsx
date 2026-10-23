@@ -2,7 +2,7 @@ import { Menu as MenuIcon, Moon, Sun } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useUi } from '../../store/useUi';
 import { useMe } from '../../hooks/useAuth';
-import { ContactAvatar } from '../common/Avatar';
+import { UserAvatar } from '../common/Avatar';
 
 const TITLES: [RegExp, string][] = [
   [/^\/$/, 'Dashboard'], [/^\/prospects/, 'Prospects'], [/^\/companies/, 'Companies'], [/^\/contacts/, 'Contacts'],
@@ -34,7 +34,7 @@ export function Header() {
         <div className="font-display text-[15px] text-mute">{title}</div>
         <div className="flex-1" />
         <ThemeToggle />
-        <span className="rounded-full" title={me ? `${me.username} · ${me.role}` : undefined}><ContactAvatar name={me?.username ?? '?'} size={40} /></span>
+        <span className="rounded-full" title={me ? `${me.username} · ${me.role}` : undefined}><UserAvatar name={me?.username ?? '?'} size={40} /></span>
       </div>
     </header>
   );

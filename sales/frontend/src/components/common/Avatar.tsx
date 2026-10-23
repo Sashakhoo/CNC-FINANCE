@@ -39,6 +39,26 @@ function portraitUri(name: string): string {
   return uri;
 }
 
+// The signed-in user's own portrait: a fixed Micah look (long black hair, light skin)
+// instead of one derived from the username.
+let userUri: string | undefined;
+function userPortraitUri(): string {
+  userUri ??= new DiceAvatar(micah, {
+    seed: 'signed-in-user', hairVariant: 'full', hairColor: '#000000', baseColor: '#f9c9b6',
+    eyesVariant: 'eyes', eyebrowsVariant: 'eyelashesUp', mouthVariant: 'smile',
+    earringsProbability: 100, earringsVariant: 'stud', earringColor: '#f4d150',
+    facialHairProbability: 0, glassesProbability: 0, shirtColor: '#fc909f', backgroundColor: '#e0ddff',
+  }).toDataUri();
+  return userUri;
+}
+
+export function UserAvatar({ name, size = 36 }: { name: string; size?: number }) {
+  return (
+    <img src={userPortraitUri()} width={size} height={size} alt={name} title={name}
+      className="rounded-full shrink-0 border border-black/5 object-cover" style={{ width: size, height: size }} />
+  );
+}
+
 export function ContactAvatar({ name, size = 32, className }: { name: string; size?: number; className?: string }) {
   return (
     <img src={portraitUri(name || '?')} width={size} height={size} alt={name} title={name} loading="lazy"

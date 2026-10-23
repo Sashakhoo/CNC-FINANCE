@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { useUi } from '../../store/useUi';
 import { useMe, useLogout } from '../../hooks/useAuth';
 import { launcherUrl } from '../../utils/hosts';
-import { ContactAvatar } from '../common/Avatar';
+import { UserAvatar } from '../common/Avatar';
 import logoDarkText from '../../assets/codencode-logo-dark-text.png';
 import logoLightText from '../../assets/codencode-logo-light-text.png';
 
@@ -80,7 +80,7 @@ export function Sidebar() {
         </nav>
         <div className="p-3 border-t border-line">
           <div className="flex items-center gap-3 p-2 rounded-2xl bg-s1 border border-line">
-            <ContactAvatar name={me?.username ?? '?'} size={36} />
+            <UserAvatar name={me?.username ?? '?'} size={36} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{me?.username}</div>
               <div className="text-[11px] text-mute capitalize">{me?.role.toLowerCase()}</div>
