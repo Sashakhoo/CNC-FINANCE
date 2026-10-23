@@ -15,6 +15,12 @@ Status mapping to app.models.base.VerificationStatus:
 | ZeroBounce | abuse                              | RISKY     | 0.40                  |
 | ZeroBounce | invalid, spamtrap, do_not_mail     | INVALID   | 0.0                   |
 | ZeroBounce | unknown / anything else            | UNKNOWN   | 0.20                  |
+| Reoon      | safe                               | VERIFIED  | 0.95                  |
+| Reoon      | role_account                       | RISKY     | 0.50                  |
+| Reoon      | catch_all                          | RISKY     | 0.40                  |
+| Reoon      | inbox_full                         | RISKY     | 0.30                  |
+| Reoon      | invalid, disabled, disposable, spamtrap | INVALID | 0.0               |
+| Reoon      | unknown / anything else            | UNKNOWN   | 0.20                  |
 | (any)      | fails local syntax check           | INVALID   | 0.0 (no API call)     |
 
 Verification never sends an email to the address (spec §20)."""
