@@ -2,6 +2,7 @@ from app.core.config import Settings
 from app.providers import registry
 from app.providers.base import ProviderKind
 from app.providers.search.brave import BraveSearch
+from app.providers.search.tavily import TavilySearch
 
 SECRET = "sk-should-never-appear"
 
@@ -13,6 +14,8 @@ def settings(**kw):
 def test_builds_configured_search_provider():
     p = registry.build_provider(ProviderKind.SEARCH, settings(search_provider="Brave", search_api_key=SECRET))
     assert isinstance(p, BraveSearch)
+    p = registry.build_provider(ProviderKind.SEARCH, settings(search_provider="tavily", search_api_key=SECRET))
+    assert isinstance(p, TavilySearch)
 
 
 def test_not_configured_cases_return_none():

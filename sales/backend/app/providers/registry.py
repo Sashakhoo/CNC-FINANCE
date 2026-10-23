@@ -15,7 +15,10 @@ from app.providers.base import NOOP_RECORDER, Cache, ProviderKind, ProviderState
 log = logging.getLogger("app.providers")
 
 CATALOGUE: dict[ProviderKind, dict[str, str]] = {
-    ProviderKind.SEARCH: {"brave": "app.providers.search.brave:BraveSearch"},
+    ProviderKind.SEARCH: {
+        "brave": "app.providers.search.brave:BraveSearch",
+        "tavily": "app.providers.search.tavily:TavilySearch",
+    },
     ProviderKind.EMAIL_DISCOVERY: {"hunter": "app.providers.email.hunter:HunterEmailDiscovery"},
     ProviderKind.EMAIL_VERIFICATION: {
         "hunter": "app.providers.verification.hunter:HunterVerifier",
