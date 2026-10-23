@@ -8,7 +8,7 @@ from app.crawler.url_safety import DNSResolutionError
 
 HOST = "precision-example.com.my"
 BASE = f"https://{HOST}"
-UA = "CodencodeLeadIntelligence/1.0 (+https://sales.codencode.my/bot)"
+UA = "CodencodeLeadIntelligence/1.0 (+https://crm.codencode.my/bot)"
 PUBLIC = {HOST: ["203.106.1.1"], "www." + HOST: ["203.106.1.1"], "cdn-example.com": ["203.106.9.9"],
           "evil-example.com": ["10.9.9.9"]}
 HTML = "<html><head><title>Hi</title><link rel='canonical' href='/canon'></head><body><p>Hello there</p></body></html>"

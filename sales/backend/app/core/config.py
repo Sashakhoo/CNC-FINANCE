@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     crm_integration_secret: str = ""
     session_cache_seconds: int = 60
 
-    frontend_url: str = "https://sales.codencode.my"
+    frontend_url: str = "https://crm.codencode.my"
     # Extra browser origins allowed to make writes, comma-separated (e.g. https://main.codencode.my).
     allowed_origins: str = ""
     # JSON per-provider quota overrides, e.g. {"brave": {"minute": 30, "month": 2000}}
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", repr=False)
     gemini_api_key: str = Field(default="", repr=False)
 
-    crawler_user_agent: str = "CodencodeLeadIntelligence/1.0 (+https://sales.codencode.my/bot)"
+    crawler_user_agent: str = "CodencodeLeadIntelligence/1.0 (+https://crm.codencode.my/bot)"
     crawler_max_pages_per_domain: int = 25
     crawler_max_depth: int = 2
     crawler_timeout_seconds: float = 15.0

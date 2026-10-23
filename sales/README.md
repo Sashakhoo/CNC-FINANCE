@@ -12,7 +12,7 @@ USER_PROVIDED), source URL, evidence text, confidence and time. Unknown stays un
 | Site | What |
 |---|---|
 | main.codencode.my | Workspace launcher (Sales, Learn, Finance) |
-| sales.codencode.my | This CRM |
+| crm.codencode.my | This CRM |
 | finance.codencode.my | CNC Finance — owns user accounts; raises invoices for WON deals |
 
 ## Status
@@ -122,12 +122,12 @@ One Railway project, all from this repo:
 | backend | `sales/backend` | `Dockerfile` | default | none (private) |
 | worker | `sales/backend` | `Dockerfile` | `celery -A app.worker worker --loglevel=INFO --concurrency=4` | none |
 | scheduler | `sales/backend` | `Dockerfile` | `celery -A app.worker beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule` | none |
-| web | `sales` | `nginx/Dockerfile` | default | sales.codencode.my, main.codencode.my |
+| web | `sales` | `nginx/Dockerfile` | default | crm.codencode.my, main.codencode.my |
 
 backend / worker / scheduler variables:
 `DATABASE_URL` (Railway's URL with `postgresql+asyncpg://`), `REDIS_URL`, `APP_ENV=production`,
 `FINANCE_INTERNAL_URL=https://finance.codencode.my`, `FINANCE_PUBLIC_URL=https://finance.codencode.my`,
-`CRM_INTEGRATION_SECRET`, `FRONTEND_URL=https://sales.codencode.my`, `ALLOWED_ORIGINS=https://main.codencode.my`,
+`CRM_INTEGRATION_SECRET`, `FRONTEND_URL=https://crm.codencode.my`, `ALLOWED_ORIGINS=https://main.codencode.my`,
 provider keys. backend also `HOST=::` (Railway's private network is IPv6).
 
 web: `BACKEND_URL=http://backend.railway.internal:8000`.
