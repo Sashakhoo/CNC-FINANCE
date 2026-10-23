@@ -26,7 +26,7 @@ browser against the local stack, including a live crawl of a real public website
 | CRM | Companies, contacts, Prospects (all spec filters, bulk actions), Works Space cards, company/contact profiles, pipeline, notes, activity, sources drawer, Do Not Contact, audit log, settings, team roles |
 | Discovery | Saved searches, weekly re-runs, search provider (Brave or Tavily), candidate filtering, domain resolution (uncertain domains never assigned), seed-website mode |
 | Website intelligence | SSRF-safe crawler (DNS checked + IP pinned per request, redirects re-validated), robots.txt + crawl-delay, page limits, content hashing, company facts, signals, decision makers |
-| Contact & email intelligence | Title normalization, decision-maker filtering, profile discovery via search results only (never logs into or scrapes LinkedIn), email discovery (Hunter), pattern inference (always INFERRED + UNVERIFIED), verification (Hunter / ZeroBounce) |
+| Contact & email intelligence | Title normalization, decision-maker filtering, profile discovery via search results only (never logs into or scrapes LinkedIn), email discovery (Hunter), pattern inference (always INFERRED + UNVERIFIED), verification (Hunter / ZeroBounce / Reoon) |
 | AI | Gemini / Anthropic / OpenAI; training match with verbatim-quote evidence; outreach drafts fact-checked against inputs; rules-only when no key |
 | Scores | Contact Confidence, Training Match and Lead Score kept separate, each with an explanation |
 | Outreach | Email / LinkedIn-style / follow-up drafts in 4 tones, edit → approve → "mark as sent" (nothing is ever sent by the app), campaigns with stage metrics |
@@ -68,7 +68,7 @@ Provider Usage and the matching pipeline step is skipped with a warning.
 |---|---|---|---|---|
 | Brave Search API or Tavily | Find companies; find public profile URLs in search results | `SEARCH_PROVIDER=brave` or `tavily`, `SEARCH_API_KEY` | Brave Search API dashboard / app.tavily.com (free 1,000 credits a month, no card) | No automatic company discovery — list websites in the search, or import |
 | Hunter.io | Business email discovery | `EMAIL_DISCOVERY_PROVIDER=hunter`, `EMAIL_DISCOVERY_API_KEY` | hunter.io → API keys | Emails only from public pages, plus INFERRED pattern guesses |
-| Hunter or ZeroBounce | Email verification | `EMAIL_VERIFICATION_PROVIDER=hunter` or `zerobounce`, `EMAIL_VERIFICATION_API_KEY` | Provider dashboard | Emails stay UNVERIFIED |
+| Hunter, ZeroBounce or Reoon | Email verification | `EMAIL_VERIFICATION_PROVIDER=hunter`, `zerobounce` or `reoon`, `EMAIL_VERIFICATION_API_KEY` | Provider dashboard (Reoon: free daily credits, power-mode checks) | Emails stay UNVERIFIED |
 | Gemini / Anthropic / OpenAI | AI training analysis, title fallback, outreach drafts | `LLM_PROVIDER`, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Google AI Studio / Claude Console / OpenAI platform | Rule-based analysis and template drafts |
 
 Quotas: defaults come from each adapter; override with `PROVIDER_LIMITS`

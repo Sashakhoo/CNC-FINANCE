@@ -39,6 +39,7 @@ async def send(
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     cost_estimate: float | None = None,
+    timeout: httpx.Timeout = DEFAULT_TIMEOUT,
 ) -> Any:
     """Makes exactly one request. `check(resp)` returns the parsed payload or
     raises a ProviderError; either way a UsageEvent is recorded."""
@@ -52,7 +53,7 @@ async def send(
         ))
 
     try:
-        resp = await client.request(method, url, params=params, headers=headers, timeout=DEFAULT_TIMEOUT)
+        resp = await client.request(method, url, params=params, headers=headers, timeout=timeout)
     except httpx.TimeoutException:
         await record(False, None, TransientError.error_type)
         raise TransientError(f"{provider} {operation}: request timed out") from None

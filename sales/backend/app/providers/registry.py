@@ -23,6 +23,7 @@ CATALOGUE: dict[ProviderKind, dict[str, str]] = {
     ProviderKind.EMAIL_VERIFICATION: {
         "hunter": "app.providers.verification.hunter:HunterVerifier",
         "zerobounce": "app.providers.verification.zerobounce:ZeroBounceVerifier",
+        "reoon": "app.providers.verification.reoon:ReoonVerifier",
     },
     ProviderKind.AI: {
         "gemini": "app.providers.ai.gemini:GeminiProvider",
