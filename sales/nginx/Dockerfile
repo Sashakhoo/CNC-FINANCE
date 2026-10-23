@@ -8,6 +8,6 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM nginx:1.27-alpine
-ENV PORT=80 BACKEND_URL=http://backend:8000
+ENV PORT=80 BACKEND_URL=http://backend:8000 NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /web/dist /usr/share/nginx/html

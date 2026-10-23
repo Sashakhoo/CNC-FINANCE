@@ -17,8 +17,13 @@ server {
         return 200 "ok";
     }
 
+    # Re-resolve the backend every few seconds: on Railway each backend deploy
+    # gets a new private IP, and a static proxy_pass would keep the old one.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
     location /api/ {
-        proxy_pass ${BACKEND_URL};
+        set $backend ${BACKEND_URL};
+        proxy_pass $backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
