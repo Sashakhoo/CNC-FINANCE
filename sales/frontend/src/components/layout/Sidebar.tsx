@@ -5,17 +5,15 @@ import { useUi } from '../../store/useUi';
 import { useMe, useLogout } from '../../hooks/useAuth';
 import { launcherUrl } from '../../utils/hosts';
 import { ContactAvatar } from '../common/Avatar';
+import logoDarkText from '../../assets/codencode-logo-dark-text.png';
+import logoLightText from '../../assets/codencode-logo-light-text.png';
 
 export function Logo({ compact }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="w-9 h-9 rounded-xl bg-lime text-ink flex items-center justify-center font-display font-semibold text-[15px] tracking-tight" aria-hidden>c/</span>
-      {!compact && (
-        <div className="leading-tight">
-          <div className="font-display font-semibold tracking-[0.14em] text-[13px]">CODENCODE</div>
-          <div className="text-[11px] text-mute">Lead Intelligence</div>
-        </div>
-      )}
+    <div className="flex flex-col gap-1.5 leading-tight">
+      <img src={logoLightText} alt="codencode.my" className="logo-on-dark h-[22px] w-auto" />
+      <img src={logoDarkText} alt="codencode.my" className="logo-on-light h-[22px] w-auto" />
+      {!compact && <div className="text-[11px] text-mute">Lead Intelligence</div>}
     </div>
   );
 }

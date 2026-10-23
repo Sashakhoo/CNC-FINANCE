@@ -17,6 +17,9 @@
     --amber: 168 111 0; --danger: 180 72 63; --sky: 47 109 174;
     color-scheme: light;
   }
+  .logo-on-light { display: none; }
+  :root[data-mode='light'] .logo-on-light { display: block; }
+  :root[data-mode='light'] .logo-on-dark { display: none; }
   :root[data-mode='light'] .text-lime, :root[data-mode='light'] .hover\:text-lime:hover, :root[data-mode='light'] .group:hover .group-hover\:text-lime { color: rgb(var(--lime-ink)); }
   :root[data-mode='light'] .shadow-2xl { box-shadow: 0 20px 50px -12px rgb(17 20 15 / 0.18); }
   html, body, #root { height: 100%; }
