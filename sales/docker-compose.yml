@@ -101,7 +101,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8080:80"
     depends_on:
