@@ -122,7 +122,7 @@ One Railway project, all from this repo:
 | backend | `sales/backend` | `Dockerfile` | default | none (private) |
 | worker | `sales/backend` | `Dockerfile` | `celery -A app.worker worker --loglevel=INFO --concurrency=4` | none |
 | scheduler | `sales/backend` | `Dockerfile` | `celery -A app.worker beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule` | none |
-| web | `sales` | `nginx/Dockerfile` | default | crm.codencode.my, main.codencode.my |
+| web | `sales` | `Dockerfile` | default | crm.codencode.my, main.codencode.my |
 
 backend / worker / scheduler variables:
 `DATABASE_URL` (Railway's URL with `postgresql+asyncpg://`), `REDIS_URL`, `APP_ENV=production`,
