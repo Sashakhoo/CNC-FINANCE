@@ -163,6 +163,45 @@ def _restart_invoice_numbers_at_1111():
     print(f"Migration {mid}: restarted INV numbering at 1111 for {len(ids)} invoice(s)")
 
 
+def _fix_vibe_coding_deposits_2026_10():
+    """Yap Wee Lee paid one RM200 deposit on 9 Oct covering herself and Teh
+    Boon Kian (RM100 each). Both later paid the RM650 balance, but Mark Paid
+    posted the full RM750 for each, counting the deposits twice (ledger
+    RM1,700 vs RM1,500 actually received). Record RM100 deposit on each
+    invoice and correct the two cash-in rows to RM650. Only touches rows that
+    still look exactly like the mistake, so it is safe to run anywhere."""
+    mid = "2026-10-fix-vibe-coding-deposits"
+    if _migration_ran(mid):
+        return
+    fixes = (("INV-1133", "Yap Wee Lee", "balance; RM100 deposit paid 9 Oct"),
+             ("INV-1132", "Teh Boon Kian", "balance; RM100 deposit paid by Yap Wee Lee on 9 Oct"))
+    done = []
+    with storage.get_conn() as conn:
+        for number, contact, note in fixes:
+            inv = conn.execute("SELECT * FROM invoices WHERE number = ? AND contact = ?", (number, contact)).fetchone()
+            if not inv or inv["status"] != "Paid" or float(inv["deposit"] or 0) > 0:
+                continue
+            if abs(storage.invoice_total(inv) - 750) > 0.01:
+                continue
+            rows = conn.execute(
+                "SELECT id FROM transactions WHERE type = 'in' AND ABS(amount - 750) < 0.01 "
+                "AND description LIKE ?", (f"Invoice {number} — %",)).fetchall()
+            if len(rows) != 1:
+                continue
+            conn.execute("UPDATE transactions SET amount = 650, description = description || ? WHERE id = ?",
+                         (f" ({note})", rows[0]["id"]))
+            conn.execute("UPDATE invoices SET deposit = 100 WHERE id = ?", (inv["id"],))
+            done.append(number)
+        cur = conn.execute(
+            "UPDATE transactions SET description = ? WHERE type = 'in' AND ABS(amount - 200) < 0.01 "
+            "AND description = ?",
+            ("Vibe Coding deposit — Yap Wee Lee RM100 + Teh Boon Kian RM100 (ref 01979)",
+             "Vibe Coding deposit — Yap Wee Lee (ref 01979)"))
+        renamed = cur.rowcount
+    print(f"Migration {mid}: corrected {', '.join(done) or 'nothing'}; deposit row renamed: {renamed}")
+    _finish(mid)
+
+
 def run_migrations() -> None:
     _recategorise_consulting_revenue()
     _rename_unpaid_to_pending()
@@ -170,3 +209,4 @@ def run_migrations() -> None:
     _restart_receipt_numbers_at_111()
     _restart_receipt_numbers_at_1111()
     _restart_invoice_numbers_at_1111()
+    _fix_vibe_coding_deposits_2026_10()

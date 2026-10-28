@@ -169,7 +169,7 @@ def _items_table(rows: list, subnotes: list) -> str:
 
 
 def _totals(subtotal: float, total: float, paid: float | None, due_label: str, due: float | None,
-           discount_pct: float = 0.0, tax_pct: float = 0.0) -> str:
+           discount_pct: float = 0.0, tax_pct: float = 0.0, paid_label: str = "Amount Paid:") -> str:
     rows = [f'<div class="row"><span>Subtotal:</span><span>{_rm(subtotal)}</span></div>']
     if discount_pct:
         discount_amt = subtotal * discount_pct / 100
@@ -180,7 +180,7 @@ def _totals(subtotal: float, total: float, paid: float | None, due_label: str, d
         rows.append(f'<div class="row"><span>Tax {tax_pct:g}%:</span><span>+{_rm(tax_amt)}</span></div>')
     rows.append(f'<div class="row grand"><span>Total:</span><span>{_rm(total)}</span></div>')
     if paid is not None:
-        rows.append(f'<div class="row"><span>Amount Paid:</span><span>{_rm(paid)}</span></div>')
+        rows.append(f'<div class="row"><span>{_esc(paid_label)}</span><span>{_rm(paid)}</span></div>')
     if due is not None:
         rows.append(f'<div class="row due"><span>{_esc(due_label)}</span><span>{_rm(due)}</span></div>')
     return f'<h2 class="sec">AMOUNT</h2><div class="totals">{"".join(rows)}</div>'
@@ -248,7 +248,7 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
                        discount_pct: float = 0.0, remarks: str = None,
                        items: list = None, attention: str = None, company: str = None,
                        address: str = None, reference_no: str = None, sales_type: str = None,
-                       sales_person: str = None, tax_pct: float = 0.0) -> bytes:
+                       sales_person: str = None, tax_pct: float = 0.0, deposit: float = 0.0) -> bytes:
     """`items`, if given, is a list of {description, qty, unit_price} dicts
     rendered as separate rows (matching a multi-service quotation/invoice).
     Falls back to a single row built from description/amount otherwise.
@@ -257,7 +257,8 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
     mirror the xlsm Invoice template's fields — each is optional and simply
     omitted from the PDF when blank."""
     paid = (status or "").lower() == "paid"
-    status_pill = ("PAID", "paid") if paid else ("PENDING", "pending")
+    deposit = float(deposit or 0)
+    status_pill = ("PAID", "paid") if paid else (("DEPOSIT PAID", "pending") if deposit else ("PENDING", "pending"))
     if items:
         rows = [(it["description"], it.get("qty", 1) or 1, it.get("unit_price", 0) or 0,
                  (it.get("qty", 1) or 1) * (it.get("unit_price", 0) or 0)) for it in items]
@@ -280,8 +281,9 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
         _header("INVOICE", invoice_no, meta_rows, status_pill),
         _party_block("BILL TO", party_name, party_lines),
         _items_table(rows, []),
-        _totals(subtotal, total, total if paid else 0.0, "Balance Due:", 0.0 if paid else total,
-                discount_pct, tax_pct),
+        _totals(subtotal, total, total if paid else min(deposit, total), "Balance Due:",
+                0.0 if paid else max(0.0, total - deposit), discount_pct, tax_pct,
+                paid_label="Less: Deposit Paid:" if deposit and not paid else "Amount Paid:"),
         _remarks_block(remarks),
         _payment_block(invoice_no),
         _footer(invoice_no),

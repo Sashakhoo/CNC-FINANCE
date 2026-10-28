@@ -651,7 +651,8 @@ async def telegram_webhook(request: Request):
             chat_id,
             f"✅ {updated['number']} marked <b>Paid</b>\n"
             f"👤 {updated['contact']}\n"
-            f"💰 RM {updated['amount']:,.2f}\n"
+            f"💰 RM {updated.get('_posted', updated['amount']):,.2f} posted"
+            + (f" (after RM {updated['deposit']:,.2f} deposit)" if updated.get("deposit") else "") + "\n"
             f"Logged to the ledger and their balance is cleared."
         )
         if tx_id:

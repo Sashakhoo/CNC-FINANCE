@@ -807,6 +807,25 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="deposit-modal-overlay" style="z-index:150;">
+  <form class="receipt-card" style="width:420px;" onsubmit="return saveDeposit(event)">
+    <div style="font-size:16px; font-weight:700; margin-bottom:4px;">Record deposit</div>
+    <div id="dep-info" class="empty-note" style="margin-bottom:14px;"></div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div class="field"><label for="dep-amount">Deposit amount (RM)</label><input type="number" id="dep-amount" min="0.01" step="0.01" required></div>
+      <div class="field"><label for="dep-date">Date received</label><input type="date" id="dep-date" required></div>
+      <div class="field"><label for="dep-note">Note (optional)</label><input id="dep-note" maxlength="120" placeholder="e.g. paid together with Teh Boon Kian, ref 01979"></div>
+      <label style="display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.4;"><input type="checkbox" id="dep-post" checked style="margin-top:2px;">
+        <span>Add it to Cash In now. Untick if you already entered this deposit by hand (e.g. one payment covering two people).</span></label>
+      <div id="dep-error" style="color:#c23b1f; font-size:12px; min-height:16px;"></div>
+    </div>
+    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+      <button type="button" class="pill-btn" onclick="document.getElementById('deposit-modal-overlay').classList.remove('open')">Cancel</button>
+      <button type="submit" class="pill-btn dark">Save deposit</button>
+    </div>
+  </form>
+</div>
+
 <div class="modal-overlay" id="confirm-modal-overlay" style="z-index:150;">
   <div class="receipt-card" style="width:360px;">
     <div id="confirm-message" style="font-size:15px; font-weight:600; margin-bottom:18px;"></div>
@@ -1514,9 +1533,38 @@ async function markPaid(id){
   await api('/invoices/' + id + '/pay', { method:'POST' });
   await loadState();
 }
-async function markDeposit(id){
-  await api('/invoices/' + id + '/status', { method:'PATCH', body: JSON.stringify({status:'Deposit'}) });
+// What the customer owes in full (amount is the pre-discount subtotal).
+function invTotal(i){ return Math.round((i.amount || 0) * (1 - (i.discount_pct || 0) / 100) * (1 + (i.tax_pct || 0) / 100) * 100) / 100; }
+let depositFor = null;
+function markDeposit(id){
+  const i = invoices.find(x => x.id === id); if(!i) return;
+  depositFor = id;
+  const owed = invTotal(i) - (i.deposit || 0);
+  document.getElementById('dep-info').textContent = i.number + ' — ' + i.contact + ' · total ' + fmt(invTotal(i)) +
+    (i.deposit ? ' · deposit so far ' + fmt(i.deposit) : '') + ' · still owed ' + fmt(owed);
+  document.getElementById('dep-amount').value = '';
+  document.getElementById('dep-amount').max = owed;
+  document.getElementById('dep-date').value = new Date().toLocaleDateString('en-CA');
+  document.getElementById('dep-note').value = '';
+  document.getElementById('dep-post').checked = true;
+  document.getElementById('dep-error').textContent = '';
+  document.getElementById('deposit-modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('dep-amount').focus(), 30);
+}
+async function saveDeposit(e){
+  e.preventDefault();
+  const body = {amount: parseFloat(document.getElementById('dep-amount').value),
+    date: document.getElementById('dep-date').value, note: document.getElementById('dep-note').value,
+    post_to_ledger: document.getElementById('dep-post').checked};
+  const res = await fetch('/api/invoices/' + depositFor + '/deposit', {method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!res.ok){
+    document.getElementById('dep-error').textContent = (await res.json().catch(() => ({}))).detail || 'Could not save the deposit';
+    return false;
+  }
+  document.getElementById('deposit-modal-overlay').classList.remove('open');
   await loadState();
+  return false;
 }
 async function deleteInvoice(id){
   if(!await confirmDialog('Delete this invoice?')) return;
@@ -1946,10 +1994,10 @@ function render(){
     const refLine = i.reference_no ? `<br><span class="empty-note">Ref: ${i.reference_no}</span>` : '';
     return `<tr><td class="mono">${i.number}${refLine}</td><td>${i.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${i.date}</td>
     <td class="mono" style="color:var(--dim);">${i.due}</td><td><span class="tag ${statusClass}">${i.status.toUpperCase()}</span>${syncBadge}</td>
-    <td style="text-align:right;" class="amt">${fmt(i.amount)}</td>
+    <td style="text-align:right;" class="amt">${fmt(invTotal(i))}${i.deposit ? `<br><span class="empty-note" style="white-space:nowrap;">deposit ${fmt(i.deposit)}${i.status !== 'Paid' ? ` · owed ${fmt(invTotal(i) - i.deposit)}` : ''}</span>` : ''}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="editInvoice(${i.id})" style="margin-left:6px;">✎ Edit</button>` : ''}
-    ${i.status!=='Paid' && i.status!=='Deposit' ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;">Deposit</button>` : ''}
+    ${i.status!=='Paid' && invTotal(i) - (i.deposit || 0) > 0.004 ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;">${i.deposit ? '+ Deposit' : 'Deposit'}</button>` : ''}
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
   }).join('');

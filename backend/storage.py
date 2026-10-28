@@ -194,6 +194,9 @@ def init_db():
             ("sales_type", "ALTER TABLE invoices ADD COLUMN sales_type TEXT NOT NULL DEFAULT ''"),
             ("sales_person", "ALTER TABLE invoices ADD COLUMN sales_person TEXT NOT NULL DEFAULT ''"),
             ("tax_pct", "ALTER TABLE invoices ADD COLUMN tax_pct REAL NOT NULL DEFAULT 0"),
+            # Deposits already received against this invoice (cash in posted
+            # separately), so Mark Paid only posts the remaining balance.
+            ("deposit", "ALTER TABLE invoices ADD COLUMN deposit REAL NOT NULL DEFAULT 0"),
         ):
             if col not in inv_cols:
                 conn.execute(ddl)
@@ -323,28 +326,85 @@ def insert_asset(name, category, cost, dep=0.0) -> int:
         return cur.lastrowid
 
 
-def mark_invoice_paid(iid: int):
-    """Marks an invoice Paid and posts the matching cash-in transaction,
-    mirroring the dashboard's markPaid()."""
+def invoice_total(inv) -> float:
+    """What the customer owes in full: line items less discount, plus tax
+    (the `amount` column holds the pre-discount subtotal)."""
+    keys = inv.keys()
+    amount = float(inv["amount"] or 0)
+    disc = float(inv["discount_pct"] or 0) if "discount_pct" in keys else 0.0
+    tax = float(inv["tax_pct"] or 0) if "tax_pct" in keys else 0.0
+    return round(amount * (1 - disc / 100) * (1 + tax / 100), 2)
+
+
+def _fmt_rm(v: float) -> str:
+    return f"RM{v:,.2f}".replace(".00", "")
+
+
+def mark_invoice_paid(iid: int, date: str = None):
+    """Marks an invoice Paid and posts the cash-in for what was still owed:
+    the invoice total minus any deposit already received (deposits were
+    posted as their own cash-in when they came in)."""
     with get_conn() as conn:
         inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (iid,)).fetchone()
         if not inv or inv["status"] == "Paid":
             return dict(inv) if inv else None
+        deposit = float(inv["deposit"] or 0)
+        balance = round(max(0.0, invoice_total(inv) - deposit), 2)
         conn.execute("UPDATE invoices SET status = 'Paid' WHERE id = ?", (iid,))
         conn.execute(
             "UPDATE contacts SET balance = MAX(0, balance - ?) WHERE name = ? AND type = 'debtor'",
-            (inv["amount"], inv["contact"]),
+            (balance, inv["contact"]),
         )
     memo = inv["description"] if "description" in inv.keys() and inv["description"] else None
     desc = f"Invoice {inv['number']} — {inv['contact']}" + (f" ({memo})" if memo else "")
-    # Best-guess category — the dashboard's inline category dropdown lets you
-    # correct this per-transaction (e.g. to Workshop Revenue) in one click.
-    category_code("Course Revenue", "in")
-    tx_id = insert_transaction(
-        date=inv["date"], description=desc,
-        tx_type="in", category="Course Revenue", amount=inv["amount"],
-        payer_payee=inv["contact"],
-    )
+    if deposit:
+        desc += f" (balance after {_fmt_rm(deposit)} deposit)"
+    tx_id = None
+    if balance > 0.004:
+        # Best-guess category — the dashboard's inline category dropdown lets you
+        # correct this per-transaction (e.g. to Workshop Revenue) in one click.
+        category_code("Course Revenue", "in")
+        tx_id = insert_transaction(
+            date=date or inv["date"], description=desc,
+            tx_type="in", category="Course Revenue", amount=balance,
+            payer_payee=inv["contact"],
+        )
+    result = get_invoice(iid)
+    result["_transaction_id"] = tx_id
+    result["_posted"] = balance
+    return result
+
+
+def record_invoice_deposit(iid: int, amount: float, date: str, post: bool = True, note: str = ""):
+    """A part-payment before the invoice is settled: adds to the invoice's
+    deposit, marks it 'Deposit', and (unless the cash-in was already
+    entered by hand) posts the cash-in. Raises ValueError on bad input."""
+    amount = round(float(amount or 0), 2)
+    with get_conn() as conn:
+        inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (iid,)).fetchone()
+        if not inv:
+            return None
+        if inv["status"] == "Paid":
+            raise ValueError("This invoice is already paid")
+        if amount <= 0:
+            raise ValueError("Deposit must be more than RM0")
+        already = float(inv["deposit"] or 0)
+        if already + amount > invoice_total(inv) + 0.004:
+            raise ValueError(f"That is more than the {_fmt_rm(invoice_total(inv) - already)} still owed")
+        conn.execute("UPDATE invoices SET deposit = ?, status = 'Deposit' WHERE id = ?",
+                     (round(already + amount, 2), iid))
+        conn.execute(
+            "UPDATE contacts SET balance = MAX(0, balance - ?) WHERE name = ? AND type = 'debtor'",
+            (amount, inv["contact"]),
+        )
+    tx_id = None
+    if post:
+        category_code("Course Revenue", "in")
+        tx_id = insert_transaction(
+            date=date or inv["date"],
+            description=f"Deposit — Invoice {inv['number']} — {inv['contact']}" + (f" ({note})" if note else ""),
+            tx_type="in", category="Course Revenue", amount=amount, payer_payee=inv["contact"],
+        )
     result = get_invoice(iid)
     result["_transaction_id"] = tx_id
     return result

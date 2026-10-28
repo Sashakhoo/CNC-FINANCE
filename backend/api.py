@@ -448,6 +448,26 @@ def update_invoice_status(iid: int, body: InvoiceStatusIn):
     return storage.get_invoice(iid)
 
 
+class DepositIn(BaseModel):
+    amount: float
+    date: str | None = None
+    post_to_ledger: bool = True      # False when the cash-in was already entered by hand
+    note: str | None = None
+
+
+@router.post("/invoices/{iid}/deposit", dependencies=[Depends(auth.require_cap("invoices"))])
+def record_deposit(iid: int, body: DepositIn):
+    try:
+        inv = storage.record_invoice_deposit(iid, body.amount, body.date, body.post_to_ledger,
+                                             (body.note or "").strip()[:120])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    _sync_invoice_to_lms_if_relevant(inv, "Deposit")
+    return storage.get_invoice(iid)
+
+
 @router.post("/invoices/{iid}/pay", dependencies=[Depends(auth.require_cap("invoices"))])
 def pay_invoice(iid: int):
     inv = storage.mark_invoice_paid(iid)
@@ -698,6 +718,7 @@ def _generate_document(kind: str, ref_id: int):
             attention=inv.get("attention"), company=inv.get("company"), address=inv.get("address"),
             reference_no=inv.get("reference_no"), sales_type=inv.get("sales_type"),
             sales_person=inv.get("sales_person"), tax_pct=inv.get("tax_pct") or 0,
+            deposit=inv.get("deposit") or 0,
         )
         return _pdf_response(pdf, f"{inv['number']}.pdf")
 
