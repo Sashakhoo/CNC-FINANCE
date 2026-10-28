@@ -30,7 +30,8 @@ def test_deposit_then_paid_posts_only_the_balance(boss):
     assert sorted(t["amount"] for t in rows) == [50, 100, 600]          # 100 + 50 + 600 = 750, not 900
     assert sum(t["amount"] for t in rows) == 750
     assert any("balance after RM150 deposit" in t["description"] for t in rows)
-    assert boss.post(f"/api/invoices/{inv['id']}/deposit", json={"amount": 1}, headers=ORIGIN).status_code == 422
+    # on a paid invoice a deposit can't exceed what the invoice was for
+    assert boss.post(f"/api/invoices/{inv['id']}/deposit", json={"amount": 700}, headers=ORIGIN).status_code == 422
 
 
 def test_deposit_already_entered_by_hand_is_not_posted_twice(boss):
@@ -90,3 +91,19 @@ def test_paid_invoice_totals_split_deposit_and_balance():
     html = pdf_generator._totals(750, 750, 750, "Balance Due:", 0,
                                  paid_rows=[("Deposit Paid:", 100), ("Balance Paid:", 650)])
     assert "Deposit Paid:" in html and "Balance Paid:" in html and "Amount Paid" not in html
+
+
+def test_deposit_on_already_paid_invoice_takes_it_off_the_cash_in(boss):
+    """The INV-1133 situation: paid in full at RM750 though RM100 had come in
+    earlier as its own entry. Recording the deposit corrects the entry."""
+    inv = make_invoice(boss, "Already Paid", 750)
+    boss.post(f"/api/invoices/{inv['id']}/pay", headers=ORIGIN)
+    assert [t["amount"] for t in cash_in_for(inv["number"])] == [750]
+    r = boss.post(f"/api/invoices/{inv['id']}/deposit", json={"amount": 100}, headers=ORIGIN)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["deposit"] == 100 and out["status"] == "Paid"
+    assert out["adjusted"]["from"] == 750 and out["adjusted"]["to"] == 650
+    rows = cash_in_for(inv["number"])
+    assert [t["amount"] for t in rows] == [650] and "RM100 deposit received separately" in rows[0]["description"]
+    assert boss.post(f"/api/invoices/{inv['id']}/deposit", json={"amount": 700}, headers=ORIGIN).status_code == 422

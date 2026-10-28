@@ -815,7 +815,8 @@
       <div class="field"><label for="dep-amount">Deposit amount (RM)</label><input type="number" id="dep-amount" min="0.01" step="0.01" required></div>
       <div class="field"><label for="dep-date">Date received</label><input type="date" id="dep-date" required></div>
       <div class="field"><label for="dep-note">Note (optional)</label><input id="dep-note" maxlength="120" placeholder="e.g. paid together with Teh Boon Kian, ref 01979"></div>
-      <label style="display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.4;"><input type="checkbox" id="dep-post" checked style="margin-top:2px;">
+      <div id="dep-paid-note" class="empty-note" style="display:none; line-height:1.5;"></div>
+      <label id="dep-post-row" style="display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.4;"><input type="checkbox" id="dep-post" checked style="margin-top:2px;">
         <span>Add it to Cash In now. Untick if you already entered this deposit by hand (e.g. one payment covering two people).</span></label>
       <div id="dep-error" style="color:#c23b1f; font-size:12px; min-height:16px;"></div>
     </div>
@@ -1267,6 +1268,17 @@ async function patchUser(id, patch){
 }
 // In-page replacement for window.confirm(), which some embedded browsers
 // suppress (it silently returns false, so Delete appeared to do nothing).
+function infoDialog(message){
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
+    document.getElementById('confirm-message').textContent = message;
+    const label = ok.textContent, cls = ok.className;
+    ok.textContent = 'OK'; ok.className = 'pill-btn dark'; cancel.style.display = 'none';
+    ok.onclick = () => { overlay.classList.remove('open'); ok.textContent = label; ok.className = cls; cancel.style.display = ''; ok.onclick = null; resolve(); };
+    overlay.classList.add('open'); ok.focus();
+  });
+}
 function confirmDialog(message){
   return new Promise(resolve => {
     const overlay = document.getElementById('confirm-modal-overlay');
@@ -1539,9 +1551,14 @@ let depositFor = null;
 function markDeposit(id){
   const i = invoices.find(x => x.id === id); if(!i) return;
   depositFor = id;
-  const owed = invTotal(i) - (i.deposit || 0);
+  const owed = invTotal(i) - (i.deposit || 0), paid = i.status === 'Paid';
   document.getElementById('dep-info').textContent = i.number + ' — ' + i.contact + ' · total ' + fmt(invTotal(i)) +
-    (i.deposit ? ' · deposit so far ' + fmt(i.deposit) : '') + ' · still owed ' + fmt(owed);
+    (i.deposit ? ' · deposit so far ' + fmt(i.deposit) : '') + (paid ? ' · already marked paid' : ' · still owed ' + fmt(owed));
+  document.getElementById('dep-paid-note').style.display = paid ? '' : 'none';
+  document.getElementById('dep-paid-note').textContent = paid ? 'This invoice is already paid. Use this when a deposit came in earlier and was entered on its own: the deposit is recorded on the invoice and taken off this invoice\'s Cash In entry, so it isn\'t counted twice. The deposit\'s own Cash In entry stays as it is.' : '';
+  document.getElementById('dep-post-row').style.display = paid ? 'none' : 'flex';
+  document.getElementById('dep-date').closest('.field').style.display = paid ? 'none' : '';
+  document.getElementById('dep-date').required = !paid;
   document.getElementById('dep-amount').value = '';
   document.getElementById('dep-amount').max = owed;
   document.getElementById('dep-date').value = new Date().toLocaleDateString('en-CA');
@@ -1562,8 +1579,10 @@ async function saveDeposit(e){
     document.getElementById('dep-error').textContent = (await res.json().catch(() => ({}))).detail || 'Could not save the deposit';
     return false;
   }
+  const out = await res.json();
   document.getElementById('deposit-modal-overlay').classList.remove('open');
   await loadState();
+  if(out.adjusted) await infoDialog(out.number + ': deposit ' + fmt(out.deposit) + ' recorded. Its Cash In entry changed from ' + fmt(out.adjusted.from) + ' to ' + fmt(out.adjusted.to) + '.');
   return false;
 }
 async function deleteInvoice(id){
@@ -1997,7 +2016,7 @@ function render(){
     <td style="text-align:right;" class="amt">${fmt(invTotal(i))}${i.deposit ? `<br><span class="empty-note" style="white-space:nowrap;">deposit ${fmt(i.deposit)}${i.status !== 'Paid' ? ` · owed ${fmt(invTotal(i) - i.deposit)}` : ''}</span>` : ''}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="editInvoice(${i.id})" style="margin-left:6px;">✎ Edit</button>` : ''}
-    ${i.status!=='Paid' && invTotal(i) - (i.deposit || 0) > 0.004 ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;">${i.deposit ? '+ Deposit' : 'Deposit'}</button>` : ''}
+    ${invTotal(i) - (i.deposit || 0) > 0.004 ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;" title="${i.status === 'Paid' ? 'Record a deposit that was already received and entered separately' : 'Record a part-payment'}">${i.deposit ? '+ Deposit' : 'Deposit'}</button>` : ''}
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
   }).join('');

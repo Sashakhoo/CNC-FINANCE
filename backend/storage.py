@@ -375,6 +375,37 @@ def mark_invoice_paid(iid: int, date: str = None):
     return result
 
 
+def _deposit_on_paid_invoice(conn, inv, amount: float, note: str = ""):
+    """The invoice was marked Paid for its full amount although a deposit had
+    already come in and been entered on its own. Record the deposit on the
+    invoice and take it off the invoice's Cash In entry, so the money isn't
+    counted twice."""
+    if amount <= 0:
+        raise ValueError("Deposit must be more than RM0")
+    already = float(inv["deposit"] or 0)
+    total = invoice_total(inv)
+    if already + amount > total + 0.004:
+        raise ValueError(f"That is more than the {_fmt_rm(total - already)} on this invoice")
+    rows = conn.execute(
+        "SELECT * FROM transactions WHERE type = 'in' AND description LIKE ? "
+        "AND description NOT LIKE 'Deposit%' AND amount >= ? ORDER BY amount DESC, id DESC",
+        (f"%{inv['number']}%", amount + 0.004)).fetchall()
+    if not rows:
+        raise ValueError(f"Couldn't find the Cash In entry for {inv['number']} to take the deposit off. "
+                         "Check the ledger for an entry mentioning this invoice number.")
+    tx = rows[0]
+    new_amount = round(float(tx["amount"]) - amount, 2)
+    suffix = f" (balance; {_fmt_rm(amount)} deposit received separately" + (f", {note}" if note else "") + ")"
+    conn.execute("UPDATE transactions SET amount = ?, description = ? WHERE id = ?",
+                 (new_amount, (tx["description"] or "") + suffix, tx["id"]))
+    conn.execute("UPDATE invoices SET deposit = ? WHERE id = ?", (round(already + amount, 2), inv["id"]))
+    conn.commit()
+    result = get_invoice(inv["id"])
+    result["_transaction_id"] = None
+    result["_adjusted"] = {"id": tx["id"], "from": float(tx["amount"]), "to": new_amount}
+    return result
+
+
 def record_invoice_deposit(iid: int, amount: float, date: str, post: bool = True, note: str = ""):
     """A part-payment before the invoice is settled: adds to the invoice's
     deposit, marks it 'Deposit', and (unless the cash-in was already
@@ -385,7 +416,7 @@ def record_invoice_deposit(iid: int, amount: float, date: str, post: bool = True
         if not inv:
             return None
         if inv["status"] == "Paid":
-            raise ValueError("This invoice is already paid")
+            return _deposit_on_paid_invoice(conn, inv, amount, note)
         if amount <= 0:
             raise ValueError("Deposit must be more than RM0")
         already = float(inv["deposit"] or 0)

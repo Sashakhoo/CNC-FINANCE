@@ -464,6 +464,10 @@ def record_deposit(iid: int, body: DepositIn):
         raise HTTPException(422, str(e))
     if not inv:
         raise HTTPException(404, "Invoice not found")
+    if inv.get("_adjusted"):                 # deposit added to an already-paid invoice
+        out = storage.get_invoice(iid)
+        out["adjusted"] = inv["_adjusted"]
+        return out
     _sync_invoice_to_lms_if_relevant(inv, "Deposit")
     return storage.get_invoice(iid)
 
