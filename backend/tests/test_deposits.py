@@ -83,3 +83,10 @@ def test_oct_2026_correction(boss):
         conn.execute("DELETE FROM _migrations WHERE id = '2026-10-fix-vibe-coding-deposits'")
     migrations._fix_vibe_coding_deposits_2026_10()
     assert [t["amount"] for t in cash_in_for("INV-1133")] == [650]
+
+
+def test_paid_invoice_totals_split_deposit_and_balance():
+    import pdf_generator
+    html = pdf_generator._totals(750, 750, 750, "Balance Due:", 0,
+                                 paid_rows=[("Deposit Paid:", 100), ("Balance Paid:", 650)])
+    assert "Deposit Paid:" in html and "Balance Paid:" in html and "Amount Paid" not in html

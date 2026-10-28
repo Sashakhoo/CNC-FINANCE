@@ -169,7 +169,8 @@ def _items_table(rows: list, subnotes: list) -> str:
 
 
 def _totals(subtotal: float, total: float, paid: float | None, due_label: str, due: float | None,
-           discount_pct: float = 0.0, tax_pct: float = 0.0, paid_label: str = "Amount Paid:") -> str:
+           discount_pct: float = 0.0, tax_pct: float = 0.0, paid_label: str = "Amount Paid:",
+           paid_rows: list = None) -> str:
     rows = [f'<div class="row"><span>Subtotal:</span><span>{_rm(subtotal)}</span></div>']
     if discount_pct:
         discount_amt = subtotal * discount_pct / 100
@@ -179,7 +180,10 @@ def _totals(subtotal: float, total: float, paid: float | None, due_label: str, d
         tax_amt = after_discount * tax_pct / 100
         rows.append(f'<div class="row"><span>Tax {tax_pct:g}%:</span><span>+{_rm(tax_amt)}</span></div>')
     rows.append(f'<div class="row grand"><span>Total:</span><span>{_rm(total)}</span></div>')
-    if paid is not None:
+    if paid_rows:                      # e.g. deposit + balance, shown separately
+        for label, value in paid_rows:
+            rows.append(f'<div class="row"><span>{_esc(label)}</span><span>{_rm(value)}</span></div>')
+    elif paid is not None:
         rows.append(f'<div class="row"><span>{_esc(paid_label)}</span><span>{_rm(paid)}</span></div>')
     if due is not None:
         rows.append(f'<div class="row due"><span>{_esc(due_label)}</span><span>{_rm(due)}</span></div>')
@@ -283,7 +287,9 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
         _items_table(rows, []),
         _totals(subtotal, total, total if paid else min(deposit, total), "Balance Due:",
                 0.0 if paid else max(0.0, total - deposit), discount_pct, tax_pct,
-                paid_label="Less: Deposit Paid:" if deposit and not paid else "Amount Paid:"),
+                paid_label="Less: Deposit Paid:" if deposit and not paid else "Amount Paid:",
+                paid_rows=[("Deposit Paid:", min(deposit, total)), ("Balance Paid:", max(0.0, total - deposit))]
+                if paid and deposit else None),
         _remarks_block(remarks),
         _payment_block(invoice_no),
         _footer(invoice_no),
