@@ -78,3 +78,32 @@ def test_provider_pattern_is_evidence_but_low_confidence():
     assert inferred.email == f"jane.tan@{D}" and inferred.confidence == 0.5
     assert inferred.evidence == ["provider:hunter"]
     assert pattern_from_provider("{weird}", "hunter") is None
+
+
+def test_name_matches_email_strict_needs_both_names():
+    from app.services.email_intel import name_matches_email
+    assert name_matches_email("Jane", "Tan", f"jane.tan@{D}", strict=True)
+    assert name_matches_email("Wei Ming", "Lim", f"weiming.lim@{D}", strict=True)
+    assert name_matches_email("Jane", "Tan", f"jane@{D}")                    # {first} counts as pattern evidence
+    assert not name_matches_email("Jane", "Tan", f"jane@{D}", strict=True)  # ...but never pins "jane@" on one Jane
+    assert not name_matches_email("Jane", "Tan", f"mary.tan@{D}")
+    assert not name_matches_email("Jane", None, f"jane@{D}")
+
+
+def test_domain_emails_in_text_keeps_only_personal_addresses_on_the_domain():
+    from app.services.email_intel import domain_emails_in_text
+    text = (f"Speakers: Aisha Rahman (aisha.rahman@{D}). Enquiries: info@{D}, hr@{D}. "
+            f"Partner: bob.lee@other.example. Also Kumar.Raj@{D.upper()}.")
+    found = [e for e, _ in domain_emails_in_text(text, D)]
+    assert found == [f"aisha.rahman@{D}", f"kumar.raj@{D}"]
+    assert domain_emails_in_text(f"x@sub.{D}", D) == []
+
+
+def test_names_near_pairs_name_with_nearby_address():
+    from app.services.email_intel import domain_emails_in_text, names_near
+    text = f"Press contact: Nur Aisyah Kamal, nur.kamal@{D}. Unrelated: Johor Bahru office"
+    (email, pos), = domain_emails_in_text(text, D)
+    pairs = names_near(text, pos)
+    assert ("Nur Aisyah", "Kamal") in pairs and ("Nur", "Aisyah Kamal") in pairs
+    from app.services.email_intel import name_matches_email
+    assert any(name_matches_email(f, l, email) for f, l in pairs)

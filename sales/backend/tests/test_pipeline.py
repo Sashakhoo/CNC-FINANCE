@@ -273,3 +273,45 @@ async def test_target_state_address_becomes_primary(db, env, monkeypatch):
     locs = (await db.execute(select(CompanyLocation))).scalars().all()
     assert {loc.state for loc in locs} >= {"Selangor", "Johor"}
     assert [loc.state for loc in locs if loc.is_primary] == ["Johor"]
+
+
+TEAM_NO_EMAILS = TEAM.replace("<p>jane.tan@southern-precision.com.my</p>", "")
+WEB_EMAILS = {"web": {"results": [
+    {"title": "Smart Factory Summit 2026 - Speakers", "url": "https://events.example/summit",
+     "description": "Panel: Jane Tan, HR Manager, Southern Precision (jane.tan@southern-precision.com.my) on upskilling."},
+    {"title": "Tender notice", "url": "https://tenders.example/123",
+     "description": "Enquiries to Ahmad Faizal at ahmad.faizal@southern-precision.com.my or info@southern-precision.com.my"},
+]}}
+
+
+async def test_web_search_finds_pattern_when_site_shows_no_staff_emails(db, env, monkeypatch):
+    monkeypatch.setenv("EMAIL_DISCOVERY_PROVIDER", "hunter")
+    monkeypatch.setenv("EMAIL_DISCOVERY_API_KEY", "test-hunter-key")
+    get_settings.cache_clear()
+    with respx.mock(assert_all_called=False) as mock:
+        web = mock.get("https://api.search.brave.com/res/v1/web/search",
+                       params={"q": '"@southern-precision.com.my"'}).mock(return_value=httpx.Response(200, json=WEB_EMAILS))
+        _brave(mock)
+        hunter = mock.get(url__startswith="https://api.hunter.io/").mock(return_value=httpx.Response(500))
+        _site(mock, "93.184.216.10", "southern-precision.com.my",
+              {"/": HOME, "/about": ABOUT, "/team": TEAM_NO_EMAILS, "/careers": CAREERS, "/contact": CONTACT})
+        _site(mock, "93.184.216.11", "rotiroti-bakes.com.my", {"/": BAKERY})
+        job_id = await _run(db, CRITERIA)
+
+    job = await db.get(Job, job_id)
+    await db.refresh(job)
+    assert job.status == JobStatus.COMPLETED, job.errors
+    assert web.call_count == 1
+    assert hunter.call_count == 0          # the web pattern covers everyone, so no paid lookups
+
+    co = (await db.execute(select(Company).where(Company.domain == "southern-precision.com.my"))).scalar_one()
+    people = {c.full_name: c for c in (await db.execute(select(Contact).where(Contact.company_id == co.id))).scalars()}
+    je = (await db.execute(select(ContactEmail).where(ContactEmail.contact_id == people["Jane Tan"].id))).scalar_one()
+    assert (je.email, je.provenance, je.source_url) == ("jane.tan@southern-precision.com.my", Provenance.DISCOVERED,
+                                                       "https://events.example/summit")
+    src = (await db.execute(select(ContactSource).where(ContactSource.contact_id == people["Jane Tan"].id,
+                                                         ContactSource.field_name == "email"))).scalar_one()
+    assert src.source_type == SourceType.SEARCH_PROVIDER and "Smart Factory Summit" in src.evidence_text
+    de = (await db.execute(select(ContactEmail).where(ContactEmail.contact_id == people["Daniel Lee"].id))).scalar_one()
+    assert (de.email, de.provenance, de.discovery_method.value) == ("daniel.lee@southern-precision.com.my",
+                                                                   Provenance.INFERRED, "EMAIL_PATTERN")

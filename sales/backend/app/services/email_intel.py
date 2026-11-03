@@ -138,6 +138,47 @@ def detect_pattern(examples: list[tuple[str | None, str | None, str]], domain: s
                         first_style=fs, last_style=ls, examples=used)
 
 
+_BOTH_NAME_PATTERNS = [p for p in PATTERNS if ("{first}" in p or "{f}" in p) and ("{last}" in p or "{l}" in p)]
+
+
+def name_matches_email(first: str | None, last: str | None, email: str, *, strict: bool = False) -> bool:
+    """True when some known pattern renders exactly this address's local part from the name.
+    `strict` only accepts patterns that use both given and family name, so "ahmad@" alone
+    is never pinned on one particular Ahmad."""
+    fv, lv = _variants(_clean(first)), _variants(_clean(last))
+    if not fv or not lv:
+        return False
+    local = email.split("@", 1)[0].lower()
+    patterns = _BOTH_NAME_PATTERNS if strict else PATTERNS
+    return any(_render(p, f, l) == local for p in patterns for f in fv.values() for l in lv.values())
+
+
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_NAME_RUN_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
+NAME_WINDOW = 120   # characters either side of an address searched for the owner's name
+
+
+def domain_emails_in_text(text: str, domain: str) -> list[tuple[str, int]]:
+    """(address, position) for personal business addresses on exactly `domain` found in free text."""
+    domain = domain.lower().strip().lstrip("@")
+    out = []
+    for m in _EMAIL_RE.finditer(text or ""):
+        norm = validate_syntax(m.group(0).rstrip("."))
+        if norm and norm.rsplit("@", 1)[1] == domain and classify_email(norm) == EmailType.PERSONAL_BUSINESS:
+            out.append((norm, m.start()))
+    return out
+
+
+def names_near(text: str, pos: int) -> list[tuple[str, str]]:
+    """(first, last) splits of capitalised name runs within NAME_WINDOW characters of `pos`."""
+    window = (text or "")[max(0, pos - NAME_WINDOW):pos + NAME_WINDOW]
+    out = []
+    for run in _NAME_RUN_RE.findall(window):
+        tokens = run.split()
+        out.extend((" ".join(tokens[:i]), " ".join(tokens[i:])) for i in range(1, len(tokens)))
+    return out
+
+
 def pattern_from_provider(pattern: str | None, provider: str) -> PatternGuess | None:
     """Wrap a provider-reported pattern (e.g. Hunter's data.pattern) as evidence."""
     if not pattern or pattern not in PATTERNS:
