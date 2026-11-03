@@ -36,7 +36,8 @@ from app.services.discovery.candidates import CompanyCandidate, candidates_from_
 from app.services.discovery.domains import DomainEvidence, resolve
 from app.services.discovery.profiles import match_profile_results, profile_queries
 from app.services.discovery.queries import build_queries
-from app.services.email_intel import classify_email, detect_pattern, infer_email, pattern_from_provider, validate_syntax
+from app.services.email_intel import (classify_email, detect_pattern, domain_emails_in_text, infer_email,
+                                      name_matches_email, names_near, pattern_from_provider, validate_syntax)
 from app.services.identity import PersonRecord, contact_duplicate_reasons
 from app.services.jobs import JobRun
 from app.services.normalize import (domain_from_url, normalize_company_name, normalize_person_name, normalize_website,
@@ -514,7 +515,8 @@ async def _add_profile(ctx: Ctx, contact: Contact, url: str, stype: SourceType, 
 
 async def _add_email(ctx: Ctx, contact: Contact, company: Company, email: str, *, method: EmailDiscoveryMethod,
                      prov: Provenance, source: str, url: str | None, confidence: float | None,
-                     evidence: str | None = None, provider: str | None = None) -> ContactEmail | None:
+                     evidence: str | None = None, provider: str | None = None,
+                     stype: SourceType | None = None) -> ContactEmail | None:
     norm = validate_syntax(email)
     if not norm:
         return None
@@ -533,8 +535,9 @@ async def _add_email(ctx: Ctx, contact: Contact, company: Company, email: str, *
     ctx.db.add(e)
     if evidence:
         await ctx.db.flush()
-        ctx.db.add(_ksrc(contact.id, "email", norm, prov=prov, stype=SourceType.COMPANY_WEBSITE if method == EmailDiscoveryMethod.PUBLIC_WEBSITE
-                         else SourceType.EMAIL_PROVIDER, url=url, evidence=evidence, confidence=confidence, provider=provider))
+        ctx.db.add(_ksrc(contact.id, "email", norm, prov=prov, stype=stype or (
+                         SourceType.COMPANY_WEBSITE if method == EmailDiscoveryMethod.PUBLIC_WEBSITE else SourceType.EMAIL_PROVIDER),
+                         url=url, evidence=evidence, confidence=confidence, provider=provider))
     await ctx.run.bump(emails_discovered=1)
     return e
 
@@ -568,6 +571,46 @@ async def _profiles_via_search(ctx: Ctx, company: Company, contacts: list[Contac
                                  confidence=m.confidence, provider=m.provider))
 
 
+async def _web_examples(ctx: Ctx, company: Company, contacts: list[Contact]) -> list[tuple[str | None, str | None, str]]:
+    """One web search for addresses at the company's domain (press releases, tender notices,
+    speaker lists...). An address that unambiguously belongs to a known contact is recorded
+    for them; every address paired with a name near it is returned as pattern evidence."""
+    search = ctx.providers.search
+    if not search or not company.domain:
+        return []
+    q = f'"@{company.domain}"'
+    try:
+        results = await ctx.providers.call(search, lambda: search.search(q, count=10))
+    except QuotaExceeded as e:
+        await ctx.run.note("warning", f"Search quota reached — email pattern search skipped: {e}", provider=search.info.name)
+        return []
+    except ProviderError as e:
+        await ctx.run.note("warning", f"Email pattern search failed for {company.domain}: {e.error_type}", provider=search.info.name)
+        return []
+    examples: list[tuple[str | None, str | None, str]] = []
+    seen: set[str] = set()
+    for r in results:
+        text = f"{r.title}\n{r.snippet}"
+        for email, pos in domain_emails_in_text(text, company.domain):
+            if email in seen:
+                continue
+            owner = next((c for c in contacts if name_matches_email(c.first_name, c.last_name, email, strict=True)), None)
+            if owner:
+                seen.add(email)
+                examples.append((owner.first_name, owner.last_name, email))
+                await _add_email(ctx, owner, company, email, method=EmailDiscoveryMethod.PUBLIC_WEBSITE,
+                                 prov=Provenance.DISCOVERED, source="Web search", url=r.url, confidence=0.7,
+                                 evidence=f"{r.title} — {r.snippet}"[:2000], provider=search.info.name,
+                                 stype=SourceType.SEARCH_PROVIDER)
+                continue
+            for first, last in names_near(text, pos):
+                if name_matches_email(first, last, email):
+                    seen.add(email)
+                    examples.append((first, last, email))
+                    break
+    return examples
+
+
 async def _emails(ctx: Ctx, company: Company) -> None:
     db = ctx.db
     if not company.domain:
@@ -581,9 +624,16 @@ async def _emails(ctx: Ctx, company: Company) -> None:
                                                          ContactEmail.provenance != Provenance.INFERRED))).scalars().all()
     examples = [(by_id[e.contact_id].first_name, by_id[e.contact_id].last_name, e.email) for e in known]
     pattern = detect_pattern(examples, company.domain)
+    if pattern is None:
+        web = await _web_examples(ctx, company, contacts)
+        if web:
+            pattern = detect_pattern(examples + web, company.domain)
+    # A pattern learned from real addresses makes the paid email provider unnecessary
+    # for everyone it covers; the provider is kept for the names it can't.
+    evidenced = pattern is not None and pattern.support_count > 0
 
     provider = ctx.providers.email
-    if provider:
+    if provider and not evidenced:
         try:
             ds = await ctx.providers.call(provider, lambda: provider.domain_search(company.domain, limit=10))
             pattern = pattern or pattern_from_provider(ds.pattern, provider.info.name)
@@ -607,7 +657,8 @@ async def _emails(ctx: Ctx, company: Company) -> None:
     for c in contacts:
         if await db.scalar(select(ContactEmail.id).where(ContactEmail.contact_id == c.id)):
             continue
-        if provider and lookups < MAX_EMAIL_LOOKUPS_PER_COMPANY and c.first_name and c.last_name:
+        guess = infer_email(c.first_name, c.last_name, company.domain, pattern) if evidenced else None
+        if provider and not guess and lookups < MAX_EMAIL_LOOKUPS_PER_COMPANY and c.first_name and c.last_name:
             lookups += 1
             try:
                 found = await ctx.providers.call(provider, lambda c=c: provider.find_email(c.first_name, c.last_name, company.domain))
