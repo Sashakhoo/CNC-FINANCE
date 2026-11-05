@@ -387,6 +387,8 @@ def _attachment_slot(kind: str, ref: str):
     if kind == "tp":
         return None
     if kind == "trainer":
+        if (ref or "").strip() == "*":
+            return "*"
         names = [t.get("name", "") for t in qs.get_settings().get("trainers") or []]
         match = next((n for n in names if n.lower() == (ref or "").strip().lower()), None)
         if not match:

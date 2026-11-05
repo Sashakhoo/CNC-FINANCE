@@ -185,3 +185,19 @@ def test_official_pdfs_are_attached_to_hrdc_quotes(boss, staff, monkeypatch):
     assert boss.get(f"/api/quotes-admin/attachments/file?kind=programme&ref={p['id']}").content[:5] == b"%PDF-"
     assert boss.delete("/api/quotes-admin/attachments?kind=tp", headers=ORIGIN).status_code == 200
     assert qs.get_settings()["attachments"]["tp_certificate"] is None
+
+
+def test_combined_trainer_profiles_pdf(boss, monkeypatch):
+    import io
+    from pypdf import PdfReader
+    from test_stamp import make_pdf
+    _fake_weasyprint(monkeypatch)
+    r = boss.post("/api/quotes-admin/attachments?kind=trainer&ref=*&filename=profiles.pdf",
+                  content=make_pdf(3, text="ALLTRAINERS"), headers={**ORIGIN, "Content-Type": "application/pdf"})
+    assert r.status_code == 200
+    html = boss.post("/api/quotes/preview", json=hrdc(), headers=ORIGIN).json()["html"]
+    assert "Trainer profiles" in html and "76085" not in html.split("Attached official documents")[-1].split("Participants")[0]
+    q = boss.post("/api/quotes", json=hrdc(), headers=ORIGIN).json()["quote"]
+    pages = [p.extract_text() for p in PdfReader(io.BytesIO(boss.get(f"/api/quotes/{q['id']}/pdf").content)).pages]
+    assert sum("ALLTRAINERS" in t for t in pages) == 3              # attached once, not once per trainer
+    boss.delete("/api/quotes-admin/attachments?kind=trainer&ref=*", headers=ORIGIN)

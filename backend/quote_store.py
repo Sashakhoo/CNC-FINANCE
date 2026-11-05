@@ -64,17 +64,30 @@ DEFAULT_SETTINGS = {
                       "HRD Corp claimable training fees."),
     "trainers": [
         {"name": "Natasya Khoo", "trainer_id": "76085",
-         "summary": ("Certified HRD Corp trainer (Train-The-Trainer CT1–CT5, 2026) specialising in practical AI, "
-                     "automation and coding for the workplace. Founder of Codencode Academy, which has trained 100+ "
-                     "learners through public classes, corporate programmes and community partnerships in Johor Bahru. "
-                     "Delivers in English, Bahasa Malaysia and Mandarin."),
+         "summary": ("HRD Corp Train-the-Trainer qualified trainer (CT1–CT5, September 2026) and Lead Trainer and "
+                     "Managing Director of Codencode Academy, Johor Bahru. Delivers practical programmes in generative "
+                     "AI, workplace automation, AI agents and coding, connecting digital concepts to business work "
+                     "through demonstrations, guided practice and projects. Background in software engineering, "
+                     "manufacturing engineering, data analytics and enterprise IT; BSc (Hons) Computer Science (AI & "
+                     "Data Analytics), UKM. Has supported 100+ learners through public classes, corporate workshops "
+                     "and community programmes. Delivers in English, Bahasa Malaysia and Mandarin."),
          "specialisations": ["Generative AI for workplace productivity and prompt engineering",
                              "Business process automation and workflow design",
                              "AI agents and AI-assisted application development (Vibe Coding)",
-                             "AI strategy, governance and adoption roadmaps for management",
-                             "AI for sales, marketing, HR and recruitment",
+                             "AI strategy, governance and adoption planning",
+                             "AI for sales, digital marketing, HR and recruitment",
                              "Python programming, machine learning and cybersecurity fundamentals"]},
-        {"name": "Teh Yong Li", "trainer_id": "10646", "summary": "", "specialisations": []},
+        {"name": "Teh Yong Li", "trainer_id": "10646",
+         "summary": ("Accredited HRD Corp trainer and digital transformation specialist with over 7 years of "
+                     "experience helping businesses adopt AI and technology. EXIN BCS AI certified and a Gemini "
+                     "Certified Educator. Co-founder of Mojo Digital and digital consultant for SME Johor Selatan "
+                     "(SMEJS), advising local businesses on digital adoption. Delivers practical, hands-on training "
+                     "for corporate and SME teams."),
+         "specialisations": ["Artificial Intelligence applications and prompt engineering",
+                             "Practical AI integration for SME workflows",
+                             "Digital transformation strategies for Malaysian businesses",
+                             "Hands-on training with AI platforms such as ChatGPT and Claude",
+                             "Cloud technologies and AWS solutions"]},
     ],
 }
 
@@ -169,7 +182,7 @@ PYW_SESSIONS = [
  {
   "title": "M1 Introduction to Python",
   "simple": "Install Python and VS Code and run your first program.",
-  "detailed": "What Python is, script vs interactive mode, IDEs (VS Code, Jupyter, Anaconda), pip, first program. Outcome: using VS Code and Jupyter, participants install packages with pip and run a program in both modes without errors. (Day 1, 9:00–10:30)"
+  "detailed": "What Python is, script vs interactive mode, IDEs (VS Code, Jupyter, Anaconda), pip, first program. Outcome: using VS Code and Jupyter, participants install packages with pip and run a program in both modes without errors. (Day 1, 8:30–10:30)"
  },
  {
   "title": "M2 Variables, Data Types & Strings",
@@ -184,7 +197,7 @@ PYW_SESSIONS = [
  {
   "title": "M4 Sequences & Collections",
   "simple": "Store, filter and total groups of records with lists and dictionaries.",
-  "detailed": "Lists, tuples, sets, dictionaries, comprehensions. Outcome: given a record set, participants select the right collection and filter/aggregate it correctly. (Day 2, 9:00–10:30)"
+  "detailed": "Lists, tuples, sets, dictionaries, comprehensions. Outcome: given a record set, participants select the right collection and filter/aggregate it correctly. (Day 2, 8:30–10:30)"
  },
  {
   "title": "M5 Functions, Modules & Packages",
@@ -199,7 +212,7 @@ PYW_SESSIONS = [
  {
   "title": "M7 Classes & Objects",
   "simple": "Model workplace things, such as an employee, in code.",
-  "detailed": "OOP basics: classes, attributes, methods, constructors, inheritance. Outcome: participants model a workplace entity (e.g. Employee) as a class with at least 2 methods that behave correctly. (Day 3, 9:00–10:30)"
+  "detailed": "OOP basics: classes, attributes, methods, constructors, inheritance. Outcome: participants model a workplace entity (e.g. Employee) as a class with at least 2 methods that behave correctly. (Day 3, 8:30–10:30)"
  },
  {
   "title": "M8 Excel & Data Automation",
@@ -324,6 +337,17 @@ def init_db():
                 "WHERE programme_code = '10001782997' AND days = 2 AND hours = 16",
                 (json.dumps(PYW_SESSIONS),))
             conn.execute("INSERT OR REPLACE INTO quote_settings(key, value) VALUES ('_migrated_python_outline_2026_11', 'true')")
+        # One-off (Nov 2026): course plan starts each day at 8:30, not 9:00.
+        if not conn.execute("SELECT 1 FROM quote_settings WHERE key = '_migrated_python_times_2026_11'").fetchone():
+            row = conn.execute("SELECT id, sessions_json FROM hrdc_programmes WHERE programme_code = '10001782997'").fetchone()
+            if row:
+                sessions = json.loads(row["sessions_json"] or "[]")
+                for ss in sessions:
+                    for d in ("1", "2", "3"):
+                        ss["detailed"] = (ss.get("detailed") or "").replace(f"(Day {d}, 9:00–10:30)", f"(Day {d}, 8:30–10:30)")
+                fixed = json.dumps(sessions)
+                conn.execute("UPDATE hrdc_programmes SET sessions_json = ? WHERE id = ?", (fixed, row["id"]))
+            conn.execute("INSERT OR REPLACE INTO quote_settings(key, value) VALUES ('_migrated_python_times_2026_11', 'true')")
         if conn.execute("SELECT COUNT(*) AS c FROM quote_courses").fetchone()["c"] == 0:
             for i, (name, price, unit, note, tiered, sessions) in enumerate(SEED_COURSES):
                 conn.execute("INSERT INTO quote_courses(name, default_price, price_unit, group_note, tiered, "

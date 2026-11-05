@@ -739,6 +739,7 @@ function renderSettings(){
     <div class="sec">Official documents attached to HRDC quotations</div>
     <div class="note" style="margin-bottom:6px;">These PDFs are added to every HRDC quotation PDF, after the quote. Each programme's own course outline is uploaded in Catalogue.</div>
     ${attachRow('tp', '', 'Training Provider Registration Certificate', (s.attachments || {}).tp_certificate)}
+    ${attachRow('trainer', '*', 'Trainer profiles — all trainers in one PDF (used instead of the ones below)', ((s.attachments || {}).trainers || {})['*'])}
     ${(s.trainers || []).filter(t => t.name).map(t => attachRow('trainer', t.name, 'Trainer profile — ' + t.name, ((s.attachments || {}).trainers || {})[t.name])).join('')}
     <div class="sec">Trainer profiles (attached to HRDC quotations — no IC numbers)</div>
     <div id="s-trainers">${(s.trainers || []).map(t => `<div class="row tr-row" style="--n:4;">

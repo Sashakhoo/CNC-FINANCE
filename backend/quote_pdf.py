@@ -134,9 +134,13 @@ def official_attachments(q: dict, settings: dict = None) -> dict:
     att = s.get("attachments") or {}
     out["outline"] = (prog or {}).get("outline_pdf") or None
     names = [n.strip().lower() for n in ((prog or {}).get("trainers") or "").split(",") if n.strip()]
-    for name, f in (att.get("trainers") or {}).items():
-        if f and (not names or name.lower() in names):
-            out["trainers"].append({**f, "trainer": name})
+    trainers = att.get("trainers") or {}
+    if trainers.get("*"):                       # one PDF with every trainer's profile
+        out["trainers"].append({**trainers["*"], "trainer": "*"})
+    else:
+        for name, f in trainers.items():
+            if f and (not names or name.lower() in names):
+                out["trainers"].append({**f, "trainer": name})
     out["tp"] = att.get("tp_certificate") or None
     return out
 
@@ -152,6 +156,7 @@ def build_html(q: dict, *, for_pdf: bool = True, parts: tuple = ("quote", "outli
                  if hrdc and prog and prog["status"] != "Approved" else "")
     official = official_attachments(q, s)
     official_trainers = {t["trainer"].lower() for t in official["trainers"]}
+    all_trainers_attached = "*" in official_trainers
 
     # header
     logo = f'<img class="logo" src="{_pg.LOGO_URI}" alt="codencode.my">' if _pg.LOGO_URI else ""
@@ -279,7 +284,7 @@ def build_html(q: dict, *, for_pdf: bool = True, parts: tuple = ("quote", "outli
         names = [n.strip().lower() for n in ((prog or {}).get("trainers") or "").split(",") if n.strip()]
         profiles = ""
         for tr in s.get("trainers") or []:
-            if tr.get("name", "").lower() in official_trainers:
+            if all_trainers_attached or tr.get("name", "").lower() in official_trainers:
                 continue                       # their official profile PDF is attached
             if tr.get("name", "").lower() in names or not names:
                 profiles += (f'<div class="box" style="margin-bottom:10px;"><div class="party">{esc(tr.get("name"))}</div>'
@@ -301,7 +306,8 @@ def build_html(q: dict, *, for_pdf: bool = True, parts: tuple = ("quote", "outli
                    + "".join(f'<tr><td>{i}</td><td>{esc(p.get("name"))}</td><td class="mono">{esc(quote_store.mask_ic(p.get("ic")))}</td>'
                              f'<td>{esc(p.get("designation"))}</td></tr>' for i, p in enumerate(people, 1)) + "</table>")
         listing = [("Course outline", official["outline"]["name"]) if official["outline"] else None] + \
-            [("Trainer profile — " + t["trainer"], t["name"]) for t in official["trainers"]] + \
+            [("Trainer profiles" if t["trainer"] == "*" else "Trainer profile — " + t["trainer"], t["name"])
+             for t in official["trainers"]] + \
             [("Training provider registration certificate", official["tp"]["name"]) if official["tp"] else None]
         listing = [x for x in listing if x]
         attached = ""
