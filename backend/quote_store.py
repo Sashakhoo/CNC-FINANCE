@@ -13,7 +13,7 @@ Tables (same SQLite DB, created/extended at startup):
 
 Line items are stored as JSON on the quotation:
   {kind, course_id, title, description, qty, unit_price, claimable}
-  kind: course | materials | venue | travel | other
+  kind: course | materials | other
 
 Nothing here touches the ledger. Rules that HRD Corp changes (ACM caps, lead
 time, attendance threshold, TP validity) are settings, never hard-coded.
@@ -27,7 +27,8 @@ import storage
 TYPES = ("standard", "hrdc")
 PREFIX = {"standard": "QUO", "hrdc": "QHR"}
 STATUSES = ("Draft", "Sent", "Accepted", "Declined", "Expired")
-LINE_KINDS = ("course", "materials", "venue", "travel", "other")
+LINE_KINDS = ("course", "materials", "other")
+ACADEMY_VENUE = "Codencode Academy, 1st Floor - Room 16, 117 Jalan Mutiara Emas 10/19, Taman Mount Austin, 81100 Johor Bahru"
 GRANT_STEPS = ("Quote", "Grant applied", "Grant approved", "Training done", "Claim docs", "Invoiced", "Paid")
 GRANT_SCHEMES = ("SBL-Khas", "SBL", "Other")
 
@@ -56,7 +57,7 @@ DEFAULT_SETTINGS = {
     "lead_days": 7,
     "attendance_threshold": 75,
     "claim_deadline_days": 30,
-    "acm_caps": {"materials_per_pax": None, "venue_fnb_per_pax_per_day": None, "travel_per_day": None},
+    "acm_caps": {"materials_per_pax": None},
     # Official PDFs appended to HRDC quotations: {"key": storage key, "name": file name}
     "attachments": {"tp_certificate": None, "trainers": {}},
     "hrdc_sst_note": ("SST is not charged on this quotation. Check with your accountant how SST applies to "
@@ -250,6 +251,20 @@ def init_db():
         pcols = {r["name"] for r in conn.execute("PRAGMA table_info(hrdc_programmes)")}
         if "outline_pdf" not in pcols:
             conn.execute("ALTER TABLE hrdc_programmes ADD COLUMN outline_pdf TEXT NOT NULL DEFAULT ''")
+        # One-off (Nov 2026): bring the first-seeded programmes in line with the
+        # approved HRD Corp records. Only touches rows still exactly as seeded.
+        if not conn.execute("SELECT 1 FROM quote_settings WHERE key = '_migrated_programmes_2026_11'").fetchone():
+            conn.execute(
+                "UPDATE hrdc_programmes SET programme_code = '10001779590', hours = 7, days = 1, sessions_json = ?, "
+                "outline_note = '', trainers = 'Natasya Khoo, Teh Yong Li' "
+                "WHERE title = 'AI for Workflow Operations and People Management' AND programme_code = ''",
+                (json.dumps(AIW_SESSIONS),))
+            conn.execute(
+                "UPDATE hrdc_programmes SET title = 'Python Programming Fundamentals for Workplace Automation', "
+                "programme_code = '10001782997', status = 'Approved', outline_note = ? "
+                "WHERE title = 'Python course' AND programme_code = ''",
+                ("Outline copied from the 'Python Programming for Beginners' draft package - upload or check the approved outline.",))
+            conn.execute("INSERT OR REPLACE INTO quote_settings(key, value) VALUES ('_migrated_programmes_2026_11', 'true')")
         if conn.execute("SELECT COUNT(*) AS c FROM quote_courses").fetchone()["c"] == 0:
             for i, (name, price, unit, note, tiered, sessions) in enumerate(SEED_COURSES):
                 conn.execute("INSERT INTO quote_courses(name, default_price, price_unit, group_note, tiered, "
@@ -267,7 +282,7 @@ def init_db():
 def get_settings() -> dict:
     out = json.loads(json.dumps(DEFAULT_SETTINGS))
     with storage.get_conn() as conn:
-        for r in conn.execute("SELECT key, value FROM quote_settings"):
+        for r in conn.execute("SELECT key, value FROM quote_settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'"):
             try:
                 out[r["key"]] = json.loads(r["value"])
             except ValueError:
@@ -431,6 +446,8 @@ def _row(r) -> dict:
         if "title" not in it:                  # quotes saved before the builder had titles
             it["title"], it["description"] = it.get("description", ""), ""
         it.setdefault("kind", "course")
+        if it["kind"] not in LINE_KINDS:       # old Venue / F&B and Travel lines
+            it["kind"] = "other"
         it.setdefault("description", "")
         it.setdefault("claimable", it.get("kind") == "course")
     q["hrdc"] = json.loads(q.pop("hrdc_json") or "{}")
@@ -570,12 +587,11 @@ def check(q: dict, settings: dict = None) -> dict:
         if not i.get("claimable"):
             continue
         kind, unit = i.get("kind"), _num(i.get("unit_price"))
-        cap_v = {"materials": caps.get("materials_per_pax"), "venue": caps.get("venue_fnb_per_pax_per_day"),
-                 "travel": caps.get("travel_per_day")}.get(kind)
-        if cap_v in (None, "") and kind in ("materials", "venue", "travel"):
+        cap_v = {"materials": caps.get("materials_per_pax")}.get(kind)
+        if cap_v in (None, "") and kind == "materials":
             warnings.append(f"No ACM cap set for {kind} - check the claimable amount (Settings).")
         elif cap_v not in (None, ""):
-            limit = _num(cap_v) * (days if kind == "venue" else 1)
+            limit = _num(cap_v)
             if unit > limit + 0.004:
                 warnings.append(f"Claimable {kind} RM {unit:,.2f} is above the ACM cap of RM {limit:,.2f}.")
     return {"errors": errors, "warnings": warnings}

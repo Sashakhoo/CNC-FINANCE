@@ -184,8 +184,12 @@ def build_html(q: dict, *, for_pdf: bool = True, parts: tuple = ("quote", "outli
         parties = f'<div class="grid">{client}{tp}</div>'
         dates = ", ".join(fdate(d) for d in (h.get("dates") or []) if d)
         when = " – ".join(x for x in (h.get("start_time"), h.get("end_time")) if x)
-        place = h.get("venue") or (prog or {}).get("venue") if (h.get("mode") or (prog or {}).get("mode")) != "online" \
-            else (h.get("platform") or "Zoom")
+        if (h.get("mode") or (prog or {}).get("mode")) == "online":
+            place = h.get("platform") or "Zoom"
+        elif h.get("venue_type") == "client":
+            place = "At " + company + (f" — {q.get('address')}" if q.get("address") else " (employer's premises)")
+        else:
+            place = quote_store.ACADEMY_VENUE
         programme = f"""<h2>Programme</h2><div class="box">
           <div class="party">{esc((prog or {}).get('title') or '—')}</div>
           {_kv('Programme ID', (prog or {}).get('programme_code'))}

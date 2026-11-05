@@ -57,6 +57,7 @@ class Hrdc(BaseModel):
     hours: float | None = None
     mode: str = ""
     venue: str = ""
+    venue_type: str = "academy"           # academy | client (the employer's own premises)
     platform: str = ""
     participants: list[Participant] = []
 
@@ -118,6 +119,8 @@ def _normalise(body: QuoteBody, qid: int = None, existing: dict = None) -> dict:
                               "designation": p["designation"].strip()[:120]}
                              for p in h["participants"] if (p["name"] or "").strip()]
         h["dates"] = [d for d in h["dates"] if d][:30]
+        if h["venue_type"] not in ("academy", "client"):
+            h["venue_type"] = "academy"
         if h["grant_status"] not in qs.GRANT_STEPS:
             h["grant_status"] = "Quote"
     else:

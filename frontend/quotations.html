@@ -196,7 +196,8 @@
           </div>
           <div class="row" style="--n:2;">
             <div class="field"><label for="h-mode">Delivery</label><select id="h-mode"><option value="physical">Physical</option><option value="online">Online</option><option value="hybrid">Hybrid</option></select></div>
-            <div class="field"><label for="h-venue">Venue address / platform</label><input id="h-venue" placeholder="e.g. Mount Austin, Johor Bahru — or Zoom"></div>
+            <div class="field" id="h-venue-wrap"><label for="h-venue-type">Venue</label><select id="h-venue-type"><option value="academy">Codencode Academy, Mount Austin</option><option value="client">Their company (in-house)</option></select></div>
+            <div class="field" id="h-platform-wrap" style="display:none;"><label for="h-venue">Platform</label><input id="h-venue" placeholder="Zoom"></div>
           </div>
           <div class="sec">Participants <span class="note" style="font-weight:400;">(optional — IC numbers are masked; only the last 4 digits are kept)</span></div>
           <table class="people"><tbody id="h-people"></tbody></table>
@@ -214,8 +215,6 @@
           <select id="add-course" class="cell std-only" style="width:auto;"><option value="">＋ Add course from catalogue…</option></select>
           <button type="button" class="pill-btn small hrdc-only" style="display:none;" onclick="addLine({kind:'course'})">＋ Course fee</button>
           <button type="button" class="pill-btn small hrdc-only" style="display:none;" onclick="addLine({kind:'materials', title:'Training materials', claimable:true})">＋ Materials</button>
-          <button type="button" class="pill-btn small hrdc-only" style="display:none;" onclick="addLine({kind:'venue', title:'Venue / F&B', claimable:true})">＋ Venue / F&amp;B</button>
-          <button type="button" class="pill-btn small hrdc-only" style="display:none;" onclick="addLine({kind:'travel', title:'Trainer travel / allowance', claimable:false})">＋ Travel</button>
           <button type="button" class="pill-btn small" onclick="addLine({kind:'other'})">＋ Custom line</button>
         </div>
 
@@ -357,7 +356,7 @@ function blank(type){
     payment_terms: s.payment_terms || '', notes: '', items: [],
     hrdc: {programme_id: null, ssm:'', mycoid:'', hr_contact:'', hr_email:'', hr_phone:'', training_type:'in-house',
       grant_scheme: 'SBL-Khas', grant_id:'', grant_status:'Quote', pax: null, dates: [], start_time:'09:00', end_time:'17:00',
-      hours: null, mode:'physical', venue:'', platform:'', participants: []}};
+      hours: null, mode:'physical', venue:'', venue_type:'academy', platform:'', participants: []}};
 }
 function newQuote(type){
   cur = blank(type);
@@ -393,7 +392,7 @@ const F = {number:'b-number', date:'b-date', validity_days:'b-validity', status:
   payment_terms:'b-terms', notes:'b-notes', discount_rm:'b-discount'};
 const CHK = {show_address:'b-show-address', sst:'b-sst', tier_note:'b-tier', plain_language:'b-plain', claude_block:'b-claude'};
 const H = {ssm:'h-ssm', mycoid:'h-mycoid', hr_contact:'h-hr', hr_email:'h-hr-email', hr_phone:'h-hr-phone', training_type:'h-type',
-  grant_scheme:'h-scheme', pax:'h-pax', start_time:'h-start', end_time:'h-end', hours:'h-hours', mode:'h-mode', venue:'h-venue',
+  grant_scheme:'h-scheme', pax:'h-pax', start_time:'h-start', end_time:'h-end', hours:'h-hours', mode:'h-mode', venue:'h-venue', venue_type:'h-venue-type',
   grant_status:'h-grant-status', grant_id:'h-grant-id'};
 
 function fillForm(){
@@ -402,6 +401,8 @@ function fillForm(){
   if(cur.status === 'Expired') $('b-status').value = 'Sent';
   for(const [k, id] of Object.entries(CHK)) $(id).checked = !!cur[k];
   for(const [k, id] of Object.entries(H)) $(id).value = cur.hrdc[k] ?? '';
+  if(!$('h-venue-type').value) $('h-venue-type').value = 'academy';
+  showVenue();
   $('h-prog').value = cur.hrdc.programme_id || '';
   renderDates(); renderPeople(); renderItems(); updateValidUntil();
   $('b-dup').disabled = !cur.id; $('b-convert').disabled = !cur.id || !!cur.invoice_id;
@@ -418,6 +419,7 @@ function collect(){
   cur.hrdc.hours = parseFloat(cur.hrdc.hours) || null;
   cur.hrdc.programme_id = parseInt($('h-prog').value) || null;
   if(cur.hrdc.mode === 'online'){ cur.hrdc.platform = cur.hrdc.venue; }
+  showVenue();
   document.querySelectorAll('#h-people tr').forEach((tr, i) => {
     const p = cur.hrdc.participants[i]; if(!p) return;
     p.name = tr.querySelector('.pn').value; p.ic = tr.querySelector('.pi').value; p.designation = tr.querySelector('.pd').value;
@@ -440,7 +442,7 @@ function renderItems(){
   const hrdc = cur.qtype === 'hrdc';
   $('items').innerHTML = cur.items.map((it, i) => `<div class="item" data-i="${i}">
     <div class="r1">
-      <select class="cell ik" aria-label="Line type">${META.line_kinds.map(k => `<option value="${k}" ${it.kind === k ? 'selected' : ''}>${{course:'Course', materials:'Materials', venue:'Venue / F&B', travel:'Travel', other:'Other'}[k]}</option>`).join('')}</select>
+      <select class="cell ik" aria-label="Line type">${META.line_kinds.map(k => `<option value="${k}" ${it.kind === k ? 'selected' : ''}>${{course:'Course', materials:'Materials', other:'Other'}[k]}</option>`).join('')}</select>
       <input class="cell it" placeholder="Title" value="${esc(it.title)}" aria-label="Title">
       <span class="tools"><button type="button" class="icon-btn" title="Move up" onclick="moveItem(${i},-1)">↑</button><button type="button" class="icon-btn" title="Move down" onclick="moveItem(${i},1)">↓</button><button type="button" class="icon-btn" title="Remove" onclick="removeItem(${i})" style="color:#c23b1f;">✕</button></span>
     </div>
@@ -502,6 +504,14 @@ $('h-prog').addEventListener('change', () => {
     fillForm();
   }
 });
+// Venue is either the academy or the employer's own premises; online uses a platform instead.
+function showVenue(){
+  const online = $('h-mode').value === 'online';
+  $('h-venue-wrap').style.display = online ? 'none' : '';
+  $('h-platform-wrap').style.display = online ? '' : 'none';
+}
+$('h-mode').addEventListener('change', showVenue);
+$('h-venue-type').addEventListener('change', () => { $('h-type').value = $('h-venue-type').value === 'client' ? 'in-house' : $('h-type').value; });
 $('h-pax').addEventListener('change', () => { collect(); cur.items.filter(i => i.kind === 'course').forEach(i => i.qty = cur.hrdc.pax || i.qty); renderItems(); schedulePreview(); });
 $('b-company').addEventListener('change', () => {
   const c = META.clients.find(x => x.company.toLowerCase() === $('b-company').value.trim().toLowerCase());
@@ -718,7 +728,7 @@ function renderSettings(){
     <div class="row" style="--n:4;">${fld('s-tpno', 'MyCoID / TP number', s.tp_number)}${fld('s-tpfrom', 'Registration from', s.tp_valid_from, 'date')}${fld('s-tpto', 'Registration until', s.tp_valid_to, 'date')}${fld('s-tpcert', 'TP certificate reference', s.tp_certificate_ref)}</div>
     <div class="sec">HRD Corp rules <span class="note" style="font-weight:400;">— check these against the HRD Corp portal; they change</span></div>
     <div class="row" style="--n:3;">${fld('s-lead', 'Grant lead time (days before training)', s.lead_days, 'number')}${fld('s-att', 'Attendance threshold (%)', s.attendance_threshold, 'number')}${fld('s-claim', 'Claim deadline after training (days)', s.claim_deadline_days, 'number')}</div>
-    <div class="row" style="--n:3;">${fld('s-acm-mat', 'ACM cap: materials per pax (RM)', caps.materials_per_pax, 'number', 'step="0.01" placeholder="not set"')}${fld('s-acm-ven', 'ACM cap: venue / F&B per pax per day (RM)', caps.venue_fnb_per_pax_per_day, 'number', 'step="0.01" placeholder="not set"')}${fld('s-acm-tra', 'ACM cap: trainer travel per day (RM)', caps.travel_per_day, 'number', 'step="0.01" placeholder="not set"')}</div>
+    <div class="row" style="--n:3;">${fld('s-acm-mat', 'ACM cap: materials per pax (RM)', caps.materials_per_pax, 'number', 'step="0.01" placeholder="not set"')}</div>
     <div class="field" style="margin-bottom:10px;"><label for="s-hrdcsst">SST note on HRDC quotations</label><textarea id="s-hrdcsst">${esc(s.hrdc_sst_note)}</textarea></div>
     <div class="sec">Defaults</div>
     <div class="row" style="--n:3;">${fld('s-valid', 'Validity (days)', s.validity_days, 'number')}${fld('s-sst', 'SST rate (%)', s.sst_rate, 'number', 'step="0.5"')}</div>
@@ -743,7 +753,7 @@ async function saveSettings(){
   const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
   const b = {tp_number:$('s-tpno').value.trim(), tp_valid_from:$('s-tpfrom').value, tp_valid_to:$('s-tpto').value, tp_certificate_ref:$('s-tpcert').value.trim(),
     lead_days:num('s-lead') || 0, attendance_threshold:num('s-att') || 0, claim_deadline_days:num('s-claim') || 0,
-    acm_caps:{materials_per_pax:num('s-acm-mat'), venue_fnb_per_pax_per_day:num('s-acm-ven'), travel_per_day:num('s-acm-tra')},
+    acm_caps:{materials_per_pax:num('s-acm-mat')},
     hrdc_sst_note:$('s-hrdcsst').value.trim(), validity_days:num('s-valid') || 30, sst_rate:num('s-sst') || 0,
     show_address:$('s-addr').checked, payment_terms:$('s-terms').value.trim(), tier_note:$('s-tier').value.trim(), claude_block:$('s-claude').value.trim(),
     trainers:[...document.querySelectorAll('#s-trainers .tr-row')].map(r => ({name:r.querySelector('.t-name').value.trim(), trainer_id:r.querySelector('.t-id').value.trim(),
