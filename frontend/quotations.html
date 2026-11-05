@@ -152,9 +152,8 @@
           <div class="field"><label for="b-date">Issue date</label><input type="date" id="b-date"></div>
           <div class="field"><label for="b-validity">Valid for (days)</label><input type="number" id="b-validity" min="1" max="365"></div>
         </div>
-        <div class="row" style="--n:3;">
+        <div class="row" style="--n:2;">
           <div class="field"><label>Valid until</label><input id="b-valid-until" disabled></div>
-          <div class="field"><label for="b-prepared">Prepared by</label><input id="b-prepared"></div>
           <div class="field"><label for="b-status">Status</label><select id="b-status"><option>Draft</option><option>Sent</option><option>Accepted</option><option>Declined</option></select></div>
         </div>
         <label class="check"><input type="checkbox" id="b-show-address"> Show our business address on the quotation</label>
@@ -353,7 +352,7 @@ async function del(id){
 function blank(type){
   const s = META.settings;
   return {id:null, qtype:type, number:'', status:'Draft', company:'', attention:'', address:'', phone:'', email:'',
-    date: today(), validity_days: s.validity_days || 30, prepared_by: s.prepared_by || '', show_address: !!s.show_address,
+    date: today(), validity_days: s.validity_days || 30, prepared_by: '', show_address: !!s.show_address,
     sst: false, plain_language: true, claude_block: false, tier_note: false, discount_rm: 0,
     payment_terms: s.payment_terms || '', notes: '', items: [],
     hrdc: {programme_id: null, ssm:'', mycoid:'', hr_contact:'', hr_email:'', hr_phone:'', training_type:'in-house',
@@ -389,7 +388,7 @@ document.querySelectorAll('#type-seg button').forEach(b => b.addEventListener('c
   fillForm(); schedulePreview();
 }));
 
-const F = {number:'b-number', date:'b-date', validity_days:'b-validity', prepared_by:'b-prepared', status:'b-status',
+const F = {number:'b-number', date:'b-date', validity_days:'b-validity', status:'b-status',
   company:'b-company', attention:'b-attention', address:'b-address', phone:'b-phone', email:'b-email',
   payment_terms:'b-terms', notes:'b-notes', discount_rm:'b-discount'};
 const CHK = {show_address:'b-show-address', sst:'b-sst', tier_note:'b-tier', plain_language:'b-plain', claude_block:'b-claude'};
@@ -526,7 +525,7 @@ function body(){
   collect();
   const b = {...cur}; delete b.id; delete b.totals; delete b.display_status; delete b.invoice_id; delete b.created_at; delete b.updated_at;
   return {qtype:b.qtype, number:b.number, status:b.status === 'Expired' ? 'Sent' : b.status, company:b.company, attention:b.attention, address:b.address,
-    phone:b.phone, email:b.email, date:b.date, validity_days:b.validity_days, prepared_by:b.prepared_by, show_address:b.show_address,
+    phone:b.phone, email:b.email, date:b.date, validity_days:b.validity_days, prepared_by:'', show_address:b.show_address,
     sst:b.sst, plain_language:b.plain_language, claude_block:b.claude_block, tier_note:b.tier_note, discount_rm:b.discount_rm,
     payment_terms:b.payment_terms, notes:b.notes, items:b.items.map(i => ({kind:i.kind, course_id:i.course_id || null, title:i.title, description:i.description || '', qty:i.qty, unit_price:i.unit_price, claimable:!!i.claimable})),
     hrdc: b.qtype === 'hrdc' ? {...b.hrdc, pax: b.hrdc.pax || null, hours: b.hrdc.hours || null} : {}};
@@ -694,7 +693,7 @@ function renderSettings(){
     <div class="row" style="--n:3;">${fld('s-acm-mat', 'ACM cap: materials per pax (RM)', caps.materials_per_pax, 'number', 'step="0.01" placeholder="not set"')}${fld('s-acm-ven', 'ACM cap: venue / F&B per pax per day (RM)', caps.venue_fnb_per_pax_per_day, 'number', 'step="0.01" placeholder="not set"')}${fld('s-acm-tra', 'ACM cap: trainer travel per day (RM)', caps.travel_per_day, 'number', 'step="0.01" placeholder="not set"')}</div>
     <div class="field" style="margin-bottom:10px;"><label for="s-hrdcsst">SST note on HRDC quotations</label><textarea id="s-hrdcsst">${esc(s.hrdc_sst_note)}</textarea></div>
     <div class="sec">Defaults</div>
-    <div class="row" style="--n:3;">${fld('s-valid', 'Validity (days)', s.validity_days, 'number')}${fld('s-prep', 'Prepared by', s.prepared_by)}${fld('s-sst', 'SST rate (%)', s.sst_rate, 'number', 'step="0.5"')}</div>
+    <div class="row" style="--n:3;">${fld('s-valid', 'Validity (days)', s.validity_days, 'number')}${fld('s-sst', 'SST rate (%)', s.sst_rate, 'number', 'step="0.5"')}</div>
     <label class="check" style="margin-bottom:10px;"><input type="checkbox" id="s-addr" ${s.show_address ? 'checked' : ''}> Show business address on new quotations</label>
     <div class="field" style="margin-bottom:10px;"><label for="s-terms">Payment terms</label><textarea id="s-terms">${esc(s.payment_terms)}</textarea></div>
     <div class="field" style="margin-bottom:10px;"><label for="s-tier">Tiered pax note</label><textarea id="s-tier">${esc(s.tier_note)}</textarea></div>
@@ -713,7 +712,7 @@ async function saveSettings(){
   const b = {tp_number:$('s-tpno').value.trim(), tp_valid_from:$('s-tpfrom').value, tp_valid_to:$('s-tpto').value, tp_certificate_ref:$('s-tpcert').value.trim(),
     lead_days:num('s-lead') || 0, attendance_threshold:num('s-att') || 0, claim_deadline_days:num('s-claim') || 0,
     acm_caps:{materials_per_pax:num('s-acm-mat'), venue_fnb_per_pax_per_day:num('s-acm-ven'), travel_per_day:num('s-acm-tra')},
-    hrdc_sst_note:$('s-hrdcsst').value.trim(), validity_days:num('s-valid') || 30, prepared_by:$('s-prep').value.trim(), sst_rate:num('s-sst') || 0,
+    hrdc_sst_note:$('s-hrdcsst').value.trim(), validity_days:num('s-valid') || 30, sst_rate:num('s-sst') || 0,
     show_address:$('s-addr').checked, payment_terms:$('s-terms').value.trim(), tier_note:$('s-tier').value.trim(), claude_block:$('s-claude').value.trim(),
     trainers:[...document.querySelectorAll('#s-trainers .tr-row')].map(r => ({name:r.querySelector('.t-name').value.trim(), trainer_id:r.querySelector('.t-id').value.trim(),
       specialisations:r.querySelector('.t-spec').value.split(',').map(x => x.trim()).filter(Boolean), summary:r.querySelector('.t-sum').value.trim()})).filter(t => t.name)};

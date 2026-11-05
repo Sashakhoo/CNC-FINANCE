@@ -43,7 +43,6 @@ CLAUDE_BLOCK = (
 
 DEFAULT_SETTINGS = {
     "validity_days": 30,
-    "prepared_by": "Natasya Khoo",
     "show_address": False,
     "payment_terms": "50% deposit to confirm the booking; balance before or on the training day.",
     "sst_rate": 8,

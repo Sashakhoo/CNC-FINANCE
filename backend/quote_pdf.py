@@ -136,8 +136,7 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
     logo = f'<img class="logo" src="{_pg.LOGO_URI}" alt="codencode.my">' if _pg.LOGO_URI else ""
     addr = ("".join(f'<div class="biz-line">{esc(l)}</div>' for l in _pg.BUSINESS_ADDRESS)
             if q.get("show_address") else "")
-    meta = [("Issue date", fdate(q.get("date"))), ("Valid until", fdate(q.get("valid_until"))),
-            ("Prepared by", q.get("prepared_by"))]
+    meta = [("Issue date", fdate(q.get("date"))), ("Valid until", fdate(q.get("valid_until")))]
     if q.get("reference_no"):
         meta.append(("Reference", q["reference_no"]))
     head = f"""
