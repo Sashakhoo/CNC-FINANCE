@@ -164,6 +164,60 @@ AIW_SESSIONS = [
  }
 ]
 
+# From the HRD Corp course content (programme 10001782997), 3 days / 21 hours.
+PYW_SESSIONS = [
+ {
+  "title": "M1 Introduction to Python",
+  "simple": "Install Python and VS Code and run your first program.",
+  "detailed": "What Python is, script vs interactive mode, IDEs (VS Code, Jupyter, Anaconda), pip, first program. Outcome: using VS Code and Jupyter, participants install packages with pip and run a program in both modes without errors. (Day 1, 9:00–10:30)"
+ },
+ {
+  "title": "M2 Variables, Data Types & Strings",
+  "simple": "Work with numbers and text, and tidy up messy text data.",
+  "detailed": "Numbers, strings, booleans, type conversion, operators and operands, string methods and formatting. Outcome: given raw text data, participants clean and format it using string methods, with correct output for all test cases. (Day 1, 10:45–12:45)"
+ },
+ {
+  "title": "M3 Control Flow",
+  "simple": "Make programs decide and repeat — build a payroll / grading rule engine.",
+  "detailed": "Conditional statements, for/while loops, break/continue, nested logic; hands-on payroll/grading rule engine. Outcome: given a business rule, participants implement it with conditions and loops, producing correct results for all scenarios. (Day 1, 1:45–5:00)"
+ },
+ {
+  "title": "M4 Sequences & Collections",
+  "simple": "Store, filter and total groups of records with lists and dictionaries.",
+  "detailed": "Lists, tuples, sets, dictionaries, comprehensions. Outcome: given a record set, participants select the right collection and filter/aggregate it correctly. (Day 2, 9:00–10:30)"
+ },
+ {
+  "title": "M5 Functions, Modules & Packages",
+  "simple": "Turn scripts into reusable building blocks.",
+  "detailed": "Defining functions, parameters, return values, scope, importing modules, creating packages, date and time. Outcome: participants refactor a script into at least 3 reusable functions in a separate module that imports and runs correctly. (Day 2, 10:45–12:45)"
+ },
+ {
+  "title": "M6 File & Exception Handling",
+  "simple": "Automatically sort and rename a folder of files, safely.",
+  "detailed": "Reading/writing text and CSV, os/shutil/pathlib, try/except/finally, regular expressions; hands-on auto-sort and rename a folder of files. Outcome: given an unsorted folder, participants write a script that organises all files by type and handles errors without crashing. (Day 2, 1:45–5:00)"
+ },
+ {
+  "title": "M7 Classes & Objects",
+  "simple": "Model workplace things, such as an employee, in code.",
+  "detailed": "OOP basics: classes, attributes, methods, constructors, inheritance. Outcome: participants model a workplace entity (e.g. Employee) as a class with at least 2 methods that behave correctly. (Day 3, 9:00–10:30)"
+ },
+ {
+  "title": "M8 Excel & Data Automation",
+  "simple": "Read Excel files and produce summary reports automatically.",
+  "detailed": "openpyxl, pandas basics, filtering, grouping, summary report export. Outcome: given a spreadsheet, participants generate a summary Excel report with correct totals. (Day 3, 10:45–12:45)"
+ },
+ {
+  "title": "M9 Email & Scheduling",
+  "simple": "Email reports automatically on a schedule.",
+  "detailed": "smtplib, attachments, schedule library. Outcome: using a test account, participants send an automated report with attachment on a scheduled trigger. (Day 3, 1:45–3:30)"
+ },
+ {
+  "title": "M10 Capstone & Assessment",
+  "simple": "Automate one task from your own job and present it.",
+  "detailed": "Build and present an automation for your own job; post-assessment. Outcome: participants demonstrate a working automation script and score at least 70% in the post-assessment. (Day 3, 3:45–5:00)"
+ }
+]
+
 SEED_COURSES = [
     # name, price, unit, group_note, tiered, sessions
     ("AI for Automation", 288, "pax", "", True, []),
@@ -177,10 +231,8 @@ SEED_PROGRAMMES = [
     # title, fee_cap, days, hours, mode, venue, status, sessions, note
     ("AI for Workflow Operations and People Management", 1500, 1, 7, "physical", "Mount Austin, Johor Bahru",
      "Approved", AIW_SESSIONS, "", "10001779590"),
-    ("Python Programming Fundamentals for Workplace Automation", 1800, 2, 16, "physical", "Mount Austin, Johor Bahru",
-     "Approved", PY_SESSIONS,
-     "Outline copied from the 'Python Programming for Beginners' draft package - upload or check the approved outline.",
-     "10001782997"),
+    ("Python Programming Fundamentals for Workplace Automation", 1800, 3, 21, "physical", "Mount Austin, Johor Bahru",
+     "Approved", PYW_SESSIONS, "", "10001782997"),
 ]
 
 
@@ -265,6 +317,13 @@ def init_db():
                 "WHERE title = 'Python course' AND programme_code = ''",
                 ("Outline copied from the 'Python Programming for Beginners' draft package - upload or check the approved outline.",))
             conn.execute("INSERT OR REPLACE INTO quote_settings(key, value) VALUES ('_migrated_programmes_2026_11', 'true')")
+        # One-off (Nov 2026): Python programme's approved content - 3 days / 21 hours, M1-M10.
+        if not conn.execute("SELECT 1 FROM quote_settings WHERE key = '_migrated_python_outline_2026_11'").fetchone():
+            conn.execute(
+                "UPDATE hrdc_programmes SET days = 3, hours = 21, sessions_json = ?, outline_note = '' "
+                "WHERE programme_code = '10001782997' AND days = 2 AND hours = 16",
+                (json.dumps(PYW_SESSIONS),))
+            conn.execute("INSERT OR REPLACE INTO quote_settings(key, value) VALUES ('_migrated_python_outline_2026_11', 'true')")
         if conn.execute("SELECT COUNT(*) AS c FROM quote_courses").fetchone()["c"] == 0:
             for i, (name, price, unit, note, tiered, sessions) in enumerate(SEED_COURSES):
                 conn.execute("INSERT INTO quote_courses(name, default_price, price_unit, group_note, tiered, "
