@@ -90,6 +90,9 @@
   .tag.out{background:#ffe3dd; color:#a13d20;}
   .tag.paid{background:#e7f7c9; color:#3a7a1f;}
   .tag.unpaid, .tag.pending{background:#fff1cf; color:#8a6300;}
+  .tag.sent{background:#e6eefc; color:#2c4fa3;}
+  .tag.accepted{background:#e7f7c9; color:#3a7a1f;}
+  .tag.declined, .tag.expired{background:#ece9e2; color:#6b6878;}
   .tag.deposit{background:#d9d3fb; color:#4a3ba3;}
   .tag.overdue{background:#ffe3dd; color:#a13d20;}
   .tag.debtor{background:#fff1cf; color:#8a6300;}
@@ -425,14 +428,18 @@
     <!-- INVOICE & RECEIPT -->
     <div class="view" id="view-invoice">
       <div class="card">
+        <div class="subtabs" role="tablist" aria-label="Document type">
+          <div class="subtab active" data-doc-mode="invoice" onclick="setDocMode('invoice')" role="tab">Invoice</div>
+          <div class="subtab" data-doc-mode="quotation" onclick="setDocMode('quotation')" role="tab">Quotation</div>
+        </div>
         <form data-cap="invoices" onsubmit="return addInvoice(event)">
           <input type="hidden" id="inv-edit-id" value="">
           <div class="inline" style="margin-bottom:0;">
             <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
             <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
             <div class="field"><label>Phone (if new)</label><input type="text" id="inv-phone" placeholder="optional"></div>
-            <div class="field"><label>Invoice Date</label><input type="date" id="inv-date" required></div>
-            <div class="field"><label>Due Date</label><input type="date" id="inv-due" required></div>
+            <div class="field"><label id="inv-date-label">Invoice Date</label><input type="date" id="inv-date" required></div>
+            <div class="field"><label id="inv-due-label">Due Date</label><input type="date" id="inv-due" required></div>
           </div>
 
           <div class="inline" style="margin-top:10px; margin-bottom:0;">
@@ -471,6 +478,8 @@
         </form>
         <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
         <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
+        <div class="panel-head" style="margin-top:28px;" id="quotations-head"><span class="panel-title">Quotations</span><span class="top-note">Quotations never touch the ledger — convert one to an invoice when the customer accepts</span></div>
+        <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Valid until</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="quo-body"></tbody></table>
       </div>
     </div>
 
@@ -915,6 +924,7 @@ async function api(path, opts){
 let transactions = [];
 let contacts = [];
 let invoices = [];
+let quotations = [];
 let assets = [];
 let teachers = [];
 let notesText = '';
@@ -932,6 +942,7 @@ async function loadState(){
   stateGen++;
   contacts = s.contacts;
   invoices = s.invoices;
+  quotations = s.quotations || [];
   assets = s.assets;
   teachers = s.teachers || [];
   notesText = (s.notes && s.notes.text) || '';
@@ -1143,7 +1154,7 @@ function switchFinTab(name){
 function showLogin(){
   // Wipe the in-memory cache and re-render so there is genuinely no data in
   // the DOM behind the (blurred) login card, not just a visual cover.
-  transactions = []; contacts = []; invoices = []; assets = []; notesText = '';
+  transactions = []; contacts = []; invoices = []; quotations = []; assets = []; notesText = '';
   currentUser = null;
   tutors = []; tutorsKey = ''; closeTutorForm();
   document.getElementById('tutor-rows').innerHTML = '';
@@ -1279,12 +1290,15 @@ function infoDialog(message){
     overlay.classList.add('open'); ok.focus();
   });
 }
-function confirmDialog(message){
+function confirmDialog(message, okLabel){
   return new Promise(resolve => {
     const overlay = document.getElementById('confirm-modal-overlay');
     const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
     document.getElementById('confirm-message').textContent = message;
+    const label = ok.textContent, cls = ok.className;
+    if(okLabel){ ok.textContent = okLabel; ok.className = 'pill-btn dark'; }
     const done = result => {
+      ok.textContent = label; ok.className = cls;
       overlay.classList.remove('open');
       ok.onclick = cancel.onclick = overlay.onclick = null;
       resolve(result);
@@ -1493,6 +1507,16 @@ async function addInvoice(e){
     items,
   };
   const editId = document.getElementById('inv-edit-id').value;
+  if(docMode === 'quotation'){
+    body.valid_until = body.due; delete body.due;
+    const q = editId ? await api('/quotations/' + editId, { method:'PUT', body: JSON.stringify(body) })
+                     : await api('/quotations', { method:'POST', body: JSON.stringify(body) });
+    cancelEditInvoice();
+    await loadState();
+    if(!editId && q && q.id) openQuoteDoc(q.id);
+    document.getElementById('quotations-head').scrollIntoView({behavior:'smooth', block:'start'});
+    return false;
+  }
   if(editId){
     await api('/invoices/' + editId, { method:'PUT', body: JSON.stringify(body) });
   } else {
@@ -1502,9 +1526,59 @@ async function addInvoice(e){
   await loadState();
   return false;
 }
+// Invoice / Quotation switch for the create form
+let docMode = 'invoice';
+function setDocMode(mode){
+  const editing = !!document.getElementById('inv-edit-id').value;
+  if(editing && mode !== docMode) cancelEditInvoice();
+  docMode = mode;
+  const q = mode === 'quotation';
+  document.querySelectorAll('[data-doc-mode]').forEach(t => t.classList.toggle('active', t.dataset.docMode === mode));
+  document.getElementById('inv-date-label').textContent = q ? 'Quotation Date' : 'Invoice Date';
+  document.getElementById('inv-due-label').textContent = q ? 'Valid Until' : 'Due Date';
+  if(!document.getElementById('inv-edit-id').value)
+    document.getElementById('inv-due').value = q ? new Date(Date.now() + 14*864e5).toISOString().slice(0,10) : _in30;
+  document.getElementById('inv-submit-btn').textContent = document.getElementById('inv-edit-id').value
+    ? '✓ Save Changes' : (q ? '＋ Create Quotation' : '＋ Create Invoice');
+}
+function editQuotation(id){
+  const qt = quotations.find(x => x.id === id);
+  if(!qt) return;
+  setDocMode('quotation');
+  const set = (k, v) => { document.getElementById(k).value = v == null ? '' : v; };
+  set('inv-edit-id', qt.id); set('inv-contact', qt.contact); set('inv-email', qt.email); set('inv-phone', qt.phone);
+  set('inv-date', qt.date); set('inv-due', qt.valid_until); set('inv-discount', qt.discount_pct || 0);
+  set('inv-tax', qt.tax_pct || 0); set('inv-remarks', qt.remarks); set('inv-attention', qt.attention);
+  set('inv-company', qt.company); set('inv-address', qt.address); set('inv-reference', qt.reference_no);
+  set('inv-sales-type', qt.sales_type); set('inv-sales-person', qt.sales_person);
+  document.getElementById('inv-items').innerHTML = '';
+  (qt.items && qt.items.length ? qt.items : [{description:'', qty:1, unit_price:0}])
+    .forEach(it => addInvItemRow(it.description, it.qty, it.unit_price));
+  document.getElementById('inv-submit-btn').textContent = '✓ Save Changes';
+  document.getElementById('inv-cancel-edit-btn').style.display = '';
+  document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function openQuoteDoc(id){ window.open('/api/documents/quotation/' + id, '_blank'); }
+async function setQuoteStatus(id, status){
+  await api('/quotations/' + id + '/status', { method:'PATCH', body: JSON.stringify({status}) });
+  await loadState();
+}
+async function convertQuote(id){
+  const qt = quotations.find(x => x.id === id);
+  if(!await confirmDialog('Turn ' + qt.number + ' into an invoice for ' + qt.contact + ' (' + fmt(qt.total) + ')?', 'Create invoice')) return;
+  const r = await api('/quotations/' + id + '/convert', { method:'POST' });
+  await loadState();
+  await infoDialog(qt.number + ' is now invoice ' + r.invoice.number + ' (dated today, due in 30 days). You can edit it in the Invoices list.');
+}
+async function deleteQuote(id){
+  if(!await confirmDialog('Delete this quotation?')) return;
+  await api('/quotations/' + id, { method:'DELETE' });
+  await loadState();
+}
 function editInvoice(id){
   const inv = invoices.find(i => i.id === id);
   if(!inv) return;
+  setDocMode('invoice');
   const contact = contacts.find(c => c.name === inv.contact) || {};
   document.getElementById('inv-edit-id').value = inv.id;
   document.getElementById('inv-contact').value = inv.contact;
@@ -1538,7 +1612,8 @@ function cancelEditInvoice(){
   document.getElementById('inv-date').value = _today;
   document.getElementById('inv-due').value = _in30;
   resetInvItemRows();
-  document.getElementById('inv-submit-btn').textContent = '＋ Create Invoice';
+  document.getElementById('inv-submit-btn').textContent = docMode === 'quotation' ? '＋ Create Quotation' : '＋ Create Invoice';
+  if(docMode === 'quotation') document.getElementById('inv-due').value = new Date(Date.now() + 14*864e5).toISOString().slice(0,10);
   document.getElementById('inv-cancel-edit-btn').style.display = 'none';
 }
 async function markPaid(id){
@@ -2020,6 +2095,28 @@ function render(){
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
   }).join('');
+
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  document.getElementById('quo-body').innerHTML = quotations.length ? quotations.map(q=>{
+    const items = q.items || [];
+    const forText = items.length > 1
+      ? `${items[0].description} <span class="empty-note">+${items.length-1} more</span>`
+      : (items[0] ? items[0].description : '<span class="empty-note">—</span>');
+    const expired = q.status === 'Sent' && q.valid_until && q.valid_until < todayStr;
+    const shown = expired ? 'Expired' : q.status;
+    const inv = q.invoice_id ? invoices.find(i => i.id === q.invoice_id) : null;
+    const done = !!inv;
+    return `<tr><td class="mono">${q.number}</td><td>${q.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${q.date}</td>
+    <td class="mono" style="color:var(--dim);">${q.valid_until || '—'}</td>
+    <td><span class="tag ${shown.toLowerCase()}">${shown.toUpperCase()}</span>${inv ? `<br><span class="empty-note">→ ${inv.number}</span>` : ''}</td>
+    <td style="text-align:right;" class="amt">${fmt(q.total)}</td>
+    <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openQuoteDoc(${q.id})">📄 PDF</button>
+    ${done ? '' : `<button class="pill-btn small" data-cap="invoices" onclick="editQuotation(${q.id})" style="margin-left:6px;">✎ Edit</button>
+    <button class="pill-btn small dark" data-cap="invoices" onclick="convertQuote(${q.id})" style="margin-left:6px;">→ Convert to invoice</button>
+    ${q.status !== 'Declined' ? `<button class="pill-btn small" data-cap="invoices" onclick="setQuoteStatus(${q.id}, 'Declined')" style="margin-left:6px;">Declined</button>`
+      : `<button class="pill-btn small" data-cap="invoices" onclick="setQuoteStatus(${q.id}, 'Sent')" style="margin-left:6px;">Reopen</button>`}`}
+    <button class="pill-btn danger small" data-cap="invoices" onclick="deleteQuote(${q.id})" style="margin-left:6px;">Delete</button></td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty-note">No quotations yet — switch the form above to <b>Quotation</b> to make one.</td></tr>`;
 
   document.getElementById('as-body').innerHTML = assets.length ? assets.map(a=>`
     <tr><td>${a.name}</td><td>${a.category}</td><td style="text-align:right;" class="amt">${fmt(a.cost)}</td>

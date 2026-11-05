@@ -82,6 +82,7 @@ PENDING_STUDENTS = {}
 @app.on_event("startup")
 def on_startup():
     storage.init_db()
+    storage.init_quotations()
     auth.seed_users()
     if seed.seed_if_empty():
         print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
@@ -615,6 +616,9 @@ async def telegram_webhook(request: Request):
 
         if is_quote:
             no = storage.next_document_number("QUO")
+            storage.insert_quotation({"contact": contact_name, "date": today, "valid_until": when or None,
+                                      "discount_pct": discount or 0, "remarks": remarks or "",
+                                      "email": email or "", "phone": phone or ""}, items, number=no)
             pdf = pdf_generator.render_quotation_pdf(no, contact_name, today, when, items,
                                                       discount_pct=discount, remarks=remarks,
                                                       email=email, phone=phone)

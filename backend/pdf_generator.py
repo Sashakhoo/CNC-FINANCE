@@ -298,23 +298,35 @@ def render_invoice_pdf(invoice_no: str, contact: str, date: str, due: str, amoun
 
 def render_quotation_pdf(quote_no: str, contact: str, date: str, valid_until: str,
                          items: list, discount_pct: float = 0.0, remarks: str = None,
-                         email: str = None, phone: str = None) -> bytes:
+                         email: str = None, phone: str = None, tax_pct: float = 0.0,
+                         attention: str = None, company: str = None, address: str = None,
+                         reference_no: str = None, sales_person: str = None, status: str = None) -> bytes:
     """A quotation is not billed and never touches the ledger — it's a sales
     document only. `items`: list of {description, qty, unit_price}."""
     rows = [(it["description"], it.get("qty", 1) or 1, it.get("unit_price", 0) or 0,
              (it.get("qty", 1) or 1) * (it.get("unit_price", 0) or 0)) for it in items]
     subtotal = sum(r[3] for r in rows)
-    total = subtotal * (1 - (discount_pct or 0) / 100)
+    total = subtotal * (1 - (discount_pct or 0) / 100) * (1 + (tax_pct or 0) / 100)
+    meta = [("Issued", _fmt_date(date))]
+    if valid_until:
+        meta.append(("Valid Until", _fmt_date(valid_until)))
+    if reference_no:
+        meta.append(("Reference No", reference_no))
+    if sales_person:
+        meta.append(("Sales Person", sales_person))
+    pill = ("ACCEPTED", "paid") if status == "Accepted" else ("QUOTATION", "pending")
+    validity = (f"This quotation is valid until {_esc(_fmt_date(valid_until))}." if valid_until
+                else "This quotation is valid for 14 days from the issue date.")
     return _page(
-        _header("QUOTATION", quote_no,
-                [("Issued", _fmt_date(date)), ("Valid Until", _fmt_date(valid_until))], ("PENDING", "pending")),
-        _party_block("BILL TO", contact or "—", [email, phone]),
+        _header("QUOTATION", quote_no, meta, pill),
+        _party_block("QUOTED TO", company or contact or "—",
+                     [attention and f"Attn: {attention}", address, email, phone]),
         _items_table(rows, []),
-        _totals(subtotal, total, None, "Quotation Total:", total, discount_pct),
+        _totals(subtotal, total, None, "Quotation Total:", total, discount_pct, tax_pct),
         _remarks_block(remarks),
         _payment_block(quote_no),
         _footer(quote_no, payment_terms=False, extra_terms=(
-            '<div><b>Quotation Validity:</b> This quotation is valid for 14 days from the issue date.</div>'
+            f'<div><b>Quotation Validity:</b> {validity}</div>'
             '<div><b>Confirmation:</b> Kindly confirm acceptance via WhatsApp or email to proceed with scheduling.</div>'
         )),
     )

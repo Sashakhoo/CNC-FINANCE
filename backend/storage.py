@@ -933,3 +933,95 @@ def update_tutor(tid: int, fields: dict):
     sets = ", ".join(f"{k} = ?" for k in fields)
     with get_conn() as conn:
         conn.execute(f"UPDATE tutors SET {sets} WHERE id = ?", (*fields.values(), tid))
+
+
+# --- quotations ------------------------------------------------------------
+# A quotation is a sales document only: it never touches the ledger. It is
+# saved so it can be reopened, tracked (Sent / Accepted / Declined) and
+# turned into an invoice with one click.
+
+QUOTE_FIELDS = ("contact", "date", "valid_until", "discount_pct", "tax_pct", "remarks", "attention",
+                "company", "address", "reference_no", "sales_type", "sales_person", "email", "phone")
+
+
+def init_quotations():
+    with get_conn() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS quotations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            number TEXT NOT NULL,
+            contact TEXT NOT NULL,
+            date TEXT NOT NULL,
+            valid_until TEXT,
+            items_json TEXT NOT NULL DEFAULT '[]',
+            discount_pct REAL NOT NULL DEFAULT 0,
+            tax_pct REAL NOT NULL DEFAULT 0,
+            remarks TEXT NOT NULL DEFAULT '',
+            attention TEXT NOT NULL DEFAULT '',
+            company TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '',
+            reference_no TEXT NOT NULL DEFAULT '',
+            sales_type TEXT NOT NULL DEFAULT '',
+            sales_person TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'Sent',
+            invoice_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+
+
+def _quote(row) -> dict:
+    import json as _json
+    q = dict(row)
+    q["items"] = _json.loads(q.pop("items_json") or "[]")
+    sub = sum((i.get("qty", 1) or 1) * (i.get("unit_price", 0) or 0) for i in q["items"])
+    q["subtotal"] = round(sub, 2)
+    q["total"] = round(sub * (1 - (q["discount_pct"] or 0) / 100) * (1 + (q["tax_pct"] or 0) / 100), 2)
+    return q
+
+
+def list_quotations() -> list:
+    with get_conn() as conn:
+        return [_quote(r) for r in conn.execute("SELECT * FROM quotations ORDER BY date DESC, id DESC")]
+
+
+def get_quotation(qid: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM quotations WHERE id = ?", (qid,)).fetchone()
+        return _quote(r) if r else None
+
+
+def insert_quotation(fields: dict, items: list, number: str = None) -> int:
+    import json as _json
+    number = number or next_document_number("QUO")
+    vals = {k: (fields.get(k) if fields.get(k) is not None else ("" if k not in ("discount_pct", "tax_pct") else 0))
+            for k in QUOTE_FIELDS}
+    with get_conn() as conn:
+        cur = conn.execute(
+            f"INSERT INTO quotations(number, items_json, {', '.join(QUOTE_FIELDS)}) "
+            f"VALUES (?, ?, {', '.join('?' for _ in QUOTE_FIELDS)})",
+            (number, _json.dumps(items), *[vals[k] for k in QUOTE_FIELDS]))
+        return cur.lastrowid
+
+
+def update_quotation(qid: int, fields: dict, items: list):
+    import json as _json
+    sets = ", ".join(f"{k} = ?" for k in QUOTE_FIELDS)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE quotations SET items_json = ?, {sets} WHERE id = ?",
+                     (_json.dumps(items), *[fields.get(k) if fields.get(k) is not None else
+                                            (0 if k in ("discount_pct", "tax_pct") else "") for k in QUOTE_FIELDS], qid))
+    return get_quotation(qid)
+
+
+def set_quotation_status(qid: int, status: str, invoice_id: int = None):
+    with get_conn() as conn:
+        if invoice_id is not None:
+            conn.execute("UPDATE quotations SET status = ?, invoice_id = ? WHERE id = ?", (status, invoice_id, qid))
+        else:
+            conn.execute("UPDATE quotations SET status = ? WHERE id = ?", (status, qid))
+    return get_quotation(qid)
+
+
+def delete_quotation(qid: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM quotations WHERE id = ?", (qid,))
