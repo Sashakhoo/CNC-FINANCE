@@ -308,6 +308,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
     <span>Invoice</span>
   </div>
+  <div class="nav-pill" data-href="/quotations" title="Quotation Builder — Non-HRDC and HRDC quotations">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5"/><path d="M14 16.5l1.8 1.8 3.2-3.6"/></svg>
+    <span>Quotes</span>
+  </div>
   <div class="nav-pill" data-view="contacts">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/></svg>
     <span>Contacts</span>
@@ -428,10 +432,6 @@
     <!-- INVOICE & RECEIPT -->
     <div class="view" id="view-invoice">
       <div class="card">
-        <div class="subtabs" role="tablist" aria-label="Document type">
-          <div class="subtab active" data-doc-mode="invoice" onclick="setDocMode('invoice')" role="tab">Invoice</div>
-          <div class="subtab" data-doc-mode="quotation" onclick="setDocMode('quotation')" role="tab">Quotation</div>
-        </div>
         <form data-cap="invoices" onsubmit="return addInvoice(event)">
           <input type="hidden" id="inv-edit-id" value="">
           <div class="inline" style="margin-bottom:0;">
@@ -478,7 +478,8 @@
         </form>
         <div class="panel-head"><span class="panel-title">Invoices</span><span class="top-note">Contact doesn't need to exist yet — a new one is created automatically</span></div>
         <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Due</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="inv-body"></tbody></table>
-        <div class="panel-head" style="margin-top:28px;" id="quotations-head"><span class="panel-title">Quotations</span><span class="top-note">Quotations never touch the ledger — convert one to an invoice when the customer accepts</span></div>
+        <div class="panel-head" style="margin-top:28px;" id="quotations-head"><span class="panel-title">Quotations</span>
+          <span style="display:flex; gap:8px; flex-wrap:wrap;"><a class="pill-btn small" href="/quotations#new">＋ Non-HRDC quote</a><a class="pill-btn small" href="/quotations#new-hrdc">＋ HRDC quote</a><a class="pill-btn dark small" href="/quotations">Open Quotation Builder</a></span></div>
         <table><thead><tr><th>No.</th><th>Contact</th><th>For</th><th>Date</th><th>Valid until</th><th>Status</th><th style="text-align:right;">Amount</th><th></th></tr></thead><tbody id="quo-body"></tbody></table>
       </div>
     </div>
@@ -1541,7 +1542,8 @@ function setDocMode(mode){
   document.getElementById('inv-submit-btn').textContent = document.getElementById('inv-edit-id').value
     ? '✓ Save Changes' : (q ? '＋ Create Quotation' : '＋ Create Invoice');
 }
-function editQuotation(id){
+function editQuotation(id){ location.href = '/quotations#q=' + id; }
+function _unusedEditQuotation(id){
   const qt = quotations.find(x => x.id === id);
   if(!qt) return;
   setDocMode('quotation');
@@ -1558,21 +1560,21 @@ function editQuotation(id){
   document.getElementById('inv-cancel-edit-btn').style.display = '';
   document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
 }
-function openQuoteDoc(id){ window.open('/api/documents/quotation/' + id, '_blank'); }
+function openQuoteDoc(id){ window.open('/api/quotes/' + id + '/pdf', '_blank'); }
 async function setQuoteStatus(id, status){
-  await api('/quotations/' + id + '/status', { method:'PATCH', body: JSON.stringify({status}) });
+  await api('/quotes/' + id + '/status', { method:'PATCH', body: JSON.stringify({status}) });
   await loadState();
 }
 async function convertQuote(id){
   const qt = quotations.find(x => x.id === id);
   if(!await confirmDialog('Turn ' + qt.number + ' into an invoice for ' + qt.contact + ' (' + fmt(qt.total) + ')?', 'Create invoice')) return;
-  const r = await api('/quotations/' + id + '/convert', { method:'POST' });
+  const r = await api('/quotes/' + id + '/convert', { method:'POST' });
   await loadState();
   await infoDialog(qt.number + ' is now invoice ' + r.invoice.number + ' (dated today, due in 30 days). You can edit it in the Invoices list.');
 }
 async function deleteQuote(id){
   if(!await confirmDialog('Delete this quotation?')) return;
-  await api('/quotations/' + id, { method:'DELETE' });
+  await api('/quotes/' + id, { method:'DELETE' });
   await loadState();
 }
 function editInvoice(id){
@@ -2102,11 +2104,10 @@ function render(){
     const forText = items.length > 1
       ? `${items[0].description} <span class="empty-note">+${items.length-1} more</span>`
       : (items[0] ? items[0].description : '<span class="empty-note">—</span>');
-    const expired = q.status === 'Sent' && q.valid_until && q.valid_until < todayStr;
-    const shown = expired ? 'Expired' : q.status;
+    const shown = q.display_status || q.status;
     const inv = q.invoice_id ? invoices.find(i => i.id === q.invoice_id) : null;
     const done = !!inv;
-    return `<tr><td class="mono">${q.number}</td><td>${q.contact}</td><td>${forText}</td><td class="mono" style="color:var(--dim);">${q.date}</td>
+    return `<tr><td class="mono">${q.number}${q.qtype === 'hrdc' ? '<br><span class="empty-note">HRDC</span>' : ''}</td><td>${q.company || q.contact}</td><td>${(items[0] && items[0].title) ? items[0].title + (items.length > 1 ? ` <span class="empty-note">+${items.length-1} more</span>` : '') : forText}</td><td class="mono" style="color:var(--dim);">${q.date}</td>
     <td class="mono" style="color:var(--dim);">${q.valid_until || '—'}</td>
     <td><span class="tag ${shown.toLowerCase()}">${shown.toUpperCase()}</span>${inv ? `<br><span class="empty-note">→ ${inv.number}</span>` : ''}</td>
     <td style="text-align:right;" class="amt">${fmt(q.total)}</td>
@@ -2114,9 +2115,9 @@ function render(){
     ${done ? '' : `<button class="pill-btn small" data-cap="invoices" onclick="editQuotation(${q.id})" style="margin-left:6px;">✎ Edit</button>
     <button class="pill-btn small dark" data-cap="invoices" onclick="convertQuote(${q.id})" style="margin-left:6px;">→ Convert to invoice</button>
     ${q.status !== 'Declined' ? `<button class="pill-btn small" data-cap="invoices" onclick="setQuoteStatus(${q.id}, 'Declined')" style="margin-left:6px;">Declined</button>`
-      : `<button class="pill-btn small" data-cap="invoices" onclick="setQuoteStatus(${q.id}, 'Sent')" style="margin-left:6px;">Reopen</button>`}`}
+      : `<button class="pill-btn small" data-cap="invoices" onclick="setQuoteStatus(${q.id}, 'Draft')" style="margin-left:6px;">Reopen</button>`}`}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteQuote(${q.id})" style="margin-left:6px;">Delete</button></td></tr>`;
-  }).join('') : `<tr><td colspan="8" class="empty-note">No quotations yet — switch the form above to <b>Quotation</b> to make one.</td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty-note">No quotations yet — open the Quotation Builder to make one.</td></tr>`;
 
   document.getElementById('as-body').innerHTML = assets.length ? assets.map(a=>`
     <tr><td>${a.name}</td><td>${a.category}</td><td style="text-align:right;" class="amt">${fmt(a.cost)}</td>

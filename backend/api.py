@@ -23,6 +23,8 @@ import lms_sync
 import crm
 import tax
 import stamp_store
+import quote_store
+import quote_pdf
 
 router = APIRouter(prefix="/api")
 
@@ -227,7 +229,7 @@ def state():
         "transactions": storage.list_transactions(),
         "contacts": storage.list_contacts(),
         "invoices": storage.list_invoices(),
-        "quotations": storage.list_quotations(),
+        "quotations": quote_store.list_quotations(),
         "assets": storage.list_assets(),
         "teachers": storage.list_teachers(),
         "category_codes": storage.list_category_codes(),
@@ -421,101 +423,6 @@ def generate_quotation(body: QuotationIn):
         email=body.email, phone=body.phone,
     )
     return _pdf_response(pdf, f"{number}.pdf")
-
-
-class QuoteIn(BaseModel):
-    contact: str
-    date: str
-    valid_until: str | None = None
-    items: list[InvoiceItemIn]
-    email: str | None = None
-    phone: str | None = None
-    discount_pct: float = 0.0
-    tax_pct: float = 0.0
-    remarks: str | None = None
-    attention: str | None = None
-    company: str | None = None
-    address: str | None = None
-    reference_no: str | None = None
-    sales_type: str | None = None
-    sales_person: str | None = None
-
-
-def _quote_fields(body: QuoteIn) -> tuple:
-    contact = (body.contact or "").strip()
-    if not contact:
-        raise HTTPException(422, "Contact is required")
-    items = [i.model_dump() for i in body.items if (i.description or "").strip()]
-    if not items:
-        raise HTTPException(422, "Add at least one line item")
-    fields = body.model_dump(exclude={"items"})
-    fields["contact"] = contact
-    return fields, items
-
-
-@router.get("/quotations", dependencies=[Depends(auth.require_finance)])
-def list_quotations():
-    return storage.list_quotations()
-
-
-@router.post("/quotations", dependencies=[Depends(auth.require_cap("invoices"))])
-def create_quotation(body: QuoteIn):
-    fields, items = _quote_fields(body)
-    return storage.get_quotation(storage.insert_quotation(fields, items))
-
-
-@router.put("/quotations/{qid}", dependencies=[Depends(auth.require_cap("invoices"))])
-def amend_quotation(qid: int, body: QuoteIn):
-    q = storage.get_quotation(qid)
-    if not q:
-        raise HTTPException(404, "Quotation not found")
-    if q["invoice_id"]:
-        raise HTTPException(409, "This quotation has already been turned into an invoice — edit the invoice instead")
-    fields, items = _quote_fields(body)
-    return storage.update_quotation(qid, fields, items)
-
-
-class QuoteStatusIn(BaseModel):
-    status: str
-
-
-@router.patch("/quotations/{qid}/status", dependencies=[Depends(auth.require_cap("invoices"))])
-def quotation_status(qid: int, body: QuoteStatusIn):
-    if body.status not in ("Sent", "Accepted", "Declined"):
-        raise HTTPException(422, "status must be Sent, Accepted or Declined")
-    if not storage.get_quotation(qid):
-        raise HTTPException(404, "Quotation not found")
-    return storage.set_quotation_status(qid, body.status)
-
-
-@router.post("/quotations/{qid}/convert", dependencies=[Depends(auth.require_cap("invoices"))])
-def convert_quotation(qid: int):
-    """Accepted -> a new invoice with the same customer, items, discount and
-    tax. Dated today, due in 30 days (editable afterwards)."""
-    from datetime import date, timedelta
-    q = storage.get_quotation(qid)
-    if not q:
-        raise HTTPException(404, "Quotation not found")
-    if q["invoice_id"] and storage.get_invoice(q["invoice_id"]):
-        raise HTTPException(409, "This quotation is already an invoice")
-    storage.find_or_create_contact(q["contact"], "debtor", email=q["email"] or "", phone=q["phone"] or "")
-    number = storage.next_document_number("INV")
-    today = date.today()
-    remarks = ((q["remarks"] or "") + f" (from quotation {q['number']})").strip()
-    iid = storage.insert_invoice(number, q["contact"], today.isoformat(), (today + timedelta(days=30)).isoformat(),
-                                 0, status="Pending", remarks=remarks, discount_pct=q["discount_pct"] or 0,
-                                 items=q["items"], attention=q["attention"], company=q["company"],
-                                 address=q["address"], reference_no=q["reference_no"] or q["number"],
-                                 sales_type=q["sales_type"], sales_person=q["sales_person"],
-                                 tax_pct=q["tax_pct"] or 0)
-    storage.set_quotation_status(qid, "Accepted", invoice_id=iid)
-    return {"quotation": storage.get_quotation(qid), "invoice": storage.get_invoice(iid)}
-
-
-@router.delete("/quotations/{qid}", dependencies=[Depends(auth.require_cap("invoices"))])
-def remove_quotation(qid: int):
-    storage.delete_quotation(qid)
-    return {"ok": True}
 
 
 def _sync_invoice_to_lms_if_relevant(inv: dict, status: str):
@@ -809,15 +716,10 @@ def generate_document(kind: str, ref_id: int):
 
 def _generate_document(kind: str, ref_id: int):
     if kind == "quotation":
-        q = storage.get_quotation(ref_id)
+        q = quote_store.get_quotation(ref_id)
         if not q:
             raise HTTPException(404, "Quotation not found")
-        pdf = pdf_generator.render_quotation_pdf(
-            q["number"], q["contact"], q["date"], q["valid_until"], q["items"],
-            discount_pct=q["discount_pct"] or 0, remarks=q["remarks"], email=q["email"], phone=q["phone"],
-            tax_pct=q["tax_pct"] or 0, attention=q["attention"], company=q["company"], address=q["address"],
-            reference_no=q["reference_no"], sales_person=q["sales_person"], status=q["status"])
-        return _pdf_response(pdf, f"{q['number']}.pdf")
+        return _pdf_response(quote_pdf.render_pdf(q), f"{q['number']}.pdf")
     if kind == "invoice":
         inv = storage.get_invoice(ref_id)
         if not inv:

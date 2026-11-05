@@ -29,6 +29,8 @@ import pdf_generator
 import lms_sync
 import stamp_store
 import stamp_api
+import quote_store
+import quote_api
 from api import router as api_router
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
@@ -82,7 +84,7 @@ PENDING_STUDENTS = {}
 @app.on_event("startup")
 def on_startup():
     storage.init_db()
-    storage.init_quotations()
+    quote_store.init_db()
     auth.seed_users()
     if seed.seed_if_empty():
         print("Seeded historical ledger (Apr-Aug 2026) into an empty database.")
@@ -93,6 +95,7 @@ def on_startup():
 
 app.include_router(api_router)
 app.include_router(stamp_api.router)
+app.include_router(quote_api.router)
 
 
 @app.get("/health")
@@ -115,6 +118,13 @@ def document_centre(request: Request):
     if not auth.is_authed(request):
         return RedirectResponse("/", status_code=302)
     return FileResponse(FRONTEND_DIR / "document-centre.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/quotations", response_class=HTMLResponse)
+def quotations_page(request: Request):
+    if not auth.is_authed(request):
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(FRONTEND_DIR / "quotations.html", headers={"Cache-Control": "no-store"})
 
 
 # Public: anyone holding a stamped document can check it. No login.
