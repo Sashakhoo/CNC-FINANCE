@@ -66,7 +66,8 @@ def test_hrdc_rules(boss):
     r = boss.post("/api/quotes", json={**over, "status": "Sent"}, headers=ORIGIN)
     assert r.status_code == 422 and "above the approved" in r.json()["detail"]
     # a pending programme can be drafted but not sent, and the PDF is watermarked
-    pend = programme("Pending")
+    pend = boss.post("/api/quotes-admin/programmes", headers=ORIGIN, json={
+        "title": "Test Pending Programme", "fee_cap": 900, "status": "Pending"}).json()
     body = hrdc()
     body["hrdc"]["programme_id"] = pend["id"]
     body["items"][0].update(title=pend["title"], unit_price=pend["fee_cap"])
@@ -132,3 +133,55 @@ def test_old_style_quotation_still_listed(boss):
                               "discount_pct": 10}, [{"description": "Vibe Coding", "qty": 1, "unit_price": 800}])
     q = next(x for x in boss.get("/api/quotes").json() if x["contact"] == "Telegram Co")
     assert q["items"][0]["title"] == "Vibe Coding" and q["total"] == 720 and q["qtype"] == "standard"
+
+
+def _fake_weasyprint(monkeypatch):
+    """WeasyPrint only exists in the server image; stand in a one-page PDF per HTML."""
+    import sys
+    import types
+    from test_stamp import make_pdf
+
+    class HTML:
+        def __init__(self, string, base_url=None):
+            self.n = max(1, string.count('<section class="sheet"'))
+
+        def write_pdf(self):
+            return make_pdf(self.n, text="GENERATED")
+    monkeypatch.setitem(sys.modules, "weasyprint", types.SimpleNamespace(HTML=HTML))
+
+
+def test_official_pdfs_are_attached_to_hrdc_quotes(boss, staff, monkeypatch):
+    import io
+    from pypdf import PdfReader
+    from test_stamp import make_pdf
+    _fake_weasyprint(monkeypatch)
+    p = programme()
+    up = lambda kind, ref, pages, who=boss: who.post(
+        f"/api/quotes-admin/attachments?kind={kind}&ref={ref}&filename={kind}.pdf",
+        content=make_pdf(pages, text=kind.upper()), headers={**ORIGIN, "Content-Type": "application/pdf"})
+    assert up("tp", "", 1, staff).status_code == 403                          # director only
+    assert up("tp", "", 1).status_code == 200
+    assert up("trainer", "Natasya Khoo", 2).status_code == 200
+    assert up("programme", p["id"], 2).status_code == 200
+    assert up("trainer", "Nobody", 1).status_code == 404
+    assert boss.post("/api/quotes-admin/attachments?kind=tp", content=b"not a pdf" * 50,
+                     headers={**ORIGIN, "Content-Type": "application/pdf"}).status_code == 400
+    # settings can't point attachments at other stored files
+    boss.put("/api/quotes-admin/settings", json={"attachments": {"tp_certificate": {"key": "x" * 32 + ".pdf"}}},
+             headers=ORIGIN)
+    assert qs.get_settings()["attachments"]["tp_certificate"]["name"] == "tp.pdf"
+
+    body = hrdc()
+    html = boss.post("/api/quotes/preview", json=body, headers=ORIGIN).json()["html"]
+    assert "Attached official documents" in html and "programme.pdf" in html and "trainer.pdf" in html
+    q = boss.post("/api/quotes", json=body, headers=ORIGIN).json()["quote"]
+    pdf = boss.get(f"/api/quotes/{q['id']}/pdf")
+    assert pdf.status_code == 200
+    pages = [pg.extract_text() for pg in PdfReader(io.BytesIO(pdf.content)).pages]
+    # quote page, official outline (2), trainer profile (2), TP certificate (1), participants page
+    order = [("GENERATED" in t and "GENERATED") or next((k for k in ("PROGRAMME", "TRAINER", "TP") if k in t), "?")
+             for t in pages]
+    assert order == ["GENERATED", "PROGRAMME", "PROGRAMME", "TRAINER", "TRAINER", "TP", "GENERATED"], order
+    assert boss.get(f"/api/quotes-admin/attachments/file?kind=programme&ref={p['id']}").content[:5] == b"%PDF-"
+    assert boss.delete("/api/quotes-admin/attachments?kind=tp", headers=ORIGIN).status_code == 200
+    assert qs.get_settings()["attachments"]["tp_certificate"] is None

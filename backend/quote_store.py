@@ -49,24 +49,31 @@ DEFAULT_SETTINGS = {
     "tier_note": "Prices are based on 3 pax. For 2 pax add RM 388 per pax; for 1 pax add RM 488 per pax.",
     "claude_block": CLAUDE_BLOCK,
     "tp_name": "CODE N CODE SOLUTION",
-    "tp_number": "",
+    "tp_number": "202603072017",
     "tp_valid_from": "2026-10-20",
     "tp_valid_to": "2027-10-19",
-    "tp_certificate_ref": "",
+    "tp_certificate_ref": "Training Provider Registration Certificate, Serial No. 202603072017 (released 19 Oct 2026)",
     "lead_days": 7,
     "attendance_threshold": 75,
     "claim_deadline_days": 30,
     "acm_caps": {"materials_per_pax": None, "venue_fnb_per_pax_per_day": None, "travel_per_day": None},
+    # Official PDFs appended to HRDC quotations: {"key": storage key, "name": file name}
+    "attachments": {"tp_certificate": None, "trainers": {}},
     "hrdc_sst_note": ("SST is not charged on this quotation. Check with your accountant how SST applies to "
                       "HRD Corp claimable training fees."),
     "trainers": [
         {"name": "Natasya Khoo", "trainer_id": "76085",
-         "summary": ("Founder and principal trainer of CODE N CODE SOLUTION, a Johor Bahru training provider "
-                     "specialising in computer education. Designs and delivers the company's Python, AI and "
-                     "Machine Learning programmes with a focus on practical, workplace-ready skills."),
-         "specialisations": ["Python Programming", "Artificial Intelligence and Machine Learning",
-                             "AI for the Workplace / Digital Upskilling"]},
-        {"name": "Teh Yong Li", "trainer_id": "", "summary": "", "specialisations": []},
+         "summary": ("Certified HRD Corp trainer (Train-The-Trainer CT1–CT5, 2026) specialising in practical AI, "
+                     "automation and coding for the workplace. Founder of Codencode Academy, which has trained 100+ "
+                     "learners through public classes, corporate programmes and community partnerships in Johor Bahru. "
+                     "Delivers in English, Bahasa Malaysia and Mandarin."),
+         "specialisations": ["Generative AI for workplace productivity and prompt engineering",
+                             "Business process automation and workflow design",
+                             "AI agents and AI-assisted application development (Vibe Coding)",
+                             "AI strategy, governance and adoption roadmaps for management",
+                             "AI for sales, marketing, HR and recruitment",
+                             "Python programming, machine learning and cybersecurity fundamentals"]},
+        {"name": "Teh Yong Li", "trainer_id": "10646", "summary": "", "specialisations": []},
     ],
 }
 
@@ -112,6 +119,50 @@ WORKPLACE_AI_SESSIONS = [
      "detailed": "Identify tasks to improve, set measurable goals, team rollout steps; assessment and wrap-up."},
 ]
 
+# From the approved HRD Corp course outline (programme 10001779590).
+AIW_SESSIONS = [
+ {
+  "title": "M1 Introduction to AI & Business Automation",
+  "simple": "What AI, generative AI, AI agents and automation are, with workplace examples (includes a short pre-assessment).",
+  "detailed": "AI fundamentals, generative AI, LLMs, AI agents and automation; 10-minute pre-assessment. Outcome: given workplace examples, participants differentiate AI, GenAI, AI agents and automation, correctly classifying at least 3 of 4 scenarios. (45 min · lecture, quiz)"
+ },
+ {
+  "title": "M2 Identifying Automation Opportunities",
+  "simple": "Spot the repetitive tasks in your own job that are worth automating.",
+  "detailed": "Process mapping, repetitive tasks, triggers and expected outcomes. Outcome: given their own job tasks, participants map one process into trigger, steps and outcome, completing all three elements. (45 min · worksheet)"
+ },
+ {
+  "title": "M3 Getting Started with n8n",
+  "simple": "Set up n8n and build your first small workflow.",
+  "detailed": "Workspace setup, canvas, nodes, connections and executions. Outcome: using n8n, participants build and run a 3-node workflow that executes without errors. (60 min · demo, hands-on)"
+ },
+ {
+  "title": "M4 Connecting Business Applications",
+  "simple": "Link Gmail, Google Sheets and Google Docs so information flows between them automatically.",
+  "detailed": "Google Workspace integration, authentication, credentials and data mapping. Outcome: using Google credentials, participants connect Gmail and Google Sheets and map data correctly between them. (60 min · hands-on)"
+ },
+ {
+  "title": "M5 Building AI-Powered Workflows",
+  "simple": "Add AI to a workflow to sort, summarise or read documents for you.",
+  "detailed": "AI integration, prompt design, document processing and intelligent classification. Outcome: using an AI node, participants classify or summarise text in a workflow, producing output in the required format. (60 min · demo, hands-on)"
+ },
+ {
+  "title": "M6 Practical Business Automation",
+  "simple": "Run ready-made automations for meetings, maintenance, attendance, inventory and customer enquiries.",
+  "detailed": "Exercises 1–5: meeting management, maintenance scheduling, employee attendance, inventory monitoring and customer enquiries. Outcome: using the prepared templates, participants import and run at least 2 of the 5 scenarios. (75 min · guided lab)"
+ },
+ {
+  "title": "M7 Customisation & Troubleshooting",
+  "simple": "Adapt a template to your needs and fix a workflow that isn't working.",
+  "detailed": "Customising workflow templates and finding errors. Outcome: given a failing workflow, participants locate and fix the error node. (30 min · practical task)"
+ },
+ {
+  "title": "M8 Workplace Application & Review",
+  "simple": "Plan one automation for your own organisation; assessment and course evaluation.",
+  "detailed": "Use-case plan, post-assessment and course evaluation. Outcome: participants write one automation use case for their own organisation. (45 min · assessment)"
+ }
+]
+
 SEED_COURSES = [
     # name, price, unit, group_note, tiered, sessions
     ("AI for Automation", 288, "pax", "", True, []),
@@ -123,11 +174,12 @@ SEED_COURSES = [
 
 SEED_PROGRAMMES = [
     # title, fee_cap, days, hours, mode, venue, status, sessions, note
-    ("AI for Workflow Operations and People Management", 1500, 1, 8, "physical", "Mount Austin, Johor Bahru",
-     "Approved", WORKPLACE_AI_SESSIONS,
-     "Outline copied from the 'AI for the Workplace' course package - check it matches the approved HRD Corp submission."),
-    ("Python course", 1800, 2, 16, "physical", "Mount Austin, Johor Bahru", "Pending", PY_SESSIONS,
-     "Outline copied from the 'Python Programming for Beginners' course package - check it matches the submission."),
+    ("AI for Workflow Operations and People Management", 1500, 1, 7, "physical", "Mount Austin, Johor Bahru",
+     "Approved", AIW_SESSIONS, "", "10001779590"),
+    ("Python Programming Fundamentals for Workplace Automation", 1800, 2, 16, "physical", "Mount Austin, Johor Bahru",
+     "Approved", PY_SESSIONS,
+     "Outline copied from the 'Python Programming for Beginners' draft package - upload or check the approved outline.",
+     "10001782997"),
 ]
 
 
@@ -181,6 +233,7 @@ def init_db():
             max_pax INTEGER NOT NULL DEFAULT 30,
             sessions_json TEXT NOT NULL DEFAULT '[]',
             outline_note TEXT NOT NULL DEFAULT '',
+            outline_pdf TEXT NOT NULL DEFAULT '',
             active INTEGER NOT NULL DEFAULT 1
         );
         CREATE TABLE IF NOT EXISTS quote_clients (
@@ -194,16 +247,19 @@ def init_db():
             value TEXT NOT NULL
         );
         """)
+        pcols = {r["name"] for r in conn.execute("PRAGMA table_info(hrdc_programmes)")}
+        if "outline_pdf" not in pcols:
+            conn.execute("ALTER TABLE hrdc_programmes ADD COLUMN outline_pdf TEXT NOT NULL DEFAULT ''")
         if conn.execute("SELECT COUNT(*) AS c FROM quote_courses").fetchone()["c"] == 0:
             for i, (name, price, unit, note, tiered, sessions) in enumerate(SEED_COURSES):
                 conn.execute("INSERT INTO quote_courses(name, default_price, price_unit, group_note, tiered, "
                              "sessions_json, sort) VALUES (?,?,?,?,?,?,?)",
                              (name, price, unit, note, int(tiered), json.dumps(sessions), i))
         if conn.execute("SELECT COUNT(*) AS c FROM hrdc_programmes").fetchone()["c"] == 0:
-            for title, cap, days, hours, mode, venue, status, sessions, note in SEED_PROGRAMMES:
+            for title, cap, days, hours, mode, venue, status, sessions, note, code in SEED_PROGRAMMES:
                 conn.execute("INSERT INTO hrdc_programmes(title, fee_cap, days, hours, mode, venue, status, "
-                             "sessions_json, outline_note) VALUES (?,?,?,?,?,?,?,?,?)",
-                             (title, cap, days, hours, mode, venue, status, json.dumps(sessions), note))
+                             "sessions_json, outline_note, programme_code) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (title, cap, days, hours, mode, venue, status, json.dumps(sessions), note, code))
 
 
 # --- settings ----------------------------------------------------------------
@@ -261,7 +317,17 @@ def _programme(r) -> dict:
     d = dict(r)
     d["sessions"] = json.loads(d.pop("sessions_json") or "[]")
     d["active"] = bool(d["active"])
+    try:
+        d["outline_pdf"] = json.loads(d.get("outline_pdf") or "null")
+    except ValueError:
+        d["outline_pdf"] = None
     return d
+
+
+def set_programme_outline_pdf(pid: int, value):
+    with storage.get_conn() as conn:
+        conn.execute("UPDATE hrdc_programmes SET outline_pdf = ? WHERE id = ?",
+                     (json.dumps(value) if value else "", pid))
 
 
 def list_programmes(include_inactive=False) -> list:

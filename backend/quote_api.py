@@ -369,4 +369,97 @@ def edit_programme(pid: int, body: ProgrammeBody, request: Request):
 @router.put("/quotes-admin/settings")
 def put_settings(values: dict, request: Request):
     _director(request)
+    values.pop("attachments", None)          # files are managed by the attachment endpoints only
     return qs.save_settings(values)
+
+
+# --- official PDFs attached to HRDC quotations ----------------------------------
+# TP certificate, each trainer's profile, and each programme's course outline,
+# uploaded once and appended to every HRDC quotation PDF that needs them.
+
+ATTACH_MAX = 10 * 1024 * 1024
+
+
+def _attachment_slot(kind: str, ref: str):
+    if kind == "tp":
+        return None
+    if kind == "trainer":
+        names = [t.get("name", "") for t in qs.get_settings().get("trainers") or []]
+        match = next((n for n in names if n.lower() == (ref or "").strip().lower()), None)
+        if not match:
+            raise HTTPException(404, "Add this trainer under Settings → Trainer profiles first")
+        return match
+    if kind == "programme":
+        try:
+            pid = int(ref)
+        except (TypeError, ValueError):
+            raise HTTPException(404, "Programme not found")
+        if not qs.get_programme(pid):
+            raise HTTPException(404, "Programme not found")
+        return pid
+    raise HTTPException(422, "kind must be tp, trainer or programme")
+
+
+def _set_attachment(kind: str, slot, value):
+    if kind == "programme":
+        qs.set_programme_outline_pdf(slot, value)
+        return
+    att = qs.get_settings().get("attachments") or {"tp_certificate": None, "trainers": {}}
+    att.setdefault("trainers", {})
+    if kind == "tp":
+        att["tp_certificate"] = value
+    elif value:
+        att["trainers"][slot] = value
+    else:
+        att["trainers"].pop(slot, None)
+    qs.save_settings({"attachments": att})
+
+
+def _get_attachment(kind: str, slot):
+    if kind == "programme":
+        return (qs.get_programme(slot) or {}).get("outline_pdf")
+    att = qs.get_settings().get("attachments") or {}
+    return att.get("tp_certificate") if kind == "tp" else (att.get("trainers") or {}).get(slot)
+
+
+@router.post("/quotes-admin/attachments")
+async def upload_attachment(request: Request, kind: str, ref: str = "", filename: str = "document.pdf"):
+    import os
+    import stamp_files
+    import stamp_pdf
+    _director(request)
+    slot = _attachment_slot(kind, ref)
+    data = b""
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > ATTACH_MAX:
+            raise HTTPException(413, "PDF is larger than 10 MB")
+    try:
+        stamp_pdf.open_pdf(data, ATTACH_MAX)
+    except stamp_pdf.StampError as e:
+        raise HTTPException(e.status, e.message)
+    key = stamp_files.get_storage().put(data, "pdf")
+    name = os.path.basename((filename or "document.pdf").replace("\\", "/"))[:120] or "document.pdf"
+    _set_attachment(kind, slot, {"key": key, "name": name, "uploaded": date.today().isoformat()})
+    return {"ok": True, "name": name}
+
+
+@router.delete("/quotes-admin/attachments")
+def remove_attachment(request: Request, kind: str, ref: str = ""):
+    _director(request)
+    _set_attachment(kind, _attachment_slot(kind, ref), None)
+    return {"ok": True}
+
+
+@router.get("/quotes-admin/attachments/file", dependencies=[Depends(auth.require_finance)])
+def attachment_file(kind: str, ref: str = ""):
+    import stamp_files
+    f = _get_attachment(kind, _attachment_slot(kind, ref))
+    if not f:
+        raise HTTPException(404, "No file uploaded")
+    try:
+        data = stamp_files.get_storage().get(f["key"])
+    except stamp_files.StorageError:
+        raise HTTPException(404, "File missing")
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{f["name"]}"', "Cache-Control": "private, no-store"})

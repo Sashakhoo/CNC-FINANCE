@@ -122,7 +122,26 @@ def _kv(label, value) -> str:
     return f'<div class="kv"><span>{esc(label)}</span><span>{esc(value)}</span></div>' if value not in (None, "") else ""
 
 
-def build_html(q: dict, *, for_pdf: bool = True) -> str:
+def official_attachments(q: dict, settings: dict = None) -> dict:
+    """Which official PDFs (uploaded in Settings / Catalogue) go with an HRDC
+    quotation: {"outline": {...} | None, "trainers": [{name, key, ...}], "tp": {...} | None}."""
+    out = {"outline": None, "trainers": [], "tp": None}
+    if q.get("qtype") != "hrdc":
+        return out
+    s = settings or quote_store.get_settings()
+    h = q.get("hrdc") or {}
+    prog = quote_store.get_programme(h.get("programme_id")) if h.get("programme_id") else None
+    att = s.get("attachments") or {}
+    out["outline"] = (prog or {}).get("outline_pdf") or None
+    names = [n.strip().lower() for n in ((prog or {}).get("trainers") or "").split(",") if n.strip()]
+    for name, f in (att.get("trainers") or {}).items():
+        if f and (not names or name.lower() in names):
+            out["trainers"].append({**f, "trainer": name})
+    out["tp"] = att.get("tp_certificate") or None
+    return out
+
+
+def build_html(q: dict, *, for_pdf: bool = True, parts: tuple = ("quote", "outline", "extra")) -> str:
     s = quote_store.get_settings()
     hrdc = q.get("qtype") == "hrdc"
     h = q.get("hrdc") or {}
@@ -131,6 +150,8 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
     courses = {c["id"]: c for c in quote_store.list_courses(include_inactive=True)}
     watermark = ('<div class="watermark">SUBJECT TO HRD CORP APPROVAL</div>'
                  if hrdc and prog and prog["status"] != "Approved" else "")
+    official = official_attachments(q, s)
+    official_trainers = {t["trainer"].lower() for t in official["trainers"]}
 
     # header
     logo = f'<img class="logo" src="{_pg.LOGO_URI}" alt="codencode.my">' if _pg.LOGO_URI else ""
@@ -230,7 +251,9 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
     # page 2: course content
     blocks = ""
     plain = q.get("plain_language", True)
-    if hrdc and prog:
+    if hrdc and prog and official["outline"]:
+        blocks = ""                            # the official HRD Corp course outline PDF is attached instead
+    elif hrdc and prog:
         blocks += _outline(prog["title"], _duration(prog.get("days"), prog.get("hours")) + " · "
                            + (prog.get("mode") or "").title(), prog.get("sessions") or [], plain)
     else:
@@ -252,6 +275,8 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
         names = [n.strip().lower() for n in ((prog or {}).get("trainers") or "").split(",") if n.strip()]
         profiles = ""
         for tr in s.get("trainers") or []:
+            if tr.get("name", "").lower() in official_trainers:
+                continue                       # their official profile PDF is attached
             if tr.get("name", "").lower() in names or not names:
                 profiles += (f'<div class="box" style="margin-bottom:10px;"><div class="party">{esc(tr.get("name"))}</div>'
                              f'{_kv("HRD Corp Trainer ID", tr.get("trainer_id") or "to be confirmed")}'
@@ -259,7 +284,7 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
                              + ("<ul class='terms' style='margin-top:4px;'>" + "".join(
                                  f"<li>{esc(x)}</li>" for x in tr.get("specialisations") or []) + "</ul>"
                                 if tr.get("specialisations") else "") + "</div>")
-        tp_ref = (f'<h2>Training provider registration</h2><div class="box mint">'
+        tp_ref = "" if official["tp"] else (f'<h2>Training provider registration</h2><div class="box mint">'
                   f'<div class="party">{esc(s.get("tp_name"))}</div>'
                   f'<div class="kv"><span>Status</span><span>HRD Corp certified Training Provider</span></div>'
                   f'{_kv("MyCoID / TP no.", s.get("tp_number"))}'
@@ -271,12 +296,24 @@ def build_html(q: dict, *, for_pdf: bool = True) -> str:
             ppl = ('<h2>Participants</h2><table class="people"><tr><th>#</th><th>Name</th><th>IC no.</th><th>Designation</th></tr>'
                    + "".join(f'<tr><td>{i}</td><td>{esc(p.get("name"))}</td><td class="mono">{esc(quote_store.mask_ic(p.get("ic")))}</td>'
                              f'<td>{esc(p.get("designation"))}</td></tr>' for i, p in enumerate(people, 1)) + "</table>")
-        extra = (f'<section class="sheet">{watermark}<h1 class="course-h" style="font-size:15pt;">Trainer profile</h1>'
-                 f'{profiles}{tp_ref}{ppl}</section>')
+        listing = [("Course outline", official["outline"]["name"]) if official["outline"] else None] + \
+            [("Trainer profile — " + t["trainer"], t["name"]) for t in official["trainers"]] + \
+            [("Training provider registration certificate", official["tp"]["name"]) if official["tp"] else None]
+        listing = [x for x in listing if x]
+        attached = ""
+        if listing and not for_pdf:            # the preview can't show the PDFs themselves - say what follows
+            attached = ('<h2>Attached official documents</h2><ul class="terms">'
+                        + "".join(f"<li>{esc(a)} <span class='mono' style='color:#8b8894;'>({esc(b)})</span></li>"
+                                  for a, b in listing) + "</ul>")
+        if profiles or tp_ref or ppl or attached:
+            title = "Trainer profile" if profiles else ("Participants" if ppl and not tp_ref else "Supporting documents")
+            extra = (f'<section class="sheet">{watermark}<h1 class="course-h" style="font-size:15pt;">{title}</h1>'
+                     f'{attached}{profiles}{tp_ref}{ppl}</section>')
 
     fonts = f"<style>{FONT_FACES}</style>" if for_pdf else WEB_FONTS
     return (f'<!DOCTYPE html><html><head><meta charset="utf-8">{fonts}<style>{CSS}</style></head>'
-            f'<body>{page1}{page2}{extra}</body></html>')
+            f'<body>{page1 if "quote" in parts else ""}{page2 if "outline" in parts else ""}'
+            f'{extra if "extra" in parts else ""}</body></html>')
 
 
 def _duration(days, hours) -> str:
@@ -306,5 +343,37 @@ def _outline(title, meta, sessions, plain) -> str:
 
 
 def render_pdf(q: dict) -> bytes:
+    """Quote (+ our course-content page) -> official course outline -> official
+    trainer profiles -> TP certificate -> remaining pages (participants...),
+    as one PDF."""
     from weasyprint import HTML
-    return HTML(string=build_html(q, for_pdf=True), base_url=str(FONT_DIR)).write_pdf()
+    import io
+    from pypdf import PdfReader, PdfWriter
+    import stamp_files
+
+    def html_pdf(parts):
+        html = build_html(q, for_pdf=True, parts=parts)
+        if "<section" not in html:
+            return None
+        return HTML(string=html, base_url=str(FONT_DIR)).write_pdf()
+
+    official = official_attachments(q)
+    if not (official["outline"] or official["trainers"] or official["tp"]):
+        return html_pdf(("quote", "outline", "extra"))
+    store = stamp_files.get_storage()
+    writer = PdfWriter()
+    for chunk in (html_pdf(("quote", "outline")),
+                  *[_stored(store, f) for f in ([official["outline"]] + official["trainers"] + [official["tp"]]) if f],
+                  html_pdf(("extra",))):
+        if chunk:
+            writer.append(PdfReader(io.BytesIO(chunk)))
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def _stored(store, f):
+    try:
+        return store.get(f["key"])
+    except Exception:
+        return None                             # a missing attachment never blocks the quotation

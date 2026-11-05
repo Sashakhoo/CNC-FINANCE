@@ -664,6 +664,7 @@ function editCat(kind, id){
       <div class="field"><label>Outline warning (shown in the builder until you clear it)</label><input id="p-note" value="${esc(p.outline_note)}" placeholder="leave empty once the outline matches the HRD Corp submission"></div>
       ${sessRows(p.sessions)}
       </fieldset>
+      ${id ? `<div class="sec">Official HRD Corp course outline</div><div class="note">When uploaded, this PDF is attached to HRDC quotations for this programme instead of the generated outline page.</div>${attachRow('programme', id, 'Course outline — ' + p.title, p.outline_pdf)}` : ''}
       ${META.is_director ? `<div style="margin-top:14px;"><button class="pill-btn dark" onclick="saveProgramme(${id})">Save programme</button></div>` : ''}`;
   }
 }
@@ -678,6 +679,33 @@ async function saveProgramme(id){
     min_pax:parseInt($('p-min').value) || 1, max_pax:parseInt($('p-max').value) || 30, active:$('p-active').checked,
     venue:$('p-venue').value, trainers:$('p-trainers').value, outline_note:$('p-note').value.trim(), sessions:readSess()};
   try { const p = await api(id ? '/quotes-admin/programmes/' + id : '/quotes-admin/programmes', {method: id ? 'PUT' : 'POST', json: b}); await loadMeta(); editCat('p', p.id); toast('Programme saved'); } catch(e){ fail(e); }
+}
+
+// ── official PDFs appended to HRDC quotations ─────────────────────────
+function attachRow(kind, ref, label, f){
+  const q = 'kind=' + kind + '&ref=' + encodeURIComponent(ref);
+  return `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 0; border-top:1px solid var(--line);">
+    <div style="flex:1; min-width:200px;"><b>${esc(label)}</b><br><span class="note">${f ? '📎 ' + esc(f.name) + (f.uploaded ? ' · uploaded ' + esc(f.uploaded) : '') : 'Not uploaded — a summary page is generated instead'}</span></div>
+    ${f ? `<a class="pill-btn small" href="/api/quotes-admin/attachments/file?${q}" target="_blank" rel="noopener">View</a>` : ''}
+    ${META.is_director ? `<label class="pill-btn small" style="cursor:pointer;">${f ? 'Replace' : 'Upload PDF'}<input type="file" accept="application/pdf,.pdf" hidden onchange="uploadAttach('${kind}', ${JSON.stringify(String(ref)).replace(/"/g, '&quot;')}, this)"></label>
+      ${f ? `<button type="button" class="pill-btn small danger" onclick="removeAttach('${kind}', ${JSON.stringify(String(ref)).replace(/"/g, '&quot;')})">Remove</button>` : ''}` : ''}
+  </div>`;
+}
+async function uploadAttach(kind, ref, input){
+  const f = input.files[0]; input.value = ''; if(!f) return;
+  try {
+    await Dino.wrap(api('/quotes-admin/attachments?kind=' + kind + '&ref=' + encodeURIComponent(ref) + '&filename=' + encodeURIComponent(f.name),
+      {method:'POST', body: f, headers:{'Content-Type':'application/pdf'}}), 'Uploading ' + f.name + '…');
+    await loadMeta(); refreshAttachViews(kind, ref); toast('Uploaded ' + f.name);
+  } catch(e){ fail(e); }
+}
+async function removeAttach(kind, ref){
+  if(!confirm('Remove this attachment? HRDC quotations will use the generated summary page instead.')) return;
+  try { await api('/quotes-admin/attachments?kind=' + kind + '&ref=' + encodeURIComponent(ref), {method:'DELETE'}); await loadMeta(); refreshAttachViews(kind, ref); toast('Removed'); } catch(e){ fail(e); }
+}
+function refreshAttachViews(kind, ref){
+  if(kind === 'programme') editCat('p', +ref); else renderSettings();
+  schedulePreview(0);
 }
 
 // ── settings ──────────────────────────────────────────────────────────
@@ -698,6 +726,10 @@ function renderSettings(){
     <div class="field" style="margin-bottom:10px;"><label for="s-terms">Payment terms</label><textarea id="s-terms">${esc(s.payment_terms)}</textarea></div>
     <div class="field" style="margin-bottom:10px;"><label for="s-tier">Tiered pax note</label><textarea id="s-tier">${esc(s.tier_note)}</textarea></div>
     <div class="field" style="margin-bottom:10px;"><label for="s-claude">Claude orientation block</label><textarea id="s-claude" rows="5">${esc(s.claude_block)}</textarea></div>
+    <div class="sec">Official documents attached to HRDC quotations</div>
+    <div class="note" style="margin-bottom:6px;">These PDFs are added to every HRDC quotation PDF, after the quote. Each programme's own course outline is uploaded in Catalogue.</div>
+    ${attachRow('tp', '', 'Training Provider Registration Certificate', (s.attachments || {}).tp_certificate)}
+    ${(s.trainers || []).filter(t => t.name).map(t => attachRow('trainer', t.name, 'Trainer profile — ' + t.name, ((s.attachments || {}).trainers || {})[t.name])).join('')}
     <div class="sec">Trainer profiles (attached to HRDC quotations — no IC numbers)</div>
     <div id="s-trainers">${(s.trainers || []).map(t => `<div class="row tr-row" style="--n:4;">
       <div class="field"><label>Name</label><input class="t-name" value="${esc(t.name)}"></div>
