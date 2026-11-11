@@ -434,6 +434,7 @@
       <div class="card">
         <form data-cap="invoices" onsubmit="return addInvoice(event)">
           <input type="hidden" id="inv-edit-id" value="">
+          <div id="inv-copy-banner" style="display:none; background:var(--lime); color:var(--lime-ink); border-radius:12px; padding:10px 14px; margin-bottom:12px; font-size:12.5px; font-weight:600;"></div>
           <div class="inline" style="margin-bottom:0;">
             <div class="field"><label>Contact</label><input type="text" id="inv-contact" list="inv-contact-list" placeholder="Type a name — new or existing" required style="min-width:180px;"><datalist id="inv-contact-list"></datalist></div>
             <div class="field"><label>Email (if new)</label><input type="email" id="inv-email" placeholder="optional"></div>
@@ -1613,6 +1614,11 @@ function duplicateInvoice(id){
     .forEach(it => addInvItemRow(it.description, it.qty, it.unit_price));
   document.getElementById('inv-cancel-edit-btn').style.display = '';
   document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
+  const items = (inv.items || []).map(it => it.description).join(', ') || inv.description || '';
+  const b = document.getElementById('inv-copy-banner');
+  b.textContent = 'Copy of ' + inv.number + ' (' + items + ', ' + fmt(invTotal(inv)) + ') — type the new customer name, email and phone, check the line items below, then click "Create Invoice". Nothing is saved yet.';
+  b.style.display = '';
+  document.getElementById('inv-submit-btn').textContent = '＋ Create Invoice (copy of ' + inv.number + ')';
   const c = document.getElementById('inv-contact');
   c.placeholder = 'New customer for a copy of ' + inv.number;
   setTimeout(() => c.focus(), 300);
@@ -1638,6 +1644,7 @@ function cancelEditInvoice(){
   if(docMode === 'quotation') document.getElementById('inv-due').value = new Date(Date.now() + 14*864e5).toISOString().slice(0,10);
   document.getElementById('inv-cancel-edit-btn').style.display = 'none';
   document.getElementById('inv-contact').placeholder = 'Type a name — new or existing';
+  document.getElementById('inv-copy-banner').style.display = 'none';
 }
 async function markPaid(id){
   await api('/invoices/' + id + '/pay', { method:'POST' });
