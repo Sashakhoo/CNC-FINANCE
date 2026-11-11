@@ -1597,6 +1597,26 @@ function editInvoice(id){
   document.getElementById('inv-cancel-edit-btn').style.display = '';
   document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
 }
+// Duplicate: fill the create form with this invoice's items and terms for a
+// new customer. Nothing is saved until "Create Invoice" is clicked.
+function duplicateInvoice(id){
+  const inv = invoices.find(i => i.id === id);
+  if(!inv) return;
+  cancelEditInvoice();
+  setDocMode('invoice');
+  const set = (k, v) => { const el = document.getElementById(k); if(el) el.value = v == null ? '' : v; };
+  set('inv-discount', inv.discount_pct || 0); set('inv-tax', inv.tax_pct || 0);
+  set('inv-remarks', inv.remarks || ''); set('inv-sales-type', inv.sales_type || ''); set('inv-sales-person', inv.sales_person || '');
+  set('inv-date', _today); set('inv-due', _in30);
+  document.getElementById('inv-items').innerHTML = '';
+  (inv.items && inv.items.length ? inv.items : [{description: inv.description || '', qty:1, unit_price: inv.amount}])
+    .forEach(it => addInvItemRow(it.description, it.qty, it.unit_price));
+  document.getElementById('inv-cancel-edit-btn').style.display = '';
+  document.querySelector('#view-invoice form').scrollIntoView({behavior:'smooth', block:'start'});
+  const c = document.getElementById('inv-contact');
+  c.placeholder = 'New customer for a copy of ' + inv.number;
+  setTimeout(() => c.focus(), 300);
+}
 function cancelEditInvoice(){
   document.getElementById('inv-edit-id').value = '';
   document.getElementById('inv-contact').value = '';
@@ -1617,6 +1637,7 @@ function cancelEditInvoice(){
   document.getElementById('inv-submit-btn').textContent = docMode === 'quotation' ? '＋ Create Quotation' : '＋ Create Invoice';
   if(docMode === 'quotation') document.getElementById('inv-due').value = new Date(Date.now() + 14*864e5).toISOString().slice(0,10);
   document.getElementById('inv-cancel-edit-btn').style.display = 'none';
+  document.getElementById('inv-contact').placeholder = 'Type a name — new or existing';
 }
 async function markPaid(id){
   await api('/invoices/' + id + '/pay', { method:'POST' });
@@ -2093,6 +2114,7 @@ function render(){
     <td style="text-align:right;" class="amt">${fmt(invTotal(i))}${i.deposit ? `<br><span class="empty-note" style="white-space:nowrap;">deposit ${fmt(i.deposit)}${i.status !== 'Paid' ? ` · owed ${fmt(invTotal(i) - i.deposit)}` : ''}</span>` : ''}</td>
     <td style="white-space:nowrap;"><button class="pill-btn small" data-cap="documents" onclick="openInvoiceDoc(${i.id})">📄 PDF</button>
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="editInvoice(${i.id})" style="margin-left:6px;">✎ Edit</button>` : ''}
+    <button class="pill-btn small" data-cap="invoices" onclick="duplicateInvoice(${i.id})" style="margin-left:6px;" title="Copy the items and terms into a new invoice">⧉ Duplicate</button>
     ${invTotal(i) - (i.deposit || 0) > 0.004 ? `<button class="pill-btn small" data-cap="invoices" onclick="markDeposit(${i.id})" style="margin-left:6px;" title="${i.status === 'Paid' ? 'Record a deposit that was already received and entered separately' : 'Record a part-payment'}">${i.deposit ? '+ Deposit' : 'Deposit'}</button>` : ''}
     ${i.status!=='Paid' ? `<button class="pill-btn small" data-cap="invoices" onclick="markPaid(${i.id})" style="margin-left:6px;">Mark Paid</button>` : ''}
     <button class="pill-btn danger small" data-cap="invoices" onclick="deleteInvoice(${i.id})" style="margin-left:6px;">Delete</button></td></tr>`;
