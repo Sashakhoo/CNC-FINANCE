@@ -34,7 +34,7 @@ CSS = f"""
   @bottom-left {{ content: "Code N Code Solution · codencode.my"; font: 7pt 'Inter'; color: #8b8894; }}
   @bottom-right {{ content: "Page " counter(page) " of " counter(pages); font: 7pt 'JetBrains Mono'; color: #8b8894; }} }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'Inter', Arial, sans-serif; font-size: 8.6pt; line-height: 1.5; color: {INK}; }}
+body {{ font-family: 'Inter', Arial, 'Noto Sans CJK SC', sans-serif; font-size: 8.6pt; line-height: 1.5; color: {INK}; }}
 .sheet {{ page-break-after: always; position: relative; }}
 .sheet:last-child {{ page-break-after: auto; }}
 h1, h2, h3, .num, .doc-type {{ font-family: 'Space Grotesk', 'Inter', sans-serif; }}

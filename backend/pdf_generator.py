@@ -59,7 +59,7 @@ INK = "#15141a"
 BASE_CSS = f"""
 @page {{ size: A4; margin: 40px 46px 44px 46px; }}
 * {{ box-sizing: border-box; }}
-body {{ font-family: 'DejaVu Sans Mono', 'Courier New', monospace; color: {INK};
+body {{ font-family: 'DejaVu Sans Mono', 'Courier New', 'Noto Sans CJK SC', monospace; color: {INK};
         font-size: 9pt; line-height: 1.5; }}
 .head {{ display: flex; justify-content: space-between; align-items: flex-start; }}
 .head .logo {{ height: 22px; margin-bottom: 10px; }}
