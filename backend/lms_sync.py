@@ -27,8 +27,10 @@ silently accepting it.
 import os
 import httpx
 
-LMS_SYNC_URL = os.environ.get("LMS_SYNC_URL", "").rstrip("/")
-LMS_SYNC_SECRET = os.environ.get("LMS_SYNC_SECRET", "")
+LMS_SYNC_URL = os.environ.get("LMS_SYNC_URL", "").strip().rstrip("/")
+# .strip(): a value pasted into Railway can carry an invisible trailing line
+# break (Windows clipboard), which would make it never match the LMS's copy.
+LMS_SYNC_SECRET = os.environ.get("LMS_SYNC_SECRET", "").strip()
 
 
 def _post_enroll(payload: dict) -> str:

@@ -690,8 +690,8 @@ def crm_won(body: CrmWonIn, request: Request):
 # it back as x-lms-secret.
 
 def _check_lms_secret(request: Request):
-    supplied = request.headers.get("x-lms-secret", "")
-    secret = lms_sync.LMS_SYNC_SECRET
+    supplied = request.headers.get("x-lms-secret", "").strip()
+    secret = (lms_sync.LMS_SYNC_SECRET or "").strip()
     if not secret or not hmac.compare_digest(supplied, secret):
         raise HTTPException(401, "Invalid integration secret")
 
