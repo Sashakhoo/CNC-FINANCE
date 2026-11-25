@@ -731,6 +731,12 @@ def lms_registration_amount(external_ref: str, body: LmsAmountIn, request: Reque
     return out
 
 
+class LmsParticipantIn(BaseModel):
+    name: str = Field(default="", max_length=120)
+    department: str = Field(default="", max_length=80)
+    level: str = Field(default="", max_length=20)
+
+
 class LmsCorporateIn(BaseModel):
     external_ref: str = Field(min_length=1, max_length=120)
     company: str = Field(min_length=1, max_length=300)
@@ -742,6 +748,14 @@ class LmsCorporateIn(BaseModel):
     topics: list[str] = Field(default=[], max_length=20)
     location: str = Field(default="", max_length=100)
     requirements: str = Field(default="", max_length=4000)
+    ssm: str = Field(default="", max_length=40)
+    mycoid: str = Field(default="", max_length=40)
+    contact_role: str = Field(default="", max_length=80)
+    mode: str = Field(default="", max_length=40)
+    dates: list[str] = Field(default=[], max_length=3)
+    start_time: str = Field(default="", max_length=10)
+    end_time: str = Field(default="", max_length=10)
+    participants: list[LmsParticipantIn] = Field(default=[], max_length=50)
 
 
 @router.post("/integrations/lms/corporate")
