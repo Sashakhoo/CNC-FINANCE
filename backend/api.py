@@ -21,6 +21,7 @@ import pdf_generator
 import auth
 import lms_sync
 import crm
+import lms_invoices
 import tax
 import stamp_store
 import quote_store
@@ -681,6 +682,57 @@ def crm_won(body: CrmWonIn, request: Request):
     if not CRM_INTEGRATION_SECRET or not hmac.compare_digest(supplied, CRM_INTEGRATION_SECRET):
         raise HTTPException(401, "Invalid integration secret")
     return crm.raise_won_invoice(**body.model_dump())
+
+
+# --- LMS registration invoices (service-to-service, shared secret) --------
+# Reuses LMS_SYNC_SECRET, the secret this app already sends to the LMS for the
+# "invoice paid -> enrol" sync, so the pair needs no new secret. The LMS sends
+# it back as x-lms-secret.
+
+def _check_lms_secret(request: Request):
+    supplied = request.headers.get("x-lms-secret", "")
+    secret = lms_sync.LMS_SYNC_SECRET
+    if not secret or not hmac.compare_digest(supplied, secret):
+        raise HTTPException(401, "Invalid integration secret")
+
+
+class LmsRegistrationIn(BaseModel):
+    external_ref: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=200)
+    email: str = Field(default="", max_length=320)
+    phone: str = Field(default="", max_length=60)
+    course: str = Field(min_length=1, max_length=200)
+    location: str = Field(default="", max_length=100)
+    timing: str = Field(default="", max_length=200)
+
+
+class LmsAmountIn(BaseModel):
+    amount: float = Field(ge=0, le=1_000_000)
+    course_title: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/integrations/lms/registration")
+def lms_registration(body: LmsRegistrationIn, request: Request):
+    _check_lms_secret(request)
+    return lms_invoices.raise_registration_invoice(**body.model_dump())
+
+
+@router.post("/integrations/lms/registration/{external_ref}/amount")
+def lms_registration_amount(external_ref: str, body: LmsAmountIn, request: Request):
+    _check_lms_secret(request)
+    try:
+        out = lms_invoices.set_registration_amount(external_ref=external_ref, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    if out is None:
+        raise HTTPException(404, "No invoice for this registration")
+    return out
+
+
+@router.post("/integrations/lms/registration/{external_ref}/cancel")
+def lms_registration_cancel(external_ref: str, request: Request):
+    _check_lms_secret(request)
+    return lms_invoices.cancel_registration_invoice(external_ref=external_ref)
 
 
 # --- documents (PDF) --------------------------------------------------
