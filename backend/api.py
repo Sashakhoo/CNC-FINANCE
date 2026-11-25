@@ -22,6 +22,7 @@ import auth
 import lms_sync
 import crm
 import lms_invoices
+import lms_quotes
 import tax
 import stamp_store
 import quote_store
@@ -728,6 +729,25 @@ def lms_registration_amount(external_ref: str, body: LmsAmountIn, request: Reque
     if out is None:
         raise HTTPException(404, "No invoice for this registration")
     return out
+
+
+class LmsCorporateIn(BaseModel):
+    external_ref: str = Field(min_length=1, max_length=120)
+    company: str = Field(min_length=1, max_length=300)
+    contact_name: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=320)
+    phone: str = Field(default="", max_length=60)
+    pax: int | None = Field(default=None, ge=1, le=10_000)
+    hrd_claim: str = Field(default="", max_length=20)
+    topics: list[str] = Field(default=[], max_length=20)
+    location: str = Field(default="", max_length=100)
+    requirements: str = Field(default="", max_length=4000)
+
+
+@router.post("/integrations/lms/corporate")
+def lms_corporate(body: LmsCorporateIn, request: Request):
+    _check_lms_secret(request)
+    return lms_quotes.raise_corporate_quote(**body.model_dump())
 
 
 @router.post("/integrations/lms/registration/{external_ref}/cancel")
