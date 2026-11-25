@@ -5,8 +5,9 @@ The other direction of the existing LMS bridge (lms_sync.py pushes
 "invoice paid -> enrol" to the LMS). Here the LMS calls us:
 
   1. A student registers (form portal or /register) -> raise_registration_invoice
-     creates a Pending RM0 invoice for the course they picked, so every
-     sign-up has an INV- number straight away.
+     creates a Pending invoice for the course they picked, at its standard
+     price if the LMS sends one (RM0 otherwise), so every sign-up has an
+     INV- number straight away.
   2. An admin approves the sign-up in the LMS and types the fee ->
      set_registration_amount fills in the amount and renames the line item
      to the exact LMS course title. That title matters: when the invoice is
@@ -55,7 +56,10 @@ def _line(course: str, location: str = "", timing: str = "") -> str:
 
 
 def raise_registration_invoice(*, external_ref: str, name: str, email: str, phone: str,
-                               course: str, location: str = "", timing: str = "") -> dict:
+                               course: str, location: str = "", timing: str = "",
+                               amount: float = 0) -> dict:
+    """`amount` is the course's standard price when the LMS knows one, else 0
+    (e.g. half-day courses); either way the LMS admin can change it on approval."""
     link = _existing(external_ref)
     if link:
         return _summary(link, created=False)
@@ -63,14 +67,14 @@ def raise_registration_invoice(*, external_ref: str, name: str, email: str, phon
     storage.find_or_create_contact(name, "debtor", email=email, phone=phone)
     today = date.today()
     number = storage.next_document_number("INV")
-    # amount=0 with an RM0 line item: the fee is set when the LMS admin approves.
     iid = storage.insert_invoice(
-        number, name, today.isoformat(), (today + timedelta(days=INVOICE_DUE_DAYS)).isoformat(), 0,
+        number, name, today.isoformat(), (today + timedelta(days=INVOICE_DUE_DAYS)).isoformat(), amount,
         status="Pending", description=f"{course} — course registration",
-        items=[{"description": _line(course, location, timing), "qty": 1, "unit_price": 0}],
+        items=[{"description": _line(course, location, timing), "qty": 1, "unit_price": amount}],
         sales_type="Course", reference_no=external_ref,
-        remarks="Raised automatically from a learn.codencode.my registration. "
-                "Amount is filled in when the registration is approved in the LMS.",
+        remarks="Raised automatically from a learn.codencode.my registration"
+                + (" at the course's standard price. " if amount else ". ")
+                + "The amount is confirmed when the registration is approved in the LMS.",
     )
     with storage.get_conn() as conn:
         conn.execute(

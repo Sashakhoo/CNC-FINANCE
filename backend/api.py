@@ -704,6 +704,7 @@ class LmsRegistrationIn(BaseModel):
     course: str = Field(min_length=1, max_length=200)
     location: str = Field(default="", max_length=100)
     timing: str = Field(default="", max_length=200)
+    amount: float = Field(default=0, ge=0, le=1_000_000)   # standard price, 0 if none
 
 
 class LmsAmountIn(BaseModel):
