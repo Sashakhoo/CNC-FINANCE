@@ -45,6 +45,14 @@ def test_registration_raises_one_rm0_pending_invoice(app_client):
     assert not again["created"] and again["invoice_id"] == out["invoice_id"]
 
 
+def test_registration_with_standard_price(app_client):
+    out = register(app_client, "lms-reg-7", course="AI Agents & Vibe Coding", amount=1128).json()
+    assert out["created"] and out["amount"] == 1128 and out["status"] == "Pending"
+    assert storage.get_invoice(out["invoice_id"])["items"][0]["unit_price"] == 1128
+    bad = register(app_client, "lms-reg-8", amount=-5)
+    assert bad.status_code == 422
+
+
 def test_approve_sets_amount_and_lms_course_title(app_client):
     iid = register(app_client, "lms-reg-2").json()["invoice_id"]
     r = app_client.post("/api/integrations/lms/registration/lms-reg-2/amount",
